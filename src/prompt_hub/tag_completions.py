@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import re
 import sqlite3
 from http import HTTPStatus
 from pathlib import Path
@@ -12,6 +13,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_opener
 
 from prompt_hub.schema_migrations import record_schema_migration
+from prompt_hub.tag_locale import localize_tag
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -31,6 +33,9 @@ TAG_DOWNLOAD_JOB_TYPE = "tag_completions_download"
 TAG_CHUNK_BYTES = 512 * 1024
 TAG_DOWNLOAD_TIMEOUT = 60
 TAG_USER_AGENT = "SodaPromptHub/1.0 tag-completions-installer"
+MAX_DISPLAY_ALIASES = 6
+_HAN_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+_KANA_HANGUL_PATTERN = re.compile(r"[\u3040-\u30ff\uac00-\ud7af]")
 TAG_COMPONENT_NAME = "danbooru_tags"
 TAG_SCHEMA_VERSION = 1
 
@@ -102,6 +107,54 @@ def _sha256_file(path: Path) -> str:
                 break
             hasher.update(chunk)
     return hasher.hexdigest()
+
+
+def _attach_tag_details(
+    connection: sqlite3.Connection,
+    candidates: list[dict[str, Any]],
+) -> None:
+    """Give every candidate the same tag-derived details, whatever matched it.
+
+    A tag must look identical whether the user typed its name or one of its
+    aliases, so display data is derived from the tag itself and never from the
+    query. Chinese wording comes only from the curated tag_locale table; raw
+    aliases stay labelled as aliases because they mix Japanese and Korean and
+    are not translations.
+    """
+    if not candidates:
+        return
+    names = [str(item["tag"]) for item in candidates]
+    placeholders = ",".join("?" for _ in names)
+    grouped: dict[str, list[str]] = {}
+    rows = connection.execute(
+        f"SELECT tag, alias FROM danbooru_tag_aliases WHERE tag IN ({placeholders})",  # noqa: S608
+        names,
+    ).fetchall()
+    for row in rows:
+        alias = str(row["alias"]).strip()
+        if alias:
+            grouped.setdefault(str(row["tag"]), []).append(alias)
+    for item in candidates:
+        tag_name = str(item["tag"])
+        localized = localize_tag(tag_name)
+        item["translation_zh"] = str(localized["zh"]) if localized["known"] else ""
+        ordered = sorted(grouped.get(tag_name, []), key=_alias_sort_key)
+        item["aliases"] = ordered[:MAX_DISPLAY_ALIASES]
+
+
+def _alias_sort_key(alias: str) -> tuple[int, str]:
+    """Surface Han-only aliases first; they are the readable ones for this UI.
+
+    This only orders the list. Han-only text can still be Japanese, so aliases
+    are never presented as translations.
+    """
+    has_han = bool(_HAN_PATTERN.search(alias))
+    has_kana_or_hangul = bool(_KANA_HANGUL_PATTERN.search(alias))
+    if has_han and not has_kana_or_hangul:
+        return (0, alias)
+    if has_han or has_kana_or_hangul:
+        return (1, alias)
+    return (2, alias)
 
 
 class TagCompletionStore:
@@ -270,6 +323,8 @@ class TagCompletionStore:
                         )
                         if len(candidates) >= max_limit:
                             break
+
+            _attach_tag_details(connection, candidates)
 
         return {
             "installed": True,

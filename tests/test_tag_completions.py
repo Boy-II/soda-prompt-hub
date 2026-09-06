@@ -383,3 +383,24 @@ def test_import_keeps_tag_named_tag(settings, tmp_path) -> None:
     store.initialize()
     assert store.import_csv(csv_path) == 3
     assert any(item["tag"] == "tag" for item in store.query("tag", limit=10)["items"])
+
+
+def test_same_tag_renders_the_same_however_it_matched(settings, tmp_path) -> None:
+    """Typing a tag name and typing one of its aliases must yield identical detail."""
+    csv_path = tmp_path / "tags.csv"
+    csv_path.write_text(
+        'tag,category,count,alias\n1girl,0,4974288,"女孩,少女,女の子"\n',
+        encoding="utf-8",
+    )
+    store = TagCompletionStore(settings.database_path, settings.tag_completions_root)
+    store.initialize()
+    store.import_csv(csv_path)
+
+    by_name = store.query("1girl", limit=5)["items"][0]
+    by_alias = store.query("女孩", limit=5)["items"][0]
+
+    assert by_name["tag"] == by_alias["tag"] == "1girl"
+    for field in ("translation_zh", "aliases", "category", "post_count"):
+        assert by_name[field] == by_alias[field]
+    assert set(by_name["aliases"][:2]) == {"女孩", "少女"}
+    assert by_name["aliases"][-1] == "女の子"

@@ -120,7 +120,8 @@ CREATIVE_STYLES = r"""
   .tag-cat-4 { background: #dcfce7; color: #15803d; }
   .tag-cat-5 { background: #fee2e2; color: #b91c1c; }
   .tag-name { font-weight: 600; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tag-alias { color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .tag-alias { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag-zh { margin-right: 6px; color: var(--ink); font-size: 10px; font-weight: 700; white-space: nowrap; }
   .tag-count { color: var(--muted); font-size: 10px; white-space: nowrap; margin-left: auto; }
   .tag-added-badge { font-size: 8px; font-weight: 700; color: var(--signal); border: 1px solid currentColor; padding: 0 3px; border-radius: 2px; flex-shrink: 0; }
   .creative-subsection { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--line); }
@@ -844,7 +845,9 @@ CREATIVE_SCRIPT = r"""
       const isAdded = inCurrent || inProject;
       const isSelected = idx === tagSelectedIndex;
       const catName = catLabels[item.category] || '标签';
-      const aliasHtml = item.matched_alias ? `<span class="tag-alias">别名: ${escapeHtml(item.matched_alias)}</span>` : '';
+      const zhHtml = item.translation_zh ? `<span class="tag-zh">${escapeHtml(item.translation_zh)}</span>` : '';
+      const aliasList = (item.aliases || []).slice(0, 4);
+      const aliasHtml = zhHtml + (aliasList.length ? `<span class="tag-alias">别名: ${escapeHtml(aliasList.join('、'))}</span>` : '');
       const addedBadge = inCurrent ? '<span class="tag-added-badge">当前已加</span>' : (inProject ? '<span class="tag-added-badge">已在其他槽</span>' : '');
 
       return `<div class="tag-autocomplete-item ${isSelected ? 'is-selected' : ''} ${isAdded ? 'is-added' : ''}" data-tag-index="${idx}">` +
