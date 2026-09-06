@@ -51,6 +51,7 @@ class Settings:
             self.embedding_index_root,
             self.remote_nodes_root,
             self.workflow_profiles_root,
+            self.imported_archives_root,
         )
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
@@ -82,6 +83,10 @@ class Settings:
     @property
     def dataset_workspaces_root(self) -> Path:
         return self.library_root / "datasets" / "workspaces"
+
+    @property
+    def imported_archives_root(self) -> Path:
+        return self.library_root / "datasets" / "imported-archives"
 
     @property
     def project_dataset_sources_root(self) -> Path:

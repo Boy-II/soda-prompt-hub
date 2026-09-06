@@ -28,7 +28,7 @@ from prompt_hub.creative import (
 from prompt_hub.database import PromptDatabase
 from prompt_hub.dataset_curation import DatasetCurationStore
 from prompt_hub.dataset_routes import create_dataset_router
-from prompt_hub.dataset_workspace import DatasetWorkspaceStore
+from prompt_hub.dataset_workspace import ARCHIVE_JOB_TYPE, DatasetWorkspaceStore
 from prompt_hub.embedding_index import EmbeddingIndexStore
 from prompt_hub.embedding_routes import create_embedding_router
 from prompt_hub.hybrid_search import HybridSearchService
@@ -228,6 +228,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         job_store,
         {
             "dataset_scan": workspace_store.scan_job,
+            ARCHIVE_JOB_TYPE: workspace_store.import_archive_job,
             "dataset_wd14": curation_store.tag_job,
             "dataset_krea2_vlm": curation_store.krea2_vlm_job,
             "source_sync": source_sync.job,

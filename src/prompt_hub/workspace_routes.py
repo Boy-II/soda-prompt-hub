@@ -4,12 +4,18 @@ import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, Literal, Never
 from urllib.parse import quote
+from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from prompt_hub.dataset_workspace import DatasetWorkspaceError, DatasetWorkspaceStore
+from prompt_hub.dataset_workspace import (
+    ARCHIVE_JOB_TYPE,
+    MAX_ARCHIVE_UPLOAD_BYTES,
+    DatasetWorkspaceError,
+    DatasetWorkspaceStore,
+)
 from prompt_hub.remote_nodes import RemoteNodeError, RemoteNodeStore
 
 if TYPE_CHECKING:
@@ -125,6 +131,15 @@ def create_workspace_router(
     def list_dataset_workspaces() -> list[dict[str, Any]]:
         return workspace_store.list_workspaces()
 
+    @router.get("/api/dataset-workspaces/browse")
+    def browse_dataset_directories(
+        path: Annotated[str, Query(max_length=4096)] = "",
+    ) -> dict[str, Any]:
+        try:
+            return workspace_store.browse_directory(path or None)
+        except DatasetWorkspaceError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
     @router.post(
         "/api/dataset-workspaces/import",
         status_code=status.HTTP_202_ACCEPTED,
@@ -140,6 +155,51 @@ def create_workspace_router(
             max_attempts=2,
         )
         return {"workspace": workspace, "job": job}
+
+    @router.post(
+        "/api/dataset-workspaces/import-zip",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    async def import_dataset_archive(
+        request: Request,
+        filename: Annotated[str, Query(min_length=1, max_length=180)] = "",
+        name: Annotated[str, Query(max_length=160)] = "",
+    ) -> dict[str, Any]:
+        archive_name = Path(filename).name
+        if not archive_name.lower().endswith(".zip"):
+            raise HTTPException(status_code=422, detail="只支持 .zip 压缩包")
+        staging_root = workspace_store.settings.imported_archives_root / ".staging"
+        staging_root.mkdir(parents=True, exist_ok=True)
+        archive_id = f"zip-{uuid4().hex[:12]}"
+        staged = staging_root / f"{archive_id}.zip"
+        received = 0
+        try:
+            with staged.open("wb") as sink:
+                async for chunk in request.stream():
+                    received += len(chunk)
+                    if received > MAX_ARCHIVE_UPLOAD_BYTES:
+                        limit_gib = MAX_ARCHIVE_UPLOAD_BYTES / (1024**3)
+                        raise DatasetWorkspaceError(f"压缩包超过上传上限（{limit_gib:.0f} GiB）")
+                    sink.write(chunk)
+        except DatasetWorkspaceError as error:
+            staged.unlink(missing_ok=True)
+            raise HTTPException(status_code=413, detail=str(error)) from error
+        except Exception:
+            staged.unlink(missing_ok=True)
+            raise
+        if received == 0:
+            staged.unlink(missing_ok=True)
+            raise HTTPException(status_code=422, detail="上传内容为空")
+        job = job_runner.submit(
+            ARCHIVE_JOB_TYPE,
+            {
+                "archive_path": str(staged),
+                "archive_id": archive_id,
+                "filename": archive_name,
+                "name": name.strip(),
+            },
+        )
+        return {"job": job, "archive_id": archive_id, "filename": archive_name}
 
     @router.get("/api/dataset-workspaces/{workspace_id}")
     def get_dataset_workspace(workspace_id: str) -> dict[str, Any]:
@@ -504,11 +564,14 @@ def create_workspace_router(
         workspace = workspace_store.remove(workspace_id)
         if workspace is None:
             raise HTTPException(status_code=404, detail="Dataset workspace not found")
+        zip_archive = str(workspace.get("source_origin", "")) == "zip_archive"
         return {
             "removed": True,
             "workspace_id": workspace_id,
             "source_path": workspace["source_path"],
-            "source_untouched": True,
+            "source_origin": workspace.get("source_origin", "user_directory"),
+            "source_untouched": not zip_archive,
+            "archive_copy_removed": zip_archive,
         }
 
     @router.get("/api/jobs")
