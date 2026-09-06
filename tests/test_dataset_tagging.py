@@ -196,3 +196,54 @@ def test_tag_normalization() -> None:
     assert normalize_tag_draft("银发, 单人") == "silver_hair, solo"
     with pytest.raises(DatasetTaggingError, match="无法确认中文标签"):
         normalize_tag_draft("自创中文标签")
+
+
+def test_model_tag_entries_keep_no_confidence_when_score_absent() -> None:
+    project = {"generation": {"result_assets": [{"asset_id": "asset-1"}]}}
+    result = {
+        "tagger": "model",
+        "model": "vision-model",
+        "provider": "LM Studio",
+        "rating": {"tag": "unknown"},
+        "general": [{"tag": "1girl"}, {"tag": "solo"}],
+        "characters": [],
+        "tag_string": "1girl, solo",
+    }
+    _generation, asset = store_wd14_result(project, asset_id="asset-1", result=result)
+    tagging = asset["wd14_tagging"]
+    assert tagging["general"] == [{"tag": "1girl"}, {"tag": "solo"}]
+    assert tagging["rating"] == {"tag": "unknown"}
+    assert "score" not in tagging["general"][0]
+    assert "score" not in tagging["rating"]
+
+
+def test_wd14_real_scores_are_preserved() -> None:
+    project = {"generation": {"result_assets": [{"asset_id": "asset-1"}]}}
+    _generation, asset = store_wd14_result(project, asset_id="asset-1", result=_tag_result())
+    tagging = asset["wd14_tagging"]
+    assert tagging["general"] == [
+        {"tag": "1girl", "score": 0.99},
+        {"tag": "solo", "score": 0.95},
+    ]
+    assert tagging["rating"] == {"tag": "sensitive", "score": 0.98}
+
+
+def test_scored_tag_handles_missing_none_and_legacy_scores() -> None:
+    project = {"generation": {"result_assets": [{"asset_id": "asset-1"}]}}
+    result = {
+        "model": "SmilingWolf/wd-swinv2-tagger-v3",
+        "provider": "CPUExecutionProvider",
+        "rating": {"tag": "general"},
+        "general": [
+            {"tag": "missing"},
+            {"tag": "none", "score": None},
+            {"tag": "legacy", "score": 1.0},
+        ],
+        "characters": [],
+        "tag_string": "missing, none, legacy",
+    }
+    _generation, asset = store_wd14_result(project, asset_id="asset-1", result=result)
+    general = asset["wd14_tagging"]["general"]
+    assert general[0] == {"tag": "missing"}
+    assert general[1] == {"tag": "none"}
+    assert general[2] == {"tag": "legacy", "score": 1.0}

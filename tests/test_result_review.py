@@ -301,7 +301,10 @@ def test_local_vision_anima_tags_parse_json_tags(tmp_path, monkeypatch) -> None:
     assert result["tagger"] == "model"
     assert result["model"] == "vision-model"
     assert result["tag_string"] == "1girl, solo, blue_eyes"
-    assert result["general"][0] == {"tag": "1girl", "score": 1.0}
+    assert result["general"][0] == {"tag": "1girl"}
+    assert "score" not in result["general"][0]
+    assert result["rating"] == {"tag": "safe"}
+    assert "score" not in result["rating"]
 
 
 def test_local_vision_anima_tags_rejects_non_json(tmp_path, monkeypatch) -> None:

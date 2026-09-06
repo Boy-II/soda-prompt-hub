@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from contextlib import suppress
 from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, override
 from urllib.error import HTTPError, URLError
@@ -459,23 +460,24 @@ def draft_anima_tags(
     if not tags:
         raise LocalModelError("视觉模型返回了空的 Anima 标签草稿")
     rating_value = raw.get("rating", "")
-    rating = (
-        {
-            "tag": str(rating_value.get("tag", "")).strip(),
-            "score": float(rating_value.get("score", 0)),
-        }
+    rating_tag = (
+        str(rating_value.get("tag", "")).strip()
         if isinstance(rating_value, dict)
-        else {"tag": str(rating_value).strip(), "score": 0.0}
+        else str(rating_value).strip()
     )
-    if not rating["tag"]:
-        rating = {"tag": "unknown", "score": 0.0}
-    scored_tags = [{"tag": tag, "score": 1.0} for tag in tags]
+    rating: dict[str, Any] = {"tag": rating_tag or "unknown"}
+    if isinstance(rating_value, dict):
+        raw_score = rating_value.get("score")
+        if raw_score is not None:
+            with suppress(TypeError, ValueError):
+                rating["score"] = float(raw_score)
+    general_tags = [{"tag": tag} for tag in tags]
     return {
         "tagger": "model",
         "model": model,
         "provider": provider,
         "rating": rating,
-        "general": scored_tags,
+        "general": general_tags,
         "characters": [],
         "tag_string": ", ".join(tags),
         "safety_warning": " ".join(str(raw.get("safety_warning", "")).split())[:2000],

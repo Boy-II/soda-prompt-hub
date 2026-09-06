@@ -124,7 +124,14 @@ def _scored_tag(value: object) -> dict[str, Any] | None:
     tag = str(value.get("tag", "")).strip()
     if not tag:
         return None
-    return {"tag": tag, "score": float(value.get("score", 0))}
+    raw_score = value.get("score")
+    if raw_score is None:
+        return {"tag": tag}
+    try:
+        score = float(raw_score)
+    except (TypeError, ValueError):
+        return {"tag": tag}
+    return {"tag": tag, "score": score}
 
 
 def _scored_tags(value: object) -> list[dict[str, Any]]:
