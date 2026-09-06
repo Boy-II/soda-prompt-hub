@@ -32,7 +32,7 @@ from prompt_hub.dataset_workspace import DatasetWorkspaceStore
 from prompt_hub.embedding_index import EmbeddingIndexStore
 from prompt_hub.embedding_routes import create_embedding_router
 from prompt_hub.hybrid_search import HybridSearchService
-from prompt_hub.importers import import_all
+from prompt_hub.importers import import_report
 from prompt_hub.local_model import (
     LocalModelError,
     analyze_result_image,
@@ -647,8 +647,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.post("/api/import")
     def rebuild_index() -> dict[str, Any]:
-        results = import_all(active_settings, database)
-        return {"status": "imported", "sources": results, "stats": database.stats()}
+        report = import_report(active_settings, database)
+        return {"status": "imported", **report, "stats": database.stats()}
 
     return application
 

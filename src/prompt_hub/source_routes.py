@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 class SourceSyncInput(BaseModel):
     source_ids: list[str] = Field(default_factory=list, max_length=100)
+    clone_missing: bool = False
 
 
 class WebCaptureInput(BaseModel):
@@ -40,7 +41,7 @@ def create_source_router(
     def sync_sources(payload: SourceSyncInput) -> dict[str, Any]:
         job = job_runner.submit(
             "source_sync",
-            {"source_ids": payload.source_ids},
+            {"source_ids": payload.source_ids, "clone_missing": payload.clone_missing},
             max_attempts=1,
         )
         return {"job": job}

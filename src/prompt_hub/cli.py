@@ -9,7 +9,7 @@ import uvicorn
 
 from prompt_hub.config import Settings
 from prompt_hub.database import PromptDatabase
-from prompt_hub.importers import import_all
+from prompt_hub.importers import import_report
 from prompt_hub.maintenance import BackupManager, MaintenanceError, doctor, verify_backup
 from prompt_hub.mcp_server import main as run_mcp
 from prompt_hub.wd14 import WD14Error, tag_image
@@ -64,8 +64,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         database.initialize()
         _print_json({"status": "initialized", "database": str(settings.database_path)})
     elif args.command == "import":
-        results = import_all(settings, database)
-        _print_json({"status": "imported", "sources": results, "stats": database.stats()})
+        report = import_report(settings, database)
+        _print_json({"status": "imported", **report, "stats": database.stats()})
     elif args.command == "stats":
         database.initialize()
         _print_json(database.stats())

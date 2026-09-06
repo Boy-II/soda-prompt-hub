@@ -49,6 +49,103 @@ def _commit(path: Path, message: str) -> None:
     )
 
 
+def _publish_remote(tmp_path: Path) -> Path:
+    remote = tmp_path / "remote.git"
+    author = tmp_path / "author"
+    executable = shutil.which("git")
+    assert executable is not None
+    subprocess.run(  # noqa: S603 - test controls the temporary repository path
+        [executable, "init", "--bare", str(remote)], check=True, capture_output=True
+    )
+    author.mkdir()
+    _git(author, "init", "-b", "main")
+    (author / "prompts.txt").write_text("first\n", encoding="utf-8")
+    _commit(author, "initial")
+    _git(author, "remote", "add", "origin", str(remote))
+    _git(author, "push", "-u", "origin", "main")
+    _git(remote, "symbolic-ref", "HEAD", "refs/heads/main")
+    return remote
+
+
+def _service(settings, spec: SourceSpec, reindexes: list[bool]) -> SourceSyncService:
+    return SourceSyncService(
+        settings,
+        PromptDatabase(settings.database_path),
+        sources=[spec],
+        reindexer=lambda: reindexes.append(True) or {"demo": 1},
+    )
+
+
+def _spec(url: str, path: Path) -> SourceSpec:
+    return SourceSpec(
+        source_id="demo",
+        name="Demo prompts",
+        url=url,
+        path=path,
+        license_name="test-only",
+        notes="",
+        importer="wildcards",
+    )
+
+
+def test_missing_source_is_cloned_only_when_explicitly_requested(settings, tmp_path) -> None:
+    remote = _publish_remote(tmp_path)
+    target = settings.git_sources_root / "demo"
+    spec = _spec(str(remote), target)
+    reindexes: list[bool] = []
+    service = _service(settings, spec, reindexes)
+
+    untouched = service.job({}, _Context())
+    assert untouched["sources"][0]["status"] == "missing"
+    assert not target.exists()
+
+    cloned = service.job({"clone_missing": True}, _Context())
+    assert cloned["cloned"] == 1
+    assert cloned["sources"][0]["status"] == "cloned"
+    assert (target / "prompts.txt").read_text(encoding="utf-8") == "first\n"
+    assert len(reindexes) == 2
+
+    unchanged = service.job({"clone_missing": True}, _Context())
+    assert unchanged["cloned"] == 0
+    assert unchanged["unchanged"] == 1
+
+
+def test_clone_that_checks_out_nothing_is_reported_as_failed(settings, tmp_path) -> None:
+    remote = _publish_remote(tmp_path)
+    _git(remote, "symbolic-ref", "HEAD", "refs/heads/does-not-exist")
+    target = settings.git_sources_root / "demo"
+    service = _service(settings, _spec(str(remote), target), [])
+
+    result = service.clone("demo")
+
+    assert result["status"] == "failed"
+    assert "不可用" in result["message"]
+
+
+def test_clone_refuses_to_overwrite_an_existing_non_empty_directory(settings, tmp_path) -> None:
+    remote = _publish_remote(tmp_path)
+    target = settings.git_sources_root / "demo"
+    target.mkdir(parents=True)
+    (target / "personal.txt").write_text("keep me\n", encoding="utf-8")
+    service = _service(settings, _spec(str(remote), target), [])
+
+    result = service.clone("demo")
+
+    assert result["status"] == "failed"
+    assert (target / "personal.txt").read_text(encoding="utf-8") == "keep me\n"
+
+
+def test_clone_rejects_a_target_outside_the_local_source_root(settings, tmp_path) -> None:
+    remote = _publish_remote(tmp_path)
+    outside = tmp_path / "outside"
+    service = _service(settings, _spec(str(remote), outside), [])
+
+    result = service.clone("demo")
+
+    assert result["status"] == "failed"
+    assert not outside.exists()
+
+
 def test_source_sync_fast_forwards_and_skips_dirty_tree(settings, tmp_path) -> None:
     remote = tmp_path / "remote.git"
     author = tmp_path / "author"
