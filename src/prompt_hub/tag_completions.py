@@ -137,6 +137,7 @@ def _attach_tag_details(
     for item in candidates:
         tag_name = str(item["tag"])
         localized = localize_tag(tag_name)
+        item["display_tag"] = tag_name.replace("_", " ")
         item["translation_zh"] = str(localized["zh"]) if localized["known"] else ""
         ordered = sorted(grouped.get(tag_name, []), key=_alias_sort_key)
         item["aliases"] = ordered[:MAX_DISPLAY_ALIASES]

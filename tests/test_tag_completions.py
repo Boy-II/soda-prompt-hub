@@ -404,3 +404,20 @@ def test_same_tag_renders_the_same_however_it_matched(settings, tmp_path) -> Non
         assert by_name[field] == by_alias[field]
     assert set(by_name["aliases"][:2]) == {"女孩", "少女"}
     assert by_name["aliases"][-1] == "女の子"
+
+
+def test_candidates_expose_space_separated_insert_text(settings, tmp_path) -> None:
+    """Prompts in this library use spaces; Danbooru tags use underscores."""
+    csv_path = tmp_path / "tags.csv"
+    csv_path.write_text(
+        "tag,category,count,alias\nlarge_breasts,0,900,\nsolo,0,50,\n",
+        encoding="utf-8",
+    )
+    store = TagCompletionStore(settings.database_path, settings.tag_completions_root)
+    store.initialize()
+    store.import_csv(csv_path)
+
+    for query in ("large_breasts", "large breasts"):
+        item = store.query(query, limit=5)["items"][0]
+        assert item["tag"] == "large_breasts"
+        assert item["display_tag"] == "large breasts"

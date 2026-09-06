@@ -774,6 +774,7 @@ CREATIVE_SCRIPT = r"""
   let activeTagSlot = null;
   let activeTagInput = null;
   let tagCandidates = [];
+  const normalizeTagKey = (value) => String(value || '').replace(/_/g, ' ').trim().toLowerCase();
   let tagSelectedIndex = 0;
 
   function hideTagDropdown() {
@@ -826,12 +827,12 @@ CREATIVE_SCRIPT = r"""
     }
 
     const currentSlotTags = new Set(
-      (activeTagInput.value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      (activeTagInput.value || '').split(',').map(normalizeTagKey).filter(Boolean)
     );
     const allProjectTags = new Set();
     Object.values(creativeState.project?.slots || {}).forEach(val => {
       (val || '').split(',').forEach(s => {
-        const t = s.trim().toLowerCase();
+        const t = normalizeTagKey(s);
         if (t) allProjectTags.add(t);
       });
     });
@@ -839,7 +840,8 @@ CREATIVE_SCRIPT = r"""
     const catLabels = {0: '普通', 1: '画师', 3: '作品', 4: '角色', 5: '元标签'};
 
     dropdown.innerHTML = tagCandidates.map((item, idx) => {
-      const tagLower = (item.tag || '').toLowerCase();
+      const tagText = item.display_tag || (item.tag || '').replace(/_/g, ' ');
+      const tagLower = normalizeTagKey(tagText);
       const inCurrent = currentSlotTags.has(tagLower);
       const inProject = allProjectTags.has(tagLower);
       const isAdded = inCurrent || inProject;
@@ -852,7 +854,7 @@ CREATIVE_SCRIPT = r"""
 
       return `<div class="tag-autocomplete-item ${isSelected ? 'is-selected' : ''} ${isAdded ? 'is-added' : ''}" data-tag-index="${idx}">` +
         `<span class="tag-cat-badge tag-cat-${item.category}">${catName}</span>` +
-        `<span class="tag-name">${escapeHtml(item.tag)}</span>` +
+        `<span class="tag-name">${escapeHtml(tagText)}</span>` +
         aliasHtml +
         `<span class="tag-count">${formatTagCount(item.post_count)}</span>` +
         addedBadge +
@@ -890,7 +892,7 @@ CREATIVE_SCRIPT = r"""
 
     const cleanBefore = before.length > 0 && !before.endsWith(' ') ? before + ' ' : before;
     const cleanAfter = after.replace(/^,\s*/, '');
-    const insertText = candidate.tag + ', ';
+    const insertText = (candidate.display_tag || (candidate.tag || '').replace(/_/g, ' ')) + ', ';
 
     textarea.value = cleanBefore + insertText + cleanAfter;
     const newCursorPos = cleanBefore.length + insertText.length;
