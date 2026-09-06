@@ -40,6 +40,9 @@ uv run prompt-hub serve --host 127.0.0.1 --port 8765
 
 浏览器会打开 <http://127.0.0.1:8765>。关闭终端窗口或按 `Control-C` 即可停止。
 
+第一次接触本项目，建议先阅读 [用户指南](USER_GUIDE.md)。它说明软件各页面的用途、绘图与数据集
+工作流、Mac 和 Windows 的连接方式、文件保存位置及当前功能边界。
+
 绘图创作的最短操作顺序见 [DRAWING_V1_GUIDE.md](DRAWING_V1_GUIDE.md)。按具体情况操作和人工验收见
 [MANUAL_ACCEPTANCE_GUIDE.md](MANUAL_ACCEPTANCE_GUIDE.md)；完整的 Mac 日常使用、数据集审核、
 LoRA 训练交付、Windows 回传、备份恢复和 SMB 配置顺序见 [MAC_OPERATIONS_GUIDE.md](MAC_OPERATIONS_GUIDE.md)。首页点“新建或继续绘图项目”
