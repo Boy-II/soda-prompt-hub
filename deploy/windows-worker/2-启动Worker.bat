@@ -10,6 +10,13 @@ if not exist "worker-config.json" (
   exit /b 2
 )
 
+if not exist "prompt_hub_worker.py" (
+  echo [ERROR] prompt_hub_worker.py not found.
+  echo Download the complete deploy\windows-worker folder again.
+  pause
+  exit /b 2
+)
+
 python --version
 echo Keep this window open while Prompt Hub sends jobs.
 echo.

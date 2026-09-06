@@ -1,14 +1,38 @@
-# Prompt Hub 5060 Ti Worker
+# Prompt Hub Windows Worker
 
-这个目录运行在 Windows 5060 Ti 主机上。它只读取 `D:\PromptHub-Bridge\prompt-hub` 中的任务，只访问本机 `http://127.0.0.1:8188`，不需要把 ComfyUI 开放到局域网。
+这个目录是可以独立放到 Windows 上运行的 Worker 发布包。它通过 SMB 共享目录接收 Mac 发来的
+任务，只访问 Windows 本机的 ComfyUI，不需要把 ComfyUI 开放到局域网。
+
+请完整保留本目录中的 `prompt_hub_worker.py`、两个 `.bat`、示例配置和说明文件，不要只下载启动脚本。
+
+## 先理解四类路径
+
+这些路径不要求位于同一块硬盘：
+
+| 配置 | 用途 | 示例 |
+|---|---|---|
+| `bridge_root` | Mac 与 Windows 交换任务和结果的共享目录 | `D:\PromptHub-Bridge\prompt-hub` |
+| ComfyUI 安装目录 | 运行 ComfyUI，本字段不直接填写到 Prompt Hub 的 Mac 页面 | `C:\AI\ComfyUI` |
+| `lora_roots` | 一个或多个 LoRA 文件夹 | `E:\AI-Models\loras` |
+| `model_roots` | Checkpoint、UNet、VAE 等各自的文件夹 | `F:\AI-Models\checkpoints` |
+
+例如 ComfyUI、数据集和模型分别放在三块硬盘时，不需要移动文件。只需建立一个容量足够的共享
+文件夹作为 `bridge_root`，再在 `worker-config.json` 中分别填写 LoRA 和模型的真实路径。
+
+Windows 可以共享 `D:\PromptHub-Bridge`；Mac 通过 Finder 挂载后可能显示为
+`/Volumes/PromptHub-Bridge`。Mac 页面填写的是 `/Volumes/PromptHub-Bridge`，程序会自动使用其下的
+`prompt-hub`。它不是 ComfyUI、dataset 或 models 路径。
 
 ## 第一次运行
 
-1. 启动 ComfyUI，并确认浏览器能打开 `http://127.0.0.1:8188`。
-2. 确认已安装 Python 3.12；当前实测版本是 3.12.10。
-3. 双击 `1-先自检.bat`。
-4. 看到 `[OK] Worker and local ComfyUI are ready.` 后，双击 `2-启动Worker.bat`。
-5. 保持 Worker 黑色窗口开启。窗口显示“等待任务”时，Mac 才能投递真实任务。
+1. 把整个 `windows-worker` 文件夹复制到 Windows 的共享目录或其他固定位置。
+2. 复制 `worker-config.example.json` 并改名为 `worker-config.json`。
+3. 按当前电脑的盘符修改 `bridge_root`、`lora_roots` 和 `model_roots`；不使用的模型类型可以删除。
+4. 启动 ComfyUI，并确认浏览器能打开 `http://127.0.0.1:8188`。
+5. 确认已安装 Python 3.12；当前实测版本是 3.12.10。
+6. 双击 `1-先自检.bat`。
+7. 看到 `[OK] Worker and local ComfyUI are ready.` 后，双击 `2-启动Worker.bat`。
+8. 保持 Worker 黑色窗口开启。窗口显示“等待任务”时，Mac 才能投递真实任务。
 
 自检写出的 `worker-status.json` 包含 `worker_build_sha256`，代表实际启动脚本的 SHA-256。任务成功
 或失败时，结果信封也会回显同一字段。它可以确认当前接任务的是刚同步的新版 Worker，而不是仍在
