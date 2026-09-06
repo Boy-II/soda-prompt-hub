@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,6 +15,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from prompt_hub.database import EntryInput
+from prompt_hub.importers import discover_sources
 
 if TYPE_CHECKING:
     from prompt_hub.config import Settings
@@ -63,6 +65,18 @@ SITE_POLICIES = {
 
 
 class WebCaptureError(ValueError):
+    pass
+
+
+class WebCaptureNotFoundError(WebCaptureError):
+    pass
+
+
+class SourceProtectedError(WebCaptureError):
+    pass
+
+
+class SourceNotFoundError(WebCaptureError):
     pass
 
 
@@ -257,6 +271,171 @@ class WebCaptureService:
         if actual != expected:
             raise WebCaptureError("网页视觉资料完整性校验失败")
         return candidate
+
+    def delete_source(
+        self,
+        source_id: str,
+        *,
+        purge_marks: bool = False,
+        preset_source_ids: set[str] | None = None,
+    ) -> dict[str, Any]:
+        preset_ids = (
+            preset_source_ids
+            if preset_source_ids is not None
+            else {spec.source_id for spec in discover_sources(self.settings)}
+        )
+        if source_id in preset_ids:
+            raise SourceProtectedError("内置资料库不能在页面删除")
+
+        source = self.database.get_source(source_id)
+        if source is None:
+            raise SourceNotFoundError(f"资料来源不存在：{source_id}")
+        if source.get("source_type") == "git":
+            raise SourceProtectedError("内置资料库不能在页面删除")
+
+        target_dirs = _collect_source_cache_dirs(self.settings, self.database, source_id)
+        deleted_files = _remove_cache_dirs(
+            target_dirs,
+            self.settings.web_sources_root.resolve(),
+            self.settings.git_sources_root.resolve(),
+        )
+
+        db_res = self.database.delete_source(source_id, purge_marks=purge_marks)
+        name = source.get("name") or source_id
+        deleted_entries = db_res["deleted_entries"]
+        retained = db_res["retained_marks"]
+        purged = db_res["purged_marks"]
+        mark_desc = (
+            f"彻底清除 {purged} 条人工标记" if purge_marks else f"安全保留 {retained} 条人工标记"
+        )
+        message = (
+            f"已删除来源「{name}」及 {deleted_entries} 条条目，"
+            f"清除 {deleted_files} 个缓存文件，{mark_desc}。"
+        )
+        return {
+            "source_id": source_id,
+            "deleted": True,
+            "deleted_entries": deleted_entries,
+            "deleted_files": deleted_files,
+            "retained_marks": retained,
+            "purged_marks": purged,
+            "message": message,
+        }
+
+    def delete_capture(
+        self,
+        capture_id: str,
+        *,
+        purge_marks: bool = False,
+    ) -> dict[str, Any]:
+        if not re.fullmatch(r"web-[0-9a-f]{24}", capture_id):
+            raise WebCaptureError("网页资料编号无效")
+
+        capture_root = (self.settings.web_sources_root / capture_id).resolve()
+        manifest_path = capture_root / "manifest.json"
+
+        source_id = ""
+        if manifest_path.is_file():
+            try:
+                data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    source_id = str(data.get("source_id", ""))
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        with self.database.connect() as connection:
+            row = connection.execute(
+                "SELECT source_id FROM entries WHERE external_id = ?",
+                (capture_id,),
+            ).fetchone()
+            if row and not source_id:
+                source_id = str(row[0])
+
+        if not capture_root.exists() and not row:
+            raise WebCaptureNotFoundError(f"网页资料不存在：{capture_id}")
+
+        deleted_files = 0
+        web_root = self.settings.web_sources_root.resolve()
+        git_root = self.settings.git_sources_root.resolve()
+
+        if (
+            capture_root.is_dir()
+            and capture_root.is_relative_to(web_root)
+            and capture_root != web_root
+            and not capture_root.is_relative_to(git_root)
+        ):
+            deleted_files = sum(1 for item in capture_root.rglob("*") if item.is_file())
+            shutil.rmtree(capture_root, ignore_errors=True)
+
+        if row:
+            db_res = self.database.delete_entry(
+                source_id=source_id or str(row[0]),
+                external_id=capture_id,
+                purge_marks=purge_marks,
+            )
+        else:
+            db_res = {
+                "deleted_entries": 0,
+                "retained_marks": 0,
+                "purged_marks": 0,
+                "source_deleted": False,
+            }
+
+        retained = db_res["retained_marks"]
+        purged = db_res["purged_marks"]
+        mark_desc = (
+            f"彻底清除 {purged} 条人工标记" if purge_marks else f"安全保留 {retained} 条人工标记"
+        )
+        return {
+            "capture_id": capture_id,
+            "source_id": source_id,
+            "deleted": True,
+            "deleted_entries": db_res["deleted_entries"],
+            "deleted_files": deleted_files,
+            "retained_marks": retained,
+            "purged_marks": purged,
+            "source_deleted": db_res.get("source_deleted", False),
+            "message": f"已删除网页资料及对应缓存文件，{mark_desc}。",
+        }
+
+
+def _collect_source_cache_dirs(
+    settings: Settings,
+    database: PromptDatabase,
+    source_id: str,
+) -> set[Path]:
+    target_dirs: set[Path] = set()
+    if settings.web_sources_root.exists():
+        for manifest_path in settings.web_sources_root.glob("web-*/manifest.json"):
+            try:
+                data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                if isinstance(data, dict) and data.get("source_id") == source_id:
+                    target_dirs.add(manifest_path.parent.resolve())
+            except (OSError, json.JSONDecodeError):
+                continue
+
+    with database.connect() as connection:
+        rows = connection.execute(
+            "SELECT external_id FROM entries WHERE source_id = ?",
+            (source_id,),
+        ).fetchall()
+        for row in rows:
+            candidate = (settings.web_sources_root / str(row[0])).resolve()
+            if candidate.is_dir():
+                target_dirs.add(candidate)
+    return target_dirs
+
+
+def _remove_cache_dirs(directories: set[Path], web_root: Path, git_root: Path) -> int:
+    deleted_files = 0
+    for directory in sorted(directories):
+        if not directory.is_relative_to(web_root) or directory == web_root:
+            continue
+        if directory.is_relative_to(git_root):
+            continue
+        deleted_files += sum(1 for item in directory.rglob("*") if item.is_file())
+        shutil.rmtree(directory, ignore_errors=True)
+    return deleted_files
 
 
 def validate_capture_url(url: str) -> tuple[str, SitePolicy]:

@@ -76,6 +76,9 @@ class SourceSyncService:
             "entry_counts": counts,
         }
 
+    def configured_source_ids(self) -> set[str]:
+        return {spec.source_id for spec in self._configured_sources()}
+
     def _configured_sources(self) -> list[SourceSpec]:
         return list(self._sources) if self._sources is not None else discover_sources(self.settings)
 

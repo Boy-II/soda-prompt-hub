@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from prompt_hub.database import EntryInput, PromptDatabase
 
 
@@ -143,3 +145,64 @@ def test_mark_survives_source_rebuild(tmp_path) -> None:
     assert rebuilt["favorite"] is True
     assert rebuilt["user_rating"] == 4
     assert rebuilt["user_note"] == "keep me"
+
+
+def test_get_and_delete_source_and_entry(tmp_path) -> None:
+    database = PromptDatabase(tmp_path / "prompt.sqlite")
+    database.initialize()
+    with database.connect() as connection:
+        database.upsert_source(
+            source_id="web-custom",
+            name="Custom Web",
+            source_type="web_capture",
+            url="https://example.com",
+            local_path=str(tmp_path / "web"),
+            commit_hash="abc",
+            license_name="MIT",
+            notes="web notes",
+            connection=connection,
+        )
+        database.replace_source_entries(
+            "web-custom",
+            [
+                EntryInput("web-custom", "e1", "style", "Entry 1", "content 1"),
+                EntryInput("web-custom", "e2", "style", "Entry 2", "content 2"),
+            ],
+            connection=connection,
+        )
+        connection.commit()
+
+    src = database.get_source("web-custom")
+    assert src is not None
+    assert src["entry_count"] == 2
+    assert src["deletable"] is True
+    assert database.get_source("nonexistent") is None
+
+    database.save_mark(
+        source_id="web-custom",
+        external_id="e1",
+        favorite=True,
+        rating=5,
+        note="mark 1",
+    )
+
+    # Delete single entry e1 (default retain marks)
+    del_entry = database.delete_entry("web-custom", "e1", purge_marks=False)
+    assert del_entry["deleted_entries"] == 1
+    assert del_entry["retained_marks"] == 1
+    assert del_entry["purged_marks"] == 0
+    assert del_entry["remaining_entries"] == 1
+    assert del_entry["source_deleted"] is False
+
+    # Delete remaining entry e2 with purge_marks=True
+    del_entry2 = database.delete_entry("web-custom", "e2", purge_marks=True)
+    assert del_entry2["deleted_entries"] == 1
+    assert del_entry2["remaining_entries"] == 0
+    assert del_entry2["source_deleted"] is True
+    assert database.get_source("web-custom") is None
+
+    # Deleting nonexistent entry / source raises KeyError
+    with pytest.raises(KeyError):
+        database.delete_entry("web-custom", "e1")
+    with pytest.raises(KeyError):
+        database.delete_source("web-custom")

@@ -6,7 +6,13 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from prompt_hub.web_capture import WebCaptureError, WebCaptureService
+from prompt_hub.web_capture import (
+    SourceNotFoundError,
+    SourceProtectedError,
+    WebCaptureError,
+    WebCaptureNotFoundError,
+    WebCaptureService,
+)
 
 if TYPE_CHECKING:
     from prompt_hub.background_jobs import BackgroundJobRunner
@@ -46,6 +52,31 @@ def create_source_router(
         )
         return {"job": job}
 
+    @router.delete("/api/sources/{source_id}")
+    def delete_source(
+        source_id: str,
+        purge_marks: bool = False,
+    ) -> dict[str, Any]:
+        preset_ids = service.configured_source_ids()
+        try:
+            return web_capture.delete_source(
+                source_id,
+                purge_marks=purge_marks,
+                preset_source_ids=preset_ids,
+            )
+        except SourceProtectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(error),
+            ) from error
+        except SourceNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+        except WebCaptureError as error:
+            raise HTTPException(
+                status_code=422,
+                detail=str(error),
+            ) from error
+
     @router.get("/api/web-captures")
     def list_web_captures() -> list[dict[str, Any]]:
         return web_capture.list_captures()
@@ -56,6 +87,21 @@ def create_source_router(
             return web_capture.capture(**payload.model_dump())
         except WebCaptureError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @router.delete("/api/web-captures/{capture_id}")
+    def delete_web_capture(
+        capture_id: str,
+        purge_marks: bool = False,
+    ) -> dict[str, Any]:
+        try:
+            return web_capture.delete_capture(capture_id, purge_marks=purge_marks)
+        except WebCaptureNotFoundError as error:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+        except WebCaptureError as error:
+            raise HTTPException(
+                status_code=422,
+                detail=str(error),
+            ) from error
 
     @router.get("/api/web-captures/{capture_id}/media", response_class=FileResponse)
     def read_web_capture_media(capture_id: str) -> FileResponse:

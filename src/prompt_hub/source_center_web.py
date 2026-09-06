@@ -20,12 +20,16 @@ SOURCE_CENTER_STYLES = r"""<style>
   .source-ledger-summary { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
   .source-ledger-summary span { padding:7px 9px; background:var(--paper-deep); font:800 9px/1 monospace; }
   .source-ledger { display:grid; border-top:1px solid var(--line); }
-  .source-ledger-row { display:grid; grid-template-columns:minmax(170px,1.3fr) repeat(2,minmax(68px,.35fr)) minmax(130px,.7fr); gap:12px; align-items:center; padding:14px 0; border-bottom:1px solid var(--line); }
+  .source-ledger-row { display:grid; grid-template-columns:minmax(160px,1.2fr) repeat(2,minmax(64px,.35fr)) minmax(110px,.65fr) auto; gap:12px; align-items:center; padding:14px 0; border-bottom:1px solid var(--line); }
   .source-ledger-name strong { display:block; font-size:13px; }
   .source-ledger-name span { display:block; margin-top:5px; color:var(--muted); font:700 9px/1.4 monospace; }
   .source-ledger-metric strong { display:block; font:700 22px/1 "Iowan Old Style",serif; }
   .source-ledger-metric span,.source-ledger-license span { color:var(--muted); font:700 8px/1.4 monospace; text-transform:uppercase; }
   .source-ledger-license strong { display:block; margin-bottom:4px; font-size:10px; overflow-wrap:anywhere; }
+  .source-ledger-action { display:flex; justify-content:flex-end; align-items:center; }
+  .source-delete-btn { padding:6px 10px; border:1px solid rgba(184,51,42,.35); background:transparent; color:#b8332a; font:800 9px/1 monospace; cursor:pointer; letter-spacing:.04em; }
+  .source-delete-btn:hover:not(:disabled) { background:#b8332a; color:#fff; }
+  .source-delete-btn.disabled, .source-delete-btn:disabled { border-color:var(--line); color:var(--muted); opacity:.6; cursor:not-allowed; }
   .source-capture-list-panel { grid-column:1/-1; }
   .source-capture-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-top:16px; }
   .source-capture-card { min-width:0; border:1px solid var(--line); background:#e2dccd; padding:14px; }
@@ -37,9 +41,12 @@ SOURCE_CENTER_STYLES = r"""<style>
   .source-capture-card p { min-height:34px; margin:0 0 12px; color:#55564f; font-size:11px; line-height:1.55; white-space:pre-wrap; }
   .source-capture-card a { color:var(--signal); font:900 9px/1 monospace; text-decoration:none; }
   .source-capture-card details { margin-top:12px; border-top:1px dashed var(--line); padding-top:8px; color:var(--muted); font:700 8px/1.6 monospace; overflow-wrap:anywhere; }
+  .capture-delete-btn { margin-top:10px; padding:5px 8px; border:1px solid rgba(184,51,42,.35); background:transparent; color:#b8332a; font:800 9px/1 monospace; cursor:pointer; }
+  .capture-delete-btn:hover:not(:disabled) { background:#b8332a; color:#fff; }
+  .capture-delete-btn:disabled { border-color:var(--line); color:var(--muted); opacity:.6; cursor:not-allowed; }
   .source-center-empty { padding:28px; border:1px dashed var(--line); color:var(--muted); font-size:12px; line-height:1.6; }
-  @media(max-width:980px){.source-center-grid{grid-template-columns:1fr}.source-capture-list{grid-template-columns:repeat(2,minmax(0,1fr))}.source-ledger-row{grid-template-columns:minmax(160px,1fr) repeat(2,70px)}.source-ledger-license{grid-column:1/-1}}
-  @media(max-width:620px){.source-capture-panel,.source-ledger-panel,.source-capture-list-panel{padding:22px}.source-form-row,.source-capture-list{grid-template-columns:1fr}.source-ledger-row{grid-template-columns:1fr 1fr}.source-ledger-name,.source-ledger-license{grid-column:1/-1}}
+  @media(max-width:980px){.source-center-grid{grid-template-columns:1fr}.source-capture-list{grid-template-columns:repeat(2,minmax(0,1fr))}.source-ledger-row{grid-template-columns:minmax(160px,1fr) repeat(2,70px) auto}.source-ledger-license{grid-column:1/-1}}
+  @media(max-width:620px){.source-capture-panel,.source-ledger-panel,.source-capture-list-panel{padding:22px}.source-form-row,.source-capture-list{grid-template-columns:1fr}.source-ledger-row{grid-template-columns:1fr 1fr}.source-ledger-name,.source-ledger-license,.source-ledger-action{grid-column:1/-1}}
 </style>"""
 
 SOURCE_CENTER_HTML = r"""
@@ -91,11 +98,83 @@ SOURCE_CENTER_SCRIPT = r"""<script>
   function renderSources(items){
     const entries=items.reduce((n,i)=>n+Number(i.entry_count||0),0),visuals=items.reduce((n,i)=>n+Number(i.visual_count||0),0),web=items.filter(i=>i.source_type==='web_capture').length;
     q('#sourceLedgerSummary').innerHTML=`<span>${fmt(items.length)} 个来源</span><span>${fmt(entries)} 条资料</span><span>${fmt(visuals)} 个视觉参照</span><span>${fmt(web)} 个网页来源</span>`;
-    q('#sourceLedger').innerHTML=items.length?items.map(item=>`<article class="source-ledger-row"><div class="source-ledger-name"><strong>${esc(item.name)}</strong><span>${esc(sourceType(item))} · 更新于 ${esc(date(item.updated_at))}</span></div><div class="source-ledger-metric"><strong>${fmt(item.entry_count)}</strong><span>可检索条目</span></div><div class="source-ledger-metric"><strong>${fmt(item.visual_count)}</strong><span>视觉参照</span></div><div class="source-ledger-license"><strong>${esc(displayLicense(item.license))}</strong><span>许可 · ${item.url?`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">查看来源</a>`:'本地来源'}</span></div></article>`).join(''):'<div class="source-center-empty">还没有已索引来源。</div>';
+    q('#sourceLedger').innerHTML=items.length?items.map(item=>{
+      const isPreset = item.source_type === 'git' || item.deletable === false;
+      const actionHtml = isPreset
+        ? `<button type="button" class="source-delete-btn disabled" disabled title="内置资料库不能在页面删除">内置资料库</button>`
+        : `<button type="button" class="source-delete-btn" data-source-id="${esc(item.source_id)}" data-name="${esc(item.name)}" data-entries="${Number(item.entry_count||0)}">删除来源</button>`;
+      return `<article class="source-ledger-row"><div class="source-ledger-name"><strong>${esc(item.name)}</strong><span>${esc(sourceType(item))} · 更新于 ${esc(date(item.updated_at))}</span></div><div class="source-ledger-metric"><strong>${fmt(item.entry_count)}</strong><span>可检索条目</span></div><div class="source-ledger-metric"><strong>${fmt(item.visual_count)}</strong><span>视觉参照</span></div><div class="source-ledger-license"><strong>${esc(displayLicense(item.license))}</strong><span>许可 · ${item.url?`<a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">查看来源</a>`:'本地来源'}</span></div><div class="source-ledger-action">${actionHtml}</div></article>`;
+    }).join(''):'<div class="source-center-empty">还没有已索引来源。</div>';
   }
-  function renderCaptures(items){q('#sourceCaptureList').innerHTML=items.length?items.map(item=>`<article class="source-capture-card">${item.media_kind==='image'?`<img class="source-capture-visual" src="/api/web-captures/${encodeURIComponent(item.capture_id)}/media" alt="${esc(item.title)}" loading="lazy">`:''}<div class="source-capture-meta"><span>${esc(item.site_label||'网页')}</span><span>${esc(safetyLabels[item.safety]||'尚未分级')}</span><span class="${item.cached?'cached':''}">${item.cached?'已离线缓存':'只保存链接'}</span></div><h3>${esc(item.title||'未命名网页资料')}</h3><p>${esc(item.note||'没有个人备注')}</p><a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">打开原始网页 ↗</a><details><summary>查看来源与校验信息</summary>许可：${esc(displayLicense(item.license))}<br>保存时间：${esc(date(item.captured_at))}<br>内容 SHA-256：${esc(item.content_sha256||'—')}<br>保存方式：${esc(policyLabels[item.cache_policy]||'未记录')}</details></article>`).join(''):'<div class="source-center-empty"><strong>还没有网页资料。</strong><br>把常用提示词页面、GitHub 提示词库文件或视觉参考直链保存到左侧。</div>';}
+  function renderCaptures(items){
+    q('#sourceCaptureList').innerHTML=items.length?items.map(item=>`<article class="source-capture-card">${item.media_kind==='image'?`<img class="source-capture-visual" src="/api/web-captures/${encodeURIComponent(item.capture_id)}/media" alt="${esc(item.title)}" loading="lazy">`:''}<div class="source-capture-meta"><span>${esc(item.site_label||'网页')}</span><span>${esc(safetyLabels[item.safety]||'尚未分级')}</span><span class="${item.cached?'cached':''}">${item.cached?'已离线缓存':'只保存链接'}</span></div><h3>${esc(item.title||'未命名网页资料')}</h3><p>${esc(item.note||'没有个人备注')}</p><a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">打开原始网页 ↗</a><details><summary>查看来源与校验信息</summary>许可：${esc(displayLicense(item.license))}<br>保存时间：${esc(date(item.captured_at))}<br>内容 SHA-256：${esc(item.content_sha256||'—')}<br>保存方式：${esc(policyLabels[item.cache_policy]||'未记录')}</details><button type="button" class="capture-delete-btn" data-capture-id="${esc(item.capture_id)}" data-title="${esc(item.title||item.capture_id)}">删除这条摘录</button></article>`).join(''):'<div class="source-center-empty"><strong>还没有网页资料。</strong><br>把常用提示词页面、GitHub 提示词库文件或视觉参考直链保存到左侧。</div>';
+  }
   async function ensure(){const [sources,captures]=await Promise.all([api('/api/sources'),api('/api/web-captures')]);renderSources(sources);renderCaptures(captures);}
   q('#sourceCaptureForm').addEventListener('submit',async event=>{event.preventDefault();const button=event.currentTarget.querySelector('button'),message=q('#sourceCaptureMessage');button.disabled=true;button.textContent='正在核对并保存…';message.textContent='正在检查这个站点允许保存哪些内容。';try{const saved=await api('/api/web-captures',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:q('#sourceCaptureUrl').value,title:q('#sourceCaptureTitle').value,note:q('#sourceCaptureNote').value,safety:q('#sourceCaptureSafety').value,license_name:q('#sourceCaptureLicense').value})});message.textContent=saved.cached?'已经保存离线副本，并记录原始来源。':'已经保存链接、标题和个人备注；这个站点的正文或作品图没有下载。';q('#sourceCaptureUrl').value='';q('#sourceCaptureTitle').value='';q('#sourceCaptureNote').value='';await ensure();if(window.loadPromptHubStats)await window.loadPromptHubStats();}catch(error){message.textContent=error.message;}finally{button.disabled=false;button.textContent='＋ 保存这条网页资料';}});
+
+  q('#sourceLedger').addEventListener('click', async event => {
+    const btn = event.target.closest('.source-delete-btn');
+    if (!btn || btn.disabled) return;
+    const sourceId = btn.dataset.sourceId;
+    const name = btn.dataset.name || sourceId;
+    const entries = Number(btn.dataset.entries) || 0;
+    const confirmed = confirm(
+      `确定要删除资料来源「${name}」吗？\n\n` +
+      `• 将删除 ${entries} 条检索条目及派生离线缓存文件\n` +
+      `• 人工标记（收藏/评分/备注）默认会被安全保留\n\n` +
+      `点击「确定」继续，点击「取消」返回。`
+    );
+    if (!confirmed) return;
+    const purge = confirm(
+      `是否同时彻底清除该来源下的人工标记（收藏、评分、备注）？\n\n` +
+      `• 点击「确定」：彻底清除所有人工标记\n` +
+      `• 点击「取消」：安全保留人工标记（推荐，未来重新添加来源后可自动恢复）`
+    );
+    btn.disabled = true;
+    btn.textContent = '正在删除…';
+    try {
+      const res = await api(`/api/sources/${encodeURIComponent(sourceId)}?purge_marks=${purge}`, {method: 'DELETE'});
+      alert(`来源删除成功：已删除 ${res.deleted_entries} 条条目，清除 ${res.deleted_files} 个缓存文件，${res.purged_marks ? `彻底清除 ${res.purged_marks} 条人工标记` : `安全保留 ${res.retained_marks} 条人工标记`}。`);
+      await ensure();
+      if (window.loadPromptHubStats) await window.loadPromptHubStats();
+    } catch (error) {
+      alert(`删除失败：${error.message}`);
+      btn.disabled = false;
+      btn.textContent = '删除来源';
+    }
+  });
+
+  q('#sourceCaptureList').addEventListener('click', async event => {
+    const btn = event.target.closest('.capture-delete-btn');
+    if (!btn || btn.disabled) return;
+    const captureId = btn.dataset.captureId;
+    const title = btn.dataset.title || captureId;
+    const confirmed = confirm(
+      `确定要删除网页摘录「${title}」吗？\n\n` +
+      `• 将删除该条目的检索条目与本地离线文件\n` +
+      `• 人工标记默认会被安全保留\n\n` +
+      `点击「确定」继续，点击「取消」返回。`
+    );
+    if (!confirmed) return;
+    const purge = confirm(
+      `是否同时彻底清除该摘录的人工标记（收藏、评分、备注）？\n\n` +
+      `• 点击「确定」：彻底清除人工标记\n` +
+      `• 点击「取消」：安全保留人工标记`
+    );
+    btn.disabled = true;
+    btn.textContent = '正在删除…';
+    try {
+      const res = await api(`/api/web-captures/${encodeURIComponent(captureId)}?purge_marks=${purge}`, {method: 'DELETE'});
+      alert(`网页摘录已删除：${res.purged_marks ? `彻底清除 ${res.purged_marks} 条人工标记` : `安全保留 ${res.retained_marks} 条人工标记`}。`);
+      await ensure();
+      if (window.loadPromptHubStats) await window.loadPromptHubStats();
+    } catch (error) {
+      alert(`删除失败：${error.message}`);
+      btn.disabled = false;
+      btn.textContent = '删除这条摘录';
+    }
+  });
+
   window.ensureSourceCenter=ensure;
 })();
 </script>"""
