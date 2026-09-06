@@ -381,3 +381,19 @@ def test_every_referenced_element_id_exists_in_page() -> None:
     referenced_ids = set(re.findall(r"\$\('#([A-Za-z0-9_-]+)'\)", INDEX_HTML))
     assert referenced_ids
     assert not referenced_ids - rendered_ids
+
+
+def _script_blocks() -> list[str]:
+    return re.findall(r"<script>(.*?)</script>", INDEX_HTML, re.DOTALL)
+
+
+def test_named_event_handlers_are_defined() -> None:
+    """A listener naming an undefined function throws and kills the whole block."""
+    blocks = _script_blocks()
+    shared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", blocks[0]))
+    for block in blocks:
+        referenced = set(
+            re.findall(r"addEventListener\(\s*'[^']+'\s*,\s*([A-Za-z_$][\w$]*)\s*[,)]", block)
+        )
+        declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", block))
+        assert not referenced - declared - shared
