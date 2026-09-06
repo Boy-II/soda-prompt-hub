@@ -5,7 +5,7 @@ import json
 import re
 import secrets
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import IO, TYPE_CHECKING, Literal, override
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
@@ -16,17 +16,82 @@ if TYPE_CHECKING:
 
     from prompt_hub.config import Settings
 
-MODEL_CONNECTION_FORMAT = "soda-prompt-hub-model-connections-v1"
+MODEL_CONNECTION_FORMAT_V1 = "soda-prompt-hub-model-connections-v1"
+MODEL_CONNECTION_FORMAT = "soda-prompt-hub-model-connections-v2"
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_DISCOVERED_MODELS = 500
 MAX_API_KEY_CHARS = 12000
-CONNECTION_ID_PATTERN = re.compile(r"^external-[a-f0-9]{16}$")
-Provider = Literal["openai_compatible"]
+MAX_ENDPOINT_MODELS = 200
+MAX_ENDPOINTS = 50
+LM_STUDIO_PORT = 1234
+OLLAMA_PORT = 11434
+ENDPOINT_ID_PATTERN = re.compile(r"^external-[a-f0-9]{16}$")
+MODEL_REF_PATTERN = re.compile(r"^external-[a-f0-9]{16}(?:::.{1,300})?$")
+Provider = Literal["openai", "lm_studio", "ollama", "openai_compatible"]
 ModelFetcher = Callable[[str, str], list[str]]
 
 
 class ModelConnectionError(ValueError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointModel:
+    name: str
+    label: str = ""
+    enabled: bool = False
+    supports_vision: bool = False
+    legacy_id: str = ""
+
+    def public(self, endpoint_id: str) -> dict[str, object]:
+        return {
+            "id": _compound_model_id(endpoint_id, self.name),
+            "name": self.name,
+            "label": self.label,
+            "enabled": self.enabled,
+            "supports_vision": self.supports_vision,
+        }
+
+    def stored(self) -> dict[str, object]:
+        return {
+            "enabled": self.enabled,
+            "label": self.label,
+            "legacy_id": self.legacy_id,
+            "name": self.name,
+            "supports_vision": self.supports_vision,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ModelEndpoint:
+    endpoint_id: str
+    label: str
+    provider: Provider
+    base_url: str
+    api_key: str
+    models: list[EndpointModel] = field(default_factory=list)
+
+    def public(self) -> dict[str, object]:
+        enabled_count = sum(1 for model in self.models if model.enabled)
+        return {
+            "id": self.endpoint_id,
+            "label": self.label,
+            "provider": self.provider,
+            "base_url": self.base_url,
+            "has_api_key": bool(self.api_key),
+            "enabled_model_count": enabled_count,
+            "models": [model.public(self.endpoint_id) for model in self.models],
+        }
+
+    def stored(self) -> dict[str, object]:
+        return {
+            "api_key": self.api_key,
+            "base_url": self.base_url,
+            "id": self.endpoint_id,
+            "label": self.label,
+            "models": [model.stored() for model in self.models],
+            "provider": self.provider,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,17 +126,6 @@ class ModelConnection:
             "source": "external",
         }
 
-    def stored(self) -> dict[str, object]:
-        return {
-            "id": self.connection_id,
-            "label": self.label,
-            "provider": self.provider,
-            "base_url": self.base_url,
-            "api_key": self.api_key,
-            "model_name": self.model_name,
-            "supports_vision": self.supports_vision,
-        }
-
 
 class ModelConnectionStore:
     def __init__(self, settings: Settings, *, fetcher: ModelFetcher | None = None) -> None:
@@ -81,101 +135,166 @@ class ModelConnectionStore:
     def initialize(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
+    def list_endpoints(self) -> list[ModelEndpoint]:
+        return sorted(
+            self._read_endpoints(),
+            key=lambda item: (item.label.casefold(), item.endpoint_id),
+        )
+
     def list_connections(self) -> list[ModelConnection]:
-        connections = [_connection_from_mapping(item) for item in self._read_items()]
-        return sorted(connections, key=lambda item: (item.label.casefold(), item.connection_id))
+        connections: list[ModelConnection] = []
+        for endpoint in self.list_endpoints():
+            connections.extend(
+                _connection_for_model(endpoint, model) for model in endpoint.models if model.enabled
+            )
+        return connections
 
     def list_public(self) -> list[dict[str, object]]:
-        return [connection.public() for connection in self.list_connections()]
+        return [endpoint.public() for endpoint in self.list_endpoints()]
 
     def list_model_options(self) -> list[dict[str, object]]:
         return [connection.model_option() for connection in self.list_connections()]
 
-    def resolve(self, connection_id: str) -> ModelConnection | None:
-        return next(
-            (
-                connection
-                for connection in self.list_connections()
-                if connection.connection_id == connection_id
-            ),
+    def get_endpoint(self, endpoint_id: str) -> ModelEndpoint:
+        _validate_endpoint_id(endpoint_id)
+        endpoint = next(
+            (item for item in self.list_endpoints() if item.endpoint_id == endpoint_id),
             None,
         )
+        if endpoint is None:
+            message = "外部模型连接不存在"
+            raise ModelConnectionError(message)
+        return endpoint
 
-    def discover(self, base_url: str, api_key: str) -> list[str]:
-        normalized_url = validate_model_base_url(base_url)
+    def resolve(self, connection_id: str) -> ModelConnection | None:
+        if not MODEL_REF_PATTERN.fullmatch(connection_id):
+            return None
+        endpoint_id, separator, model_name = connection_id.partition("::")
+        endpoint = next(
+            (item for item in self.list_endpoints() if item.endpoint_id == endpoint_id),
+            None,
+        )
+        if separator and endpoint is not None:
+            model = next(
+                (item for item in endpoint.models if item.enabled and item.name == model_name),
+                None,
+            )
+            return _connection_for_model(endpoint, model) if model else None
+        if not separator:
+            legacy_matches: list[tuple[ModelEndpoint, EndpointModel]] = [
+                (candidate, model)
+                for candidate in self.list_endpoints()
+                for model in candidate.models
+                if model.legacy_id == connection_id
+            ]
+            if legacy_matches:
+                match = next(
+                    ((candidate, model) for candidate, model in legacy_matches if model.enabled),
+                    None,
+                )
+                if match is None:
+                    return None
+                return _connection_for_model(match[0], match[1], connection_id=connection_id)
+        if endpoint is not None:
+            model = next((item for item in endpoint.models if item.enabled), None)
+            return _connection_for_model(endpoint, model) if model else None
+        return None
+
+    def discover(
+        self,
+        base_url: str,
+        api_key: str = "",
+        *,
+        endpoint_id: str = "",
+    ) -> list[dict[str, object]]:
         clean_key = api_key.strip()
         if len(clean_key) > MAX_API_KEY_CHARS:
             message = "API Key 过长"
             raise ModelConnectionError(message)
-        return self._fetcher(normalized_url, clean_key)
+        if endpoint_id and not clean_key:
+            endpoint = self.get_endpoint(endpoint_id)
+            normalized_url = validate_model_base_url(base_url)
+            if normalized_url != endpoint.base_url:
+                message = "已保存密钥只能用于对应的模型服务地址"
+                raise ModelConnectionError(message)
+            normalized_url = endpoint.base_url
+            clean_key = endpoint.api_key
+        else:
+            normalized_url = validate_model_base_url(base_url)
+        names = self._fetcher(normalized_url, clean_key)
+        return [{"id": name, "name": name, "supports_vision": None} for name in names]
 
-    def save(self, values: Mapping[str, object]) -> dict[str, object]:
-        connections = self.list_connections()
-        connection_id = _clean_string(values.get("connection_id"), 80)
-        provider = _clean_string(values.get("provider"), 40) or "openai_compatible"
-        if provider != "openai_compatible":
-            message = "首版只支持 OpenAI-compatible 接口"
-            raise ModelConnectionError(message)
+    def save_endpoint(self, values: Mapping[str, object]) -> dict[str, object]:
+        endpoints = self.list_endpoints()
+        endpoint_id = _clean_string(values.get("endpoint_id"), 80)
+        provider = _provider_from_value(values.get("provider"))
         base_url = validate_model_base_url(_clean_string(values.get("base_url"), 2048))
-        model_name = _clean_string(values.get("model_name"), 300)
-        if not model_name:
-            message = "请填写上游服务使用的模型名称"
-            raise ModelConnectionError(message)
-        label = _clean_string(values.get("label"), 160) or model_name
+        label = _clean_string(values.get("label"), 160) or _default_label(provider, base_url)
         api_key = _clean_string(values.get("api_key"), MAX_API_KEY_CHARS)
-        supports_vision = bool(values.get("supports_vision", False))
 
         current = None
-        if connection_id:
-            if not CONNECTION_ID_PATTERN.fullmatch(connection_id):
-                message = "外部模型连接 ID 无效"
-                raise ModelConnectionError(message)
-            current = next(
-                (item for item in connections if item.connection_id == connection_id),
-                None,
-            )
+        if endpoint_id:
+            _validate_endpoint_id(endpoint_id)
+            current = next((item for item in endpoints if item.endpoint_id == endpoint_id), None)
             if current is None:
                 message = "外部模型连接不存在"
                 raise ModelConnectionError(message)
         else:
-            current = next(
-                (
-                    item
-                    for item in connections
-                    if item.base_url == base_url and item.model_name == model_name
-                ),
-                None,
-            )
-            connection_id = current.connection_id if current else f"external-{secrets.token_hex(8)}"
+            if len(endpoints) >= MAX_ENDPOINTS:
+                message = "外部模型端点数量已达上限"
+                raise ModelConnectionError(message)
+            endpoint_id = f"external-{secrets.token_hex(8)}"
         if not api_key and current is not None:
             api_key = current.api_key
-
-        connection = ModelConnection(
-            connection_id=connection_id,
+        endpoint = ModelEndpoint(
+            endpoint_id=endpoint_id,
             label=label,
-            provider="openai_compatible",
+            provider=provider,
             base_url=base_url,
             api_key=api_key,
-            model_name=model_name,
-            supports_vision=supports_vision,
+            models=list(current.models) if current else [],
         )
-        retained = [item for item in connections if item.connection_id != connection_id]
-        self._write([*retained, connection])
-        return connection.public()
+        retained = [item for item in endpoints if item.endpoint_id != endpoint_id]
+        self._write([*retained, endpoint])
+        return endpoint.public()
+
+    def save_endpoint_models(
+        self,
+        endpoint_id: str,
+        model_values: list[Mapping[str, object]],
+    ) -> dict[str, object]:
+        endpoint = self.get_endpoint(endpoint_id)
+        existing_legacy = {
+            model.name: model.legacy_id for model in endpoint.models if model.legacy_id
+        }
+        models = _models_from_values(model_values, existing_legacy=existing_legacy)
+        endpoints = [
+            item
+            if item.endpoint_id != endpoint_id
+            else ModelEndpoint(
+                endpoint_id=item.endpoint_id,
+                label=item.label,
+                provider=item.provider,
+                base_url=item.base_url,
+                api_key=item.api_key,
+                models=models,
+            )
+            for item in self.list_endpoints()
+        ]
+        self._write(endpoints)
+        return self.get_endpoint(endpoint.endpoint_id).public()
 
     def delete(self, connection_id: str) -> dict[str, object]:
-        if not CONNECTION_ID_PATTERN.fullmatch(connection_id):
-            message = "外部模型连接 ID 无效"
-            raise ModelConnectionError(message)
-        connections = self.list_connections()
-        retained = [item for item in connections if item.connection_id != connection_id]
-        if len(retained) == len(connections):
+        _validate_endpoint_id(connection_id)
+        endpoints = self.list_endpoints()
+        retained = [item for item in endpoints if item.endpoint_id != connection_id]
+        if len(retained) == len(endpoints):
             message = "外部模型连接不存在"
             raise ModelConnectionError(message)
         self._write(retained)
         return {"deleted": connection_id}
 
-    def _read_items(self) -> list[Mapping[str, object]]:
+    def _read_endpoints(self) -> list[ModelEndpoint]:
         if not self.path.is_file():
             return []
         try:
@@ -183,21 +302,27 @@ class ModelConnectionStore:
         except (OSError, json.JSONDecodeError) as error:
             message = "外部模型配置无法读取"
             raise ModelConnectionError(message) from error
-        if not isinstance(payload, dict) or payload.get("format") != MODEL_CONNECTION_FORMAT:
+        if not isinstance(payload, dict):
             message = "外部模型配置格式无效"
             raise ModelConnectionError(message)
-        items = payload.get("connections", [])
+        file_format = payload.get("format")
+        if file_format == MODEL_CONNECTION_FORMAT_V1:
+            return _migrate_v1(payload)
+        if file_format != MODEL_CONNECTION_FORMAT:
+            message = "外部模型配置格式无效"
+            raise ModelConnectionError(message)
+        items = payload.get("endpoints", [])
         if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
             message = "外部模型配置内容无效"
             raise ModelConnectionError(message)
-        return items
+        return [_endpoint_from_mapping(item) for item in items]
 
-    def _write(self, connections: list[ModelConnection]) -> None:
+    def _write(self, endpoints: list[ModelEndpoint]) -> None:
         self.initialize()
         temporary = self.path.with_name(f".{self.path.name}.{secrets.token_hex(8)}.tmp")
         payload = {
+            "endpoints": [endpoint.stored() for endpoint in endpoints],
             "format": MODEL_CONNECTION_FORMAT,
-            "connections": [connection.stored() for connection in connections],
         }
         temporary.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
@@ -244,28 +369,175 @@ def _clean_string(value: object, limit: int) -> str:
     return str(value or "").strip()[:limit]
 
 
-def _connection_from_mapping(value: Mapping[str, object]) -> ModelConnection:
-    connection_id = _clean_string(value.get("id"), 80)
-    if not CONNECTION_ID_PATTERN.fullmatch(connection_id):
-        message = "外部模型配置包含无效 ID"
+def _validate_endpoint_id(endpoint_id: str) -> None:
+    if not ENDPOINT_ID_PATTERN.fullmatch(endpoint_id):
+        message = "外部模型连接 ID 无效"
         raise ModelConnectionError(message)
-    provider = _clean_string(value.get("provider"), 40)
-    if provider != "openai_compatible":
-        message = "外部模型配置包含不支持的接口协议"
-        raise ModelConnectionError(message)
-    model_name = _clean_string(value.get("model_name"), 300)
-    if not model_name:
-        message = "外部模型配置缺少模型名称"
-        raise ModelConnectionError(message)
+
+
+def _provider_from_value(value: object) -> Provider:
+    provider = _clean_string(value, 40) or "openai_compatible"
+    if provider in {"openai", "lm_studio", "ollama", "openai_compatible"}:
+        return provider
+    message = "外部模型端点类型无效"
+    raise ModelConnectionError(message)
+
+
+def _default_label(provider: Provider, base_url: str) -> str:
+    labels = {
+        "lm_studio": "LM Studio",
+        "ollama": "Ollama",
+        "openai": "OpenAI",
+        "openai_compatible": "自定义模型服务",
+    }
+    return labels.get(provider) or base_url
+
+
+def _guess_provider(base_url: str) -> Provider:
+    parsed = urlsplit(base_url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    port = parsed.port
+    if host == "api.openai.com":
+        return "openai"
+    if _is_loopback(host) and port == LM_STUDIO_PORT:
+        return "lm_studio"
+    if _is_loopback(host) and port == OLLAMA_PORT:
+        return "ollama"
+    return "openai_compatible"
+
+
+def _compound_model_id(endpoint_id: str, model_name: str) -> str:
+    return f"{endpoint_id}::{model_name}"
+
+
+def _connection_for_model(
+    endpoint: ModelEndpoint,
+    model: EndpointModel,
+    *,
+    connection_id: str = "",
+) -> ModelConnection:
+    label = model.label or model.name
     return ModelConnection(
-        connection_id=connection_id,
-        label=_clean_string(value.get("label"), 160) or model_name,
-        provider="openai_compatible",
-        base_url=validate_model_base_url(_clean_string(value.get("base_url"), 2048)),
-        api_key=_clean_string(value.get("api_key"), MAX_API_KEY_CHARS),
-        model_name=model_name,
-        supports_vision=bool(value.get("supports_vision", False)),
+        connection_id=connection_id or _compound_model_id(endpoint.endpoint_id, model.name),
+        label=f"{endpoint.label} · {label}",
+        provider=endpoint.provider,
+        base_url=endpoint.base_url,
+        api_key=endpoint.api_key,
+        model_name=model.name,
+        supports_vision=model.supports_vision,
     )
+
+
+def _models_from_values(
+    model_values: list[Mapping[str, object]],
+    *,
+    existing_legacy: Mapping[str, str] | None = None,
+) -> list[EndpointModel]:
+    models: list[EndpointModel] = []
+    seen: set[str] = set()
+    for value in model_values:
+        name = _clean_string(value.get("name"), 300)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        models.append(
+            EndpointModel(
+                name=name,
+                label=_clean_string(value.get("label"), 160),
+                enabled=bool(value.get("enabled", False)),
+                supports_vision=bool(value.get("supports_vision", False)),
+                legacy_id=_clean_string(value.get("legacy_id"), 80)
+                or (existing_legacy or {}).get(name, ""),
+            )
+        )
+        if len(models) >= MAX_ENDPOINT_MODELS:
+            break
+    return models
+
+
+def _endpoint_from_mapping(value: Mapping[str, object]) -> ModelEndpoint:
+    endpoint_id = _clean_string(value.get("id"), 80)
+    _validate_endpoint_id(endpoint_id)
+    models = value.get("models", [])
+    if not isinstance(models, list) or not all(isinstance(item, dict) for item in models):
+        message = "外部模型配置内容无效"
+        raise ModelConnectionError(message)
+    base_url = validate_model_base_url(_clean_string(value.get("base_url"), 2048))
+    provider = _provider_from_value(value.get("provider"))
+    return ModelEndpoint(
+        endpoint_id=endpoint_id,
+        label=_clean_string(value.get("label"), 160) or _default_label(provider, base_url),
+        provider=provider,
+        base_url=base_url,
+        api_key=_clean_string(value.get("api_key"), MAX_API_KEY_CHARS),
+        models=_models_from_values(models),
+    )
+
+
+def _migrate_v1(payload: Mapping[str, object]) -> list[ModelEndpoint]:
+    items = payload.get("connections", [])
+    if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+        message = "外部模型配置内容无效"
+        raise ModelConnectionError(message)
+    endpoints: list[ModelEndpoint] = []
+    model_rows: dict[str, list[Mapping[str, object]]] = {}
+    for item in items:
+        base_url = validate_model_base_url(_clean_string(item.get("base_url"), 2048))
+        item_key = _clean_string(item.get("api_key"), MAX_API_KEY_CHARS)
+        current_index = next(
+            (
+                index
+                for index, endpoint in enumerate(endpoints)
+                if endpoint.base_url == base_url
+                and (not endpoint.api_key or not item_key or endpoint.api_key == item_key)
+            ),
+            -1,
+        )
+        if current_index < 0:
+            endpoint_id = _clean_string(item.get("id"), 80)
+            _validate_endpoint_id(endpoint_id)
+            provider = _guess_provider(base_url)
+            endpoint = ModelEndpoint(
+                endpoint_id=endpoint_id,
+                label=_default_label(provider, base_url),
+                provider=provider,
+                base_url=base_url,
+                api_key=item_key,
+            )
+            endpoints.append(endpoint)
+            current_index = len(endpoints) - 1
+            model_rows[endpoint.endpoint_id] = []
+        elif not endpoints[current_index].api_key and item_key:
+            endpoint = endpoints[current_index]
+            endpoints[current_index] = ModelEndpoint(
+                endpoint_id=endpoint.endpoint_id,
+                label=endpoint.label,
+                provider=endpoint.provider,
+                base_url=endpoint.base_url,
+                api_key=item_key,
+            )
+        model_name = _clean_string(item.get("model_name"), 300)
+        if model_name:
+            model_rows[endpoints[current_index].endpoint_id].append(
+                {
+                    "enabled": True,
+                    "label": _clean_string(item.get("label"), 160),
+                    "legacy_id": _clean_string(item.get("id"), 80),
+                    "name": model_name,
+                    "supports_vision": bool(item.get("supports_vision", False)),
+                }
+            )
+    return [
+        ModelEndpoint(
+            endpoint_id=endpoint.endpoint_id,
+            label=endpoint.label,
+            provider=endpoint.provider,
+            base_url=endpoint.base_url,
+            api_key=endpoint.api_key,
+            models=_models_from_values(model_rows[endpoint.endpoint_id]),
+        )
+        for endpoint in endpoints
+    ]
 
 
 class _NoRedirect(HTTPRedirectHandler):

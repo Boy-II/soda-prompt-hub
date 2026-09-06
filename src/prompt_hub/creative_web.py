@@ -133,7 +133,7 @@ CREATIVE_STYLES = r"""
   .dataset-caption { margin-top: 7px; border-top: 1px solid rgba(31,29,25,.2); padding-top: 7px; }
   .dataset-caption summary { cursor: pointer; color: var(--muted); font: 800 8px monospace; }
   .dataset-caption textarea { width: 100%; min-height: 78px; margin-top: 7px; resize: vertical; border: 1px solid var(--line); background: #fbf6ec; padding: 7px; color: var(--ink); font: 9px/1.45 monospace; }
-  .wd14-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px auto; gap: 9px; align-items: end; margin-top: 12px; border: 1px solid var(--line); background: #171714; color: #f4eddf; padding: 12px; box-shadow: inset 4px 0 var(--acid); }
+  .wd14-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 130px minmax(220px, 1.1fr) auto; gap: 9px; align-items: end; margin-top: 12px; border: 1px solid var(--line); background: #171714; color: #f4eddf; padding: 12px; box-shadow: inset 4px 0 var(--acid); }
   .wd14-toolbar strong { display: block; font: 800 10px monospace; letter-spacing: .06em; }
   .wd14-toolbar p { margin: 4px 0 0; color: #aaa395; font-size: 9px; }
   .wd14-toolbar label { color: #aaa395; font: 800 8px monospace; text-transform: uppercase; }
@@ -304,7 +304,7 @@ CREATIVE_SCRIPT = r"""
   };
   const safetyLabels = {sfw:'普通',suggestive:'轻度成人向',adult:'成人向','explicit-adult':'明确成人向',unrated:'尚未分级'};
   const wd14RatingLabels = {general:'普通',sensitive:'轻度成人向',questionable:'成人向',explicit:'明确成人向',unknown:'尚未判断'};
-  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', workflowProfiles: [], windowsModels: [], windowsLoras: [], modelConnections: [], discoveredModels: [], editingModelConnectionId: '', workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
+  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', workflowProfiles: [], windowsModels: [], windowsLoras: [], workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
 
   async function creativeJson(url, options = {}) {
     const response = await fetch(url, options);
@@ -638,65 +638,11 @@ CREATIVE_SCRIPT = r"""
     creativeState.project = project; creativeState.sourcing = null; creativeState.sourcingProjectId = ''; creativeState.review = null; creativeState.reviewProjectId = ''; creativeState.projects.unshift(project); renderCreativeProject(); $('#creativeSaveState').textContent = '新项目已保存到本机 · R1'; return project;
   }
 
-  function renderExternalModelConnections() {
-    const candidates = $('#externalModelCandidates');
-    candidates.innerHTML = creativeState.discoveredModels.length ? creativeState.discoveredModels.map(model => `<div class="external-model-candidate"><span title="${escapeHtml(model.id)}">${escapeHtml(model.name || model.id)}</span><button type="button" data-use-external-model="${escapeHtml(model.id)}">选择</button></div>`).join('') : '';
-    const list = $('#externalModelList');
-    list.innerHTML = creativeState.modelConnections.length ? creativeState.modelConnections.map(item => `<div class="external-model-item"><span title="${escapeHtml(item.base_url)} · ${escapeHtml(item.model_name)}">${escapeHtml(item.label)}${item.supports_vision ? ' · 可看图' : ''}${item.has_api_key ? ' · 已保存密钥' : ''}</span><div class="external-model-item-actions"><button type="button" data-edit-external-model="${escapeHtml(item.id)}">编辑</button><button type="button" data-delete-external-model="${escapeHtml(item.id)}">删除</button></div></div>`).join('') : '<p class="external-model-status">还没有保存外部模型。</p>';
-  }
-
-  function clearExternalModelForm() {
-    creativeState.editingModelConnectionId = '';
-    $('#externalModelLabel').value = ''; $('#externalModelBaseUrl').value = ''; $('#externalModelApiKey').value = ''; $('#externalModelName').value = ''; $('#externalModelVision').checked = false;
-    $('#saveExternalModel').textContent = '保存这个模型'; $('#cancelExternalModelEdit').hidden = true;
-  }
-
-  function editExternalModel(connectionId) {
-    const item = creativeState.modelConnections.find(connection => connection.id === connectionId);
-    if (!item) return;
-    creativeState.editingModelConnectionId = item.id;
-    $('#externalModelLabel').value = item.label || ''; $('#externalModelBaseUrl').value = item.base_url || ''; $('#externalModelApiKey').value = ''; $('#externalModelName').value = item.model_name || ''; $('#externalModelVision').checked = Boolean(item.supports_vision);
-    $('#saveExternalModel').textContent = '保存修改'; $('#cancelExternalModelEdit').hidden = false; $('#externalModelSettings').open = true;
-    $('#externalModelStatus').textContent = '正在编辑已有连接。API Key 留空会保留原密钥。';
-  }
-
-  async function discoverExternalModels() {
-    const baseUrl = $('#externalModelBaseUrl').value.trim();
-    if (!baseUrl) throw new Error('请先填写 Base URL');
-    const button = $('#discoverExternalModels'); button.disabled = true; button.textContent = '正在读取…';
-    $('#externalModelStatus').textContent = '正在由本机后端读取模型列表，密钥不会返回网页。';
-    try {
-      const result = await creativeJson('/api/model-connections/discover', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({base_url:baseUrl, api_key:$('#externalModelApiKey').value})});
-      creativeState.discoveredModels = result.models || []; renderExternalModelConnections();
-      $('#externalModelStatus').textContent = creativeState.discoveredModels.length ? `读取到 ${creativeState.discoveredModels.length} 个模型，请选择一个。` : '服务没有返回模型列表，可以在下方手工填写模型名称。';
-    } finally { button.disabled = false; button.textContent = '读取可用模型'; }
-  }
-
-  async function saveExternalModel() {
-    const baseUrl = $('#externalModelBaseUrl').value.trim(); const modelName = $('#externalModelName').value.trim();
-    if (!baseUrl || !modelName) throw new Error('请填写 Base URL 和模型名称');
-    const button = $('#saveExternalModel'); button.disabled = true; button.textContent = '正在保存…';
-    try {
-      const saved = await creativeJson('/api/model-connections', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({connection_id:creativeState.editingModelConnectionId, label:$('#externalModelLabel').value.trim() || modelName, provider:'openai_compatible', base_url:baseUrl, api_key:$('#externalModelApiKey').value, model_name:modelName, supports_vision:$('#externalModelVision').checked})});
-      clearExternalModelForm(); $('#externalModelStatus').textContent = `已保存 ${saved.label}。密钥输入框已清空。`;
-      await loadCreativeMeta();
-    } finally { button.disabled = false; button.textContent = creativeState.editingModelConnectionId ? '保存修改' : '保存这个模型'; }
-  }
-
-  async function deleteExternalModel(connectionId) {
-    if (!confirm('确定删除这个外部模型连接吗？本地 LM Studio 不受影响。')) return;
-    await creativeJson(`/api/model-connections/${encodeURIComponent(connectionId)}`, {method:'DELETE'});
-    if (creativeState.editingModelConnectionId === connectionId) clearExternalModelForm();
-    $('#externalModelStatus').textContent = '外部模型连接已删除。'; await loadCreativeMeta();
-  }
-
   async function loadCreativeMeta() {
     const modelCatalog = creativeJson('/api/models').catch(() => creativeJson('/api/local-models'));
-    const savedConnections = creativeJson('/api/model-connections').catch(error => { $('#externalModelStatus').textContent = `外部模型配置读取失败：${error.message}`; return []; });
-    const [projects, recipes, models, workflowProfiles, windowsModels, windowsLoras, connections] = await Promise.all([creativeJson('/api/creative/projects'), creativeJson('/api/creative/recipes'), modelCatalog, creativeJson('/api/workflow-profiles'), creativeJson('/api/windows-models?limit=2000'), creativeJson('/api/windows-loras?limit=500'), savedConnections]);
+    const [projects, recipes, models, workflowProfiles, windowsModels, windowsLoras] = await Promise.all([creativeJson('/api/creative/projects'), creativeJson('/api/creative/recipes'), modelCatalog, creativeJson('/api/workflow-profiles'), creativeJson('/api/windows-models?limit=2000'), creativeJson('/api/windows-loras?limit=500')]);
     creativeState.projects = projects; creativeState.recipes = recipes; renderCreativeProjects(); renderCreativeRecipes();
     creativeState.workflowProfiles = workflowProfiles; creativeState.windowsModels=windowsModels.results||[]; creativeState.windowsLoras=windowsLoras.results||[]; renderWorkflowProfiles();
-    creativeState.modelConnections = connections; renderExternalModelConnections();
     const select = $('#lmModel'); select.innerHTML = models.models.map(model => `<option value="${escapeHtml(model.id)}" data-source="${escapeHtml(model.source || 'local')}">${model.loaded ? '● ' : ''}${escapeHtml(model.name || model.id)}${model.params ? ` · ${escapeHtml(model.params)}` : ''}</option>`).join('');
     const loaded = models.models.find(model => model.loaded);
     const quickFallback = models.models.find(model => model.id.includes('qwen3.5-9b'));
@@ -825,18 +771,18 @@ CREATIVE_SCRIPT = r"""
     await saveCreative(); const button = document.querySelector(`[data-wd14-tag="${CSS.escape(assetId)}"]`); if (button) { button.disabled = true; button.textContent = 'WD14 打标中…'; }
     creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = '正在本机使用 WD14 分析图片…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
     try {
-      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/results/${encodeURIComponent(assetId)}/tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(wd14Payload())});
-      applyDatasetProject(response.project, `WD14 已生成 ${response.asset.wd14_tagging?.general?.length || 0} 个 general 标签；请审核后确认。`);
-    } finally { if (button) { button.disabled = false; button.textContent = '用 WD14 生成标签'; } }
+      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/results/${encodeURIComponent(assetId)}/tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+      applyDatasetProject(response.project, `${label} 已生成 ${response.asset.wd14_tagging?.general?.length || 0} 个 general 标签；请审核后确认。`);
+    } finally { if (button) { button.disabled = false; button.textContent = `用 ${label} 生成标签`; } }
   }
 
   async function tagSelectedDataset() {
     await saveCreative(); const button = $('#tagSelectedDataset'); button.disabled = true; button.textContent = '精选图片打标中…';
     creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = '正在逐张处理精选图片，请保持页面打开…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
     try {
-      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/dataset-tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(wd14Payload())});
+      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/dataset-tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
       const suffix = response.failed_count ? `；${response.failed_count} 张失败，可单独重试` : '';
-      applyDatasetProject(response.project, `WD14 已完成 ${response.tagged_count}/${response.selected_count} 张${suffix}。`);
+      applyDatasetProject(response.project, `${label} 已完成 ${response.tagged_count}/${response.selected_count} 张${suffix}。`);
     } finally { button.textContent = '打标全部精选'; renderResultGallery(); }
   }
 
@@ -957,11 +903,7 @@ CREATIVE_SCRIPT = r"""
   $('#assistCreative').addEventListener('click', async () => { try { const payload=collectCreative(); if (!payload.brief_zh) throw new Error('请先写一段中文创作想法'); $('#assistCreative').disabled=true; $('#assistCreative').textContent='所选模型正在补全…'; creativeState.suggestion=await creativeJson('/api/creative/assist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brief:payload.brief_zh,slots:payload.slots,slot_locks:payload.slot_locks,model:$('#lmModel').value,target_profile:creativeState.profile})}); $('#assistPreview').textContent=JSON.stringify(creativeState.suggestion.suggested_slots,null,2); $('#assistProposal').hidden=false; } catch(error) { showCreativeError(error); } finally { $('#assistCreative').disabled=false; $('#assistCreative').textContent='用所选模型补全空白项'; } });
   $('#applyAssist').addEventListener('click', () => { if (!creativeState.suggestion) return; creativeState.project.slots=creativeState.suggestion.suggested_slots; creativeState.suggestion=null; $('#assistProposal').hidden=true; renderCreativeProject(); queueCreativeSave(); });
   $('#cancelAssist').addEventListener('click', () => { creativeState.suggestion=null; $('#assistProposal').hidden=true; });
-  $('#discoverExternalModels').addEventListener('click', () => discoverExternalModels().catch(showCreativeError));
-  $('#saveExternalModel').addEventListener('click', () => saveExternalModel().catch(showCreativeError));
-  $('#cancelExternalModelEdit').addEventListener('click', () => { clearExternalModelForm(); $('#externalModelStatus').textContent='已取消编辑。'; });
-  $('#externalModelCandidates').addEventListener('click', event => { const button=event.target.closest('[data-use-external-model]'); if(!button) return; $('#externalModelName').value=button.dataset.useExternalModel; $('#externalModelStatus').textContent='已填入模型名称。确认是否支持看图，然后保存。'; });
-  $('#externalModelList').addEventListener('click', event => { const editButton=event.target.closest('[data-edit-external-model]'); if(editButton) { editExternalModel(editButton.dataset.editExternalModel); return; } const deleteButton=event.target.closest('[data-delete-external-model]'); if(deleteButton) deleteExternalModel(deleteButton.dataset.deleteExternalModel).catch(showCreativeError); });
+  $('#openModelEndpointSettings').addEventListener('click', () => { window.openModelEndpoints?.(); });
 
   $('#results').addEventListener('click', event => {
     const add = event.target.closest('[data-creative-add]'); if (add) { const card=add.closest('[data-result-index]'); const item=currentResults[Number(card.dataset.resultIndex)]; const slot=card.querySelector('[data-creative-slot]').value; addEntryToCreative(item,slot).catch(showCreativeError); return; }

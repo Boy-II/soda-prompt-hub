@@ -3,6 +3,13 @@
 本文件记录 Soda Prompt Hub 面向使用者的重要变化。开发过程和历史验收细节继续保存在
 `task_plan.md`、`progress.md` 与 `findings.md`。
 
+## 未发布
+
+### 破坏性变更
+
+- 外部模型配置升级为“端点 + 勾选模型”结构，旧 `/api/model-connections*` 路径已移除；
+  请使用 `/api/model-endpoints*` 管理多组 OpenAI-compatible 端点。
+
 ## [1.0.0] - 2026-09-05
 
 ### 主要能力

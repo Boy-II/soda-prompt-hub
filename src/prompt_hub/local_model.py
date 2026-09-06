@@ -10,7 +10,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 from PIL import Image, ImageOps
 
 from prompt_hub.creative import SLOT_LABELS, SLOT_ORDER
-from prompt_hub.model_connections import CONNECTION_ID_PATTERN
+from prompt_hub.model_connections import MODEL_REF_PATTERN
 
 if TYPE_CHECKING:
     from http.client import HTTPMessage
@@ -433,7 +433,7 @@ def _resolve_external_model(
     connections: ModelConnectionStore | None,
 ) -> ModelConnection | None:
     connection = connections.resolve(model) if connections else None
-    if connection is None and CONNECTION_ID_PATTERN.fullmatch(model):
+    if connection is None and MODEL_REF_PATTERN.fullmatch(model):
         raise LocalModelError("外部模型连接不存在或已删除，请重新选择模型")
     return connection
 

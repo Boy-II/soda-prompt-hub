@@ -315,16 +315,40 @@ def test_local_models_unavailable_is_graceful(settings, monkeypatch) -> None:
 
 
 def test_external_model_ui_keeps_existing_creative_actions() -> None:
-    for marker in (
+    for removed_marker in (
         'id="externalModelSettings"',
         'id="externalModelBaseUrl"',
         'id="externalModelApiKey"',
-        'autocomplete="new-password"',
         'id="discoverExternalModels"',
         'id="saveExternalModel"',
         'id="cancelExternalModelEdit"',
         "function editExternalModel",
-        "data-edit-external-model",
+    ):
+        assert removed_marker not in INDEX_HTML
+
+    for marker in (
+        'id="openModelEndpointSettings"',
+        "模型接入",
+        'data-remote-view="endpoints"',
+        'id="remoteEndpointsPanel"',
+        'id="endpointApiKey"',
+        'id="discoverEndpointModels"',
+        'id="saveEndpointTop"',
+        'id="saveEndpointBottom"',
+        'id="endpointModelToolbar"',
+        'id="endpointModelSearch"',
+        'id="endpointModelSelectionCount"',
+        'id="endpointDiscoveredModels" tabindex="0"',
+        "max-height: min(52vh,560px)",
+        "remote-endpoint-model-footer",
+        'data-endpoint-model-select="all"',
+        'data-endpoint-model-select="none"',
+        "data-endpoint-model-name",
+        "function updateEndpointModel",
+        "function markEndpointDirty",
+        "/api/model-endpoints",
+        "function discoverEndpointModels",
+        "state.discoveredEndpointModels.map(model=>({name:model.name,label:model.label||'',enabled:Boolean(model.enabled),supports_vision:Boolean(model.supports_vision)}))",
         "function runCreativeSourcing",
         "function uploadResultImage",
         "function exportDataset",
@@ -333,3 +357,7 @@ def test_external_model_ui_keeps_existing_creative_actions() -> None:
         "$('#sendWorkflow').addEventListener",
     ):
         assert marker in INDEX_HTML
+
+    assert "document.querySelector(`[data-endpoint-model-enabled=" not in INDEX_HTML
+    assert "document.querySelector(`[data-endpoint-model-vision=" not in INDEX_HTML
+    assert "document.querySelector(`[data-endpoint-model-label=" not in INDEX_HTML

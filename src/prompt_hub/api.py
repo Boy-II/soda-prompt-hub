@@ -45,7 +45,7 @@ from prompt_hub.local_visual import LocalVisualEncoder, LocalVisualIndexService
 from prompt_hub.lora_projects import LoraProjectStore
 from prompt_hub.lora_routes import create_lora_router
 from prompt_hub.media import resolve_media_path
-from prompt_hub.model_connections import CONNECTION_ID_PATTERN, ModelConnectionStore
+from prompt_hub.model_connections import MODEL_REF_PATTERN, ModelConnectionStore
 from prompt_hub.model_routes import create_model_router
 from prompt_hub.oc_manager import archive_import, parse_oc_manager_json
 from prompt_hub.project_journey import ProjectJourneyServices, create_project_journey_router
@@ -119,7 +119,7 @@ class LocalAssistInput(BaseModel):
     brief: str = Field(min_length=1, max_length=6000)
     slots: dict[str, str] = Field(default_factory=dict)
     slot_locks: dict[str, bool] = Field(default_factory=dict)
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
     target_profile: Literal["anima", "krea2"] = "anima"
 
 
@@ -136,11 +136,11 @@ class CreativeSourcingExpandInput(BaseModel):
     brief: str = Field(min_length=1, max_length=6000)
     slots: dict[str, str] = Field(default_factory=dict)
     slot_locks: dict[str, bool] = Field(default_factory=dict)
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
 
 
 class CreativeImageAnalysisInput(BaseModel):
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
 
 
 class CreativeReviewApplyInput(BaseModel):
@@ -166,7 +166,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model: str,
         existing_caption: str,
     ) -> dict[str, Any]:
-        if not CONNECTION_ID_PATTERN.fullmatch(model):
+        if not MODEL_REF_PATTERN.fullmatch(model):
             return DatasetCurationStore._default_krea2_captioner(  # noqa: SLF001
                 image_path,
                 model,

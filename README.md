@@ -49,10 +49,11 @@ LoRA 训练交付、Windows 回传、备份恢复和 SMB 配置顺序见 [MAC_OP
 角色、服装、动作、构图、场景、灯光、画风返回真实候选；若 LM Studio 可用，再异步扩展英文
 检索词。模型只负责帮助检索，最终卡片仍来自本地库，且只有点“加入槽位”后才会写入项目。
 
-LM Studio 仍是默认且优先的模型来源。需要临时使用云端或局域网模型时，可在创作台左栏展开
-“连接外部模型（可选）”，填写 OpenAI-compatible 的 Base URL、模型名和 API Key。模型列表由
-Mac 后端读取；保存后的 Key 只写入 `prompt-library/private/model-connections.json`，文件权限为
-`0600`，接口和页面不会回显明文。远程地址必须使用 HTTPS，本机 loopback 才允许 HTTP。
+LM Studio 仍是默认且优先的模型来源。需要临时使用云端或局域网模型时，可到“设备连接 › 模型接入”
+新增多组 OpenAI-compatible 端点（LM Studio、OpenAI、Ollama 或自定义），填写 Base URL 和 API Key，
+由 Mac 后端拉取模型列表，再勾选要启用的模型。保存后的 Key 只写入
+`prompt-library/private/model-connections.json`，文件权限为 `0600`，接口和页面不会回显明文。
+远程地址必须使用 HTTPS，本机 loopback 才允许 HTTP。
 首版不直接支持 Anthropic 或 Gemini 原生协议；若服务提供 OpenAI-compatible 入口才可接入。
 
 出图后可在创作台“结果图复盘”中导入 PNG、JPEG 或 WebP。原图与缩略图只保存在本机

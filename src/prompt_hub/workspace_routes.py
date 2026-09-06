@@ -45,7 +45,7 @@ class DatasetWD14QueueInput(BaseModel):
 class DatasetKrea2VLMQueueInput(BaseModel):
     scope: Literal["selected", "missing", "failed", "all"] = "missing"
     paths: list[str] = Field(default_factory=list, max_length=100000)
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
 
 
 class DatasetKrea2DraftInput(BaseModel):
@@ -66,7 +66,7 @@ class DatasetKrea2VLMResultItem(BaseModel):
 class DatasetKrea2VLMImportInput(BaseModel):
     task_id: str = Field(min_length=1, max_length=200)
     worker_id: str = Field(min_length=1, max_length=160)
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
     items: list[DatasetKrea2VLMResultItem] = Field(min_length=1, max_length=100000)
 
 
