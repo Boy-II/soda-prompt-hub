@@ -137,7 +137,9 @@ CREATIVE_STYLES = r"""
   .wd14-toolbar strong { display: block; font: 800 10px monospace; letter-spacing: .06em; }
   .wd14-toolbar p { margin: 4px 0 0; color: #aaa395; font-size: 9px; }
   .wd14-toolbar label { color: #aaa395; font: 800 8px monospace; text-transform: uppercase; }
-  .wd14-toolbar input { width: 100%; margin-top: 6px; border: 1px solid #706b61; background: #292824; color: #f4eddf; padding: 8px; font: 10px monospace; }
+  .wd14-toolbar input, .wd14-toolbar select { width: 100%; margin-top: 6px; border: 1px solid #706b61; background: #292824; color: #f4eddf; padding: 8px; font: 10px monospace; }
+  .wd14-thresholds { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .wd14-thresholds[hidden], #wd14TaggerModelWrap[hidden] { display: none !important; }
   .wd14-toolbar button { min-height: 34px; background: var(--acid); color: var(--ink); padding: 0 11px; font: 800 9px monospace; }
   .wd14-toolbar button:disabled { background: #383631; color: #777268; }
   .wd14-review { margin-top: 7px; border: 1px solid rgba(31,29,25,.26); background: #e9e1d1; padding: 7px; }
@@ -446,7 +448,8 @@ CREATIVE_SCRIPT = r"""
 
   function renderResultCard(asset, profileLabel) {
     const selected = asset.dataset_selected === true; const captions = asset.dataset_captions || {}; const caption = captions[creativeState.datasetProfile] || '';
-    return `<article class="result-card ${selected ? 'is-dataset-selected' : ''}"><a href="${escapeHtml(asset.original_url)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(asset.thumbnail_url)}" alt="${escapeHtml(asset.filename || '本地结果图')}" loading="lazy"></a><div class="result-card-body"><strong>${escapeHtml(asset.filename || '本地结果图')}</strong><span>${Number(asset.width) || '?'} × ${Number(asset.height) || '?'} · ${escapeHtml(safetyLabels[asset.safety] || '尚未分级')}</span><button class="dataset-toggle ${selected ? 'is-selected' : ''}" data-dataset-toggle="${escapeHtml(asset.asset_id)}">${selected ? '✓ 已加入数据集' : '＋ 加入数据集'}</button><button class="wd14-run" data-wd14-tag="${escapeHtml(asset.asset_id)}">${asset.wd14_tagging ? '重新运行 WD14' : '用 WD14 生成标签'}</button>${renderWd14Review(asset)}<details class="dataset-caption"><summary>${profileLabel}说明 · 留空时使用项目输出</summary><textarea data-dataset-caption="${escapeHtml(asset.asset_id)}" maxlength="12000" placeholder="留空时采用当前项目的 ${profileLabel}正向提示词">${escapeHtml(caption)}</textarea><button data-save-caption="${escapeHtml(asset.asset_id)}">保存此图说明</button></details><button data-review-asset="${escapeHtml(asset.asset_id)}" ${creativeState.visionAvailable ? '' : 'disabled'}>${creativeState.visionAvailable ? '用所选模型分析图片' : '暂无视觉模型'}</button></div></article>`;
+    const taggerLabel=activeTaggerLabel();
+    return `<article class="result-card ${selected ? 'is-dataset-selected' : ''}"><a href="${escapeHtml(asset.original_url)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(asset.thumbnail_url)}" alt="${escapeHtml(asset.filename || '本地结果图')}" loading="lazy"></a><div class="result-card-body"><strong>${escapeHtml(asset.filename || '本地结果图')}</strong><span>${Number(asset.width) || '?'} × ${Number(asset.height) || '?'} · ${escapeHtml(safetyLabels[asset.safety] || '尚未分级')}</span><button class="dataset-toggle ${selected ? 'is-selected' : ''}" data-dataset-toggle="${escapeHtml(asset.asset_id)}">${selected ? '✓ 已加入数据集' : '＋ 加入数据集'}</button><button class="wd14-run" data-wd14-tag="${escapeHtml(asset.asset_id)}">${asset.wd14_tagging ? `重新运行 ${taggerLabel}` : `用 ${taggerLabel} 生成标签`}</button>${renderWd14Review(asset)}<details class="dataset-caption"><summary>${profileLabel}说明 · 留空时使用项目输出</summary><textarea data-dataset-caption="${escapeHtml(asset.asset_id)}" maxlength="12000" placeholder="留空时采用当前项目的 ${profileLabel}正向提示词">${escapeHtml(caption)}</textarea><button data-save-caption="${escapeHtml(asset.asset_id)}">保存此图说明</button></details><button data-review-asset="${escapeHtml(asset.asset_id)}" ${creativeState.visionAvailable ? '' : 'disabled'}>${creativeState.visionAvailable ? '用所选模型分析图片' : '暂无视觉模型'}</button></div></article>`;
   }
 
   function renderWd14Review(asset) {
@@ -457,7 +460,7 @@ CREATIVE_SCRIPT = r"""
     const chips = candidates.map(tag => `<button class="wd14-tag-chip ${selectedTags.has(tag.toLowerCase()) ? 'selected' : ''}" data-wd14-chip="${escapeHtml(asset.asset_id)}" data-tag-value="${escapeHtml(tag)}" aria-pressed="${selectedTags.has(tag.toLowerCase())}">${escapeHtml(window.displayCanonicalTag ? window.displayCanonicalTag(tag) : tag)}</button>`).join('');
     const language = window.getTagDisplayLanguage?.() === 'en' ? '只看英文标签' : '查看中英标签';
     const characterLabels = characters.map(tag => window.displayCanonicalTag ? window.displayCanonicalTag(tag) : tag);
-    return `<details class="wd14-review" open><summary>WD14 草稿 · ${escapeHtml(wd14RatingLabels[rating] || rating)} ${Number.isFinite(ratingScore) ? Math.round(ratingScore * 100) + '%' : ''} · ${state}</summary><p>角色候选：${escapeHtml(characterLabels.join(', ') || '无（原创 OC 常见）')}<br>普通标签最低可信度 ${Number(tagging.general_threshold).toFixed(2)} · 角色标签最低可信度 ${Number(tagging.character_threshold).toFixed(2)} · 运行方式 ${escapeHtml(tagging.provider || 'CPU')}</p><div class="wd14-tag-locale"><span>点击标签保留或移除；保存和导出始终使用英文标签。</span><button data-toggle-tag-language>${language}</button></div><div class="wd14-tag-chips">${chips}</div><details class="wd14-advanced"><summary>直接编辑英文标签</summary><textarea data-wd14-draft="${escapeHtml(asset.asset_id)}" maxlength="12000" aria-label="WD14 Anima 标签草稿">${escapeHtml(draft)}</textarea></details><div class="wd14-actions"><button data-save-wd14="${escapeHtml(asset.asset_id)}">保存审核草稿</button><button data-confirm-wd14="${escapeHtml(asset.asset_id)}">确认用作 Anima 标签</button></div></details>`;
+    return `<details class="wd14-review" open><summary>${escapeHtml(taggingSourceLabel(tagging))} 草稿 · ${escapeHtml(wd14RatingLabels[rating] || rating)} ${Number.isFinite(ratingScore) ? Math.round(ratingScore * 100) + '%' : ''} · ${state}</summary><p>角色候选：${escapeHtml(characterLabels.join(', ') || '无（原创 OC 常见）')}<br>普通标签最低可信度 ${Number(tagging.general_threshold).toFixed(2)} · 角色标签最低可信度 ${Number(tagging.character_threshold).toFixed(2)} · 运行方式 ${escapeHtml(tagging.provider || 'CPU')}</p><div class="wd14-tag-locale"><span>点击标签保留或移除；保存和导出始终使用英文标签。</span><button data-toggle-tag-language>${language}</button></div><div class="wd14-tag-chips">${chips}</div><details class="wd14-advanced"><summary>直接编辑英文标签</summary><textarea data-wd14-draft="${escapeHtml(asset.asset_id)}" maxlength="12000" aria-label="Anima 标签草稿">${escapeHtml(draft)}</textarea></details><div class="wd14-actions"><button data-save-wd14="${escapeHtml(asset.asset_id)}">保存审核草稿</button><button data-confirm-wd14="${escapeHtml(asset.asset_id)}">确认用作 Anima 标签</button></div></details>`;
   }
 
   function toggleWd14Chip(assetId, tag) {
@@ -474,6 +477,19 @@ CREATIVE_SCRIPT = r"""
       ? '● 当前视觉模型已加载，可以直接分析图片。'
       : '○ 当前模型尚未加载。24GB Mac 请先在 LM Studio 卸载文字模型，再只加载这一只视觉模型。';
   }
+
+  function updateWd14TaggerMode() {
+    const mode=$('#wd14TaggerMode').value, hasVision=creativeState.visionAvailable, option=[...$('#wd14TaggerMode').options].find(item=>item.value==='model');
+    if(option) option.disabled=!hasVision;
+    if(mode==='model'&&!hasVision) $('#wd14TaggerMode').value='wd14';
+    const usingModel=$('#wd14TaggerMode').value==='model';
+    $('#wd14Thresholds').hidden=usingModel; $('#wd14TaggerModelWrap').hidden=!usingModel;
+    $('#wd14TaggerHint').textContent=usingModel?'模型会生成 Anima Booru 标签草稿；图片会发送到所选模型服务。':hasVision?'默认使用 WD14；也可以改用已连接的视觉模型生成 Booru 标签草稿。':'没有可用视觉模型；“使用模型”已禁用，请先在 LM Studio 加载视觉模型或在模型接入中启用支持看图的模型。';
+    renderResultGallery();
+  }
+
+  function activeTaggerLabel() { return $('#wd14TaggerMode').value==='model'?'模型':'WD14'; }
+  function taggingSourceLabel(tagging) { return tagging?.tagger==='model'?`模型${tagging.model ? ' · ' + tagging.model : ''}`:'WD14'; }
 
   function renderReviewProposal() {
     const proposal = $('#reviewProposal'); const review = creativeState.review;
@@ -649,12 +665,15 @@ CREATIVE_SCRIPT = r"""
     const preferred = loaded || quickFallback || models.models[0];
     if (preferred) select.value = preferred.id; else select.innerHTML = '<option value="">暂无可用模型</option>';
     select.disabled = !preferred;
-    const visionModels = models.models.filter(model => model.vision); const visionSelect = $('#visionModel');
-    visionSelect.innerHTML = visionModels.map(model => `<option value="${escapeHtml(model.id)}" data-source="${escapeHtml(model.source || 'local')}">${model.loaded ? '● ' : ''}${escapeHtml(model.name || model.id)}${model.params ? ` · ${escapeHtml(model.params)}` : ''}</option>`).join('');
+    const visionModels = models.models.filter(model => model.vision); const visionSelect = $('#visionModel'), taggerSelect=$('#wd14TaggerModel'), previousTagger=taggerSelect.value;
+    const visionOptions = visionModels.map(model => `<option value="${escapeHtml(model.id)}" data-source="${escapeHtml(model.source || 'local')}">${model.loaded ? '● ' : ''}${escapeHtml(model.name || model.id)}${model.params ? ` · ${escapeHtml(model.params)}` : ''}</option>`).join('');
+    visionSelect.innerHTML = visionOptions;
+    taggerSelect.innerHTML = visionOptions || '<option value="">没有可用视觉模型</option>';
     const loadedVision = visionModels.find(model => model.loaded); const visionFallback = visionModels.find(model => model.id.includes('qwen3.5-9b')); const preferredVision = visionFallback || loadedVision || visionModels[0];
     if (preferredVision) visionSelect.value = preferredVision.id;
+    if (visionModels.some(model => model.id === previousTagger)) taggerSelect.value = previousTagger; else if (preferredVision) taggerSelect.value = preferredVision.id;
     creativeState.visionAvailable = Boolean(models.available && visionModels.length); visionSelect.disabled = !creativeState.visionAvailable;
-    updateVisionHint();
+    taggerSelect.disabled = !creativeState.visionAvailable; updateVisionHint(); updateWd14TaggerMode();
     const localCount = Number(models.local_count ?? models.models.filter(model => model.source !== 'external').length); const externalCount = Number(models.external_count ?? models.models.filter(model => model.source === 'external').length);
     $('#lmStatus').textContent = models.available ? `可用模型：LM Studio ${localCount} 个，外部 ${externalCount} 个；默认优先已加载的本地模型。` : '当前没有可用模型，手动编辑与双格式输出仍可使用。';
     $('#assistCreative').disabled = !models.available || !models.models.length;
@@ -757,9 +776,11 @@ CREATIVE_SCRIPT = r"""
   }
 
   function wd14Payload() {
+    const tagger=$('#wd14TaggerMode').value, model=$('#wd14TaggerModel').value;
+    if(tagger==='model' && !model) throw new Error('请先选择用于打标的视觉模型');
     const general = Number($('#wd14GeneralThreshold').value); const character = Number($('#wd14CharacterThreshold').value);
-    if (!Number.isFinite(general) || general < 0 || general > 1 || !Number.isFinite(character) || character < 0 || character > 1) throw new Error('WD14 阈值必须在 0 到 1 之间');
-    return {general_threshold:general, character_threshold:character, limit:80};
+    if (tagger==='wd14' && (!Number.isFinite(general) || general < 0 || general > 1 || !Number.isFinite(character) || character < 0 || character > 1)) throw new Error('WD14 阈值必须在 0 到 1 之间');
+    return {tagger, model, general_threshold:general, character_threshold:character, limit:80};
   }
 
   function applyDatasetProject(project, message) {
@@ -768,8 +789,9 @@ CREATIVE_SCRIPT = r"""
   }
 
   async function tagResultAsset(assetId) {
-    await saveCreative(); const button = document.querySelector(`[data-wd14-tag="${CSS.escape(assetId)}"]`); if (button) { button.disabled = true; button.textContent = 'WD14 打标中…'; }
-    creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = '正在本机使用 WD14 分析图片…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
+    const payload=wd14Payload(), label=payload.tagger==='model'?'模型':'WD14';
+    await saveCreative(); const button = document.querySelector(`[data-wd14-tag="${CSS.escape(assetId)}"]`); if (button) { button.disabled = true; button.textContent = `${label} 打标中…`; }
+    creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = payload.tagger==='model'?`正在使用 ${payload.model} 生成标签草稿…`:'正在本机使用 WD14 分析图片…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
     try {
       const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/results/${encodeURIComponent(assetId)}/tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
       applyDatasetProject(response.project, `${label} 已生成 ${response.asset.wd14_tagging?.general?.length || 0} 个 general 标签；请审核后确认。`);
@@ -777,6 +799,7 @@ CREATIVE_SCRIPT = r"""
   }
 
   async function tagSelectedDataset() {
+    const payload=wd14Payload(), label=payload.tagger==='model'?'模型':'WD14';
     await saveCreative(); const button = $('#tagSelectedDataset'); button.disabled = true; button.textContent = '精选图片打标中…';
     creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = '正在逐张处理精选图片，请保持页面打开…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
     try {
@@ -861,6 +884,8 @@ CREATIVE_SCRIPT = r"""
   $('#sourcingGroups').addEventListener('click', async event => { const button = event.target.closest('[data-source-slot]'); if (!button || !creativeState.sourcing) return; const group = creativeState.sourcing.slots?.[button.dataset.sourceSlot]; const item = group?.candidates?.[Number(button.dataset.sourceIndex)]; if (!item) return; try { await addEntryToCreative(item, button.dataset.sourceSlot); renderSourcing(); } catch(error) { showCreativeError(error); } });
   $('#creativeBrief').addEventListener('input', () => { if (creativeState.sourcing) $('#sourcingRailStatus').textContent = '创作想法已变化，请重新取材。'; });
   $('#visionModel').addEventListener('change', updateVisionHint);
+  $('#wd14TaggerMode').addEventListener('change',updateWd14TaggerMode);
+  $('#wd14TaggerModel').addEventListener('change',updateWd14TaggerMode);
   $('#uploadResultImage').addEventListener('click', () => uploadResultImage().catch(showResultReviewError));
   $('#datasetProfile').addEventListener('change', event => { creativeState.datasetProfile = event.target.value; creativeState.datasetMessage = ''; renderResultGallery(); });
   $('#tagSelectedDataset').addEventListener('click', () => tagSelectedDataset().catch(showResultReviewError));

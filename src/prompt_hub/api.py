@@ -187,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         active_settings,
         workspace_store,
         krea2_captioner=krea2_captioner,
+        model_connections=model_connections,
     )
     lora_store = LoraProjectStore(active_settings.lora_projects_root)
     comfy_store = ComfyResultStore(active_settings.comfy_results_root)
@@ -246,7 +247,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Local-first prompt, style, tag, dataset, and workflow hub.",
         lifespan=lifespan,
     )
-    application.include_router(create_dataset_router(active_settings, creative_store))
+    application.include_router(
+        create_dataset_router(active_settings, creative_store, model_connections)
+    )
     application.include_router(
         create_workspace_router(
             workspace_store,

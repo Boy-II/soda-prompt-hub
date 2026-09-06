@@ -384,6 +384,104 @@ def draft_krea2_caption(
     }
 
 
+def draft_anima_tags(
+    *,
+    image_path: Path,
+    model: str,
+    existing_tags: str = "",
+    base_url: str = DEFAULT_LM_STUDIO_URL,
+    connections: ModelConnectionStore | None = None,
+) -> dict[str, Any]:
+    instruction = (
+        "You write concise Booru-style English tags for Anima image datasets. "
+        "Return one JSON object only, with keys tags, rating, and safety_warning. "
+        "tags must be an array of ASCII English Booru tags using underscores, ordered from "
+        "the most important subject, count, appearance, outfit, pose, composition, setting, "
+        "lighting, and style tags to less important details. Do not write a paragraph. "
+        "Do not include artist names, copyrights, watermarks, or identity guesses unless they "
+        "are visibly established by the image. Legal adult SFW or NSFW images may be tagged "
+        "objectively. If explicit sexual content may depict a minor, set a clear safety_warning "
+        "and omit explicit tags. Do not reveal reasoning."
+    )
+    context = (
+        f"Existing reviewed or draft Anima tags for reference only: {existing_tags[:1200]}"
+        if existing_tags.strip()
+        else "There are no existing Anima tags."
+    )
+    image_data_url = _image_data_url(image_path)
+    text_prompt = f"Draft Anima Booru tags for this local dataset image. {context}"
+    payload = {
+        "model": model,
+        "system_prompt": instruction,
+        "input": [
+            {"type": "image", "data_url": image_data_url},
+            {"type": "text", "content": text_prompt},
+        ],
+        "temperature": 0.1,
+        "max_output_tokens": 500,
+        "reasoning": "off",
+        "stream": False,
+        "store": False,
+    }
+    external = _resolve_external_model(model, connections)
+    if external:
+        content = _external_vision_completion(
+            connection=external,
+            system_prompt=instruction,
+            text_prompt=text_prompt,
+            image_data_url=image_data_url,
+            temperature=0.1,
+            max_tokens=500,
+        )
+        provider = "external"
+    else:
+        server_root = base_url.rstrip("/").removesuffix("/v1")
+        response = _request_json(
+            f"{server_root}/api/v1/chat",
+            method="POST",
+            payload=payload,
+            timeout=180,
+        )
+        provider = "LM Studio"
+        try:
+            content = "\n".join(
+                str(item.get("content", ""))
+                for item in response["output"]
+                if isinstance(item, dict) and item.get("type") == "message"
+            )
+        except (KeyError, TypeError) as error:
+            raise LocalModelError("本地视觉模型没有返回可识别的 Anima 标签草稿 JSON") from error
+    try:
+        raw = _extract_json_object(content)
+    except json.JSONDecodeError as error:
+        raise LocalModelError("视觉模型没有返回可识别的 Anima 标签草稿 JSON") from error
+    tags = _clean_anima_tags(raw.get("tags", []))
+    if not tags:
+        raise LocalModelError("视觉模型返回了空的 Anima 标签草稿")
+    rating_value = raw.get("rating", "")
+    rating = (
+        {
+            "tag": str(rating_value.get("tag", "")).strip(),
+            "score": float(rating_value.get("score", 0)),
+        }
+        if isinstance(rating_value, dict)
+        else {"tag": str(rating_value).strip(), "score": 0.0}
+    )
+    if not rating["tag"]:
+        rating = {"tag": "unknown", "score": 0.0}
+    scored_tags = [{"tag": tag, "score": 1.0} for tag in tags]
+    return {
+        "tagger": "model",
+        "model": model,
+        "provider": provider,
+        "rating": rating,
+        "general": scored_tags,
+        "characters": [],
+        "tag_string": ", ".join(tags),
+        "safety_warning": " ".join(str(raw.get("safety_warning", "")).split())[:2000],
+    }
+
+
 def _request_json(
     url: str,
     *,
@@ -524,3 +622,16 @@ def _clean_query_values(values: list[Any]) -> list[str]:
 def _clean_text_list(value: Any) -> list[str]:
     values = value if isinstance(value, list) else [value]
     return [str(item).strip() for item in values if str(item).strip()][:8]
+
+
+def _clean_anima_tags(value: Any) -> list[str]:
+    values = value if isinstance(value, list) else str(value).replace("\n", ",").split(",")
+    tags: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        tag = "_".join(str(raw).strip().replace(" ", "_").split())[:120]
+        key = tag.casefold()
+        if tag and tag.isascii() and key not in seen:
+            seen.add(key)
+            tags.append(tag)
+    return tags[:120]

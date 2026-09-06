@@ -36,6 +36,8 @@ class DatasetReviewUpdate(BaseModel):
 class DatasetWD14QueueInput(BaseModel):
     scope: Literal["untagged", "failed", "selected", "filtered", "all"] = "untagged"
     paths: list[str] = Field(default_factory=list, max_length=100000)
+    tagger: Literal["wd14", "model"] = "wd14"
+    model: str = Field(default="", max_length=400)
     general_threshold: float = Field(default=0.35, ge=0, le=1)
     character_threshold: float = Field(default=0.85, ge=0, le=1)
     provider: Literal["auto", "coreml", "cpu"] = "auto"
@@ -198,6 +200,8 @@ def create_workspace_router(
     ) -> dict[str, Any]:
         if workspace_store.get(workspace_id) is None:
             raise HTTPException(status_code=404, detail="Dataset workspace not found")
+        if payload.tagger == "model" and not payload.model.strip():
+            raise HTTPException(status_code=422, detail="使用模型打标时必须选择打标模型")
         job = job_runner.submit(
             "dataset_wd14",
             {"workspace_id": workspace_id, **payload.model_dump()},

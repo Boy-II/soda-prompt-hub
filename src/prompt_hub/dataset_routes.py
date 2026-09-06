@@ -19,6 +19,7 @@ from prompt_hub.dataset_tagging import (
     review_wd14_draft,
     store_wd14_result,
 )
+from prompt_hub.local_model import LocalModelError, draft_anima_tags
 from prompt_hub.result_assets import (
     find_result_asset,
     result_asset_path,
@@ -27,8 +28,11 @@ from prompt_hub.result_assets import (
 from prompt_hub.wd14 import WD14Error, tag_image
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from prompt_hub.config import Settings
     from prompt_hub.creative import CreativeStore
+    from prompt_hub.model_connections import ModelConnectionStore
 
 
 class DatasetAssetUpdate(BaseModel):
@@ -42,6 +46,8 @@ class DatasetExportInput(BaseModel):
 
 
 class DatasetTagInput(BaseModel):
+    tagger: Literal["wd14", "model"] = "wd14"
+    model: str = Field(default="", max_length=400)
     general_threshold: float = Field(default=0.35, ge=0, le=1)
     character_threshold: float = Field(default=0.85, ge=0, le=1)
     limit: int = Field(default=80, ge=1, le=200)
@@ -52,7 +58,11 @@ class DatasetTagReviewInput(BaseModel):
     confirm_anima: bool = False
 
 
-def create_dataset_router(settings: Settings, creative_store: CreativeStore) -> APIRouter:
+def create_dataset_router(
+    settings: Settings,
+    creative_store: CreativeStore,
+    model_connections: ModelConnectionStore | None = None,
+) -> APIRouter:
     router = APIRouter()
 
     @router.post("/api/creative/projects/{project_id}/dataset-export")
@@ -103,6 +113,7 @@ def create_dataset_router(settings: Settings, creative_store: CreativeStore) -> 
         asset_id: str,
         payload: DatasetTagInput,
     ) -> dict[str, Any]:
+        _validate_tagger_input(payload)
         project = creative_store.get_project(project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Creative project not found")
@@ -111,20 +122,19 @@ def create_dataset_router(settings: Settings, creative_store: CreativeStore) -> 
             raise HTTPException(status_code=404, detail="Result image not found")
         path = result_asset_path(settings, project_id, asset)
         try:
-            result = tag_image(
+            result = _tag_dataset_asset(
+                settings,
                 path,
-                model_root=settings.wd14_model_root,
-                general_threshold=payload.general_threshold,
-                character_threshold=payload.character_threshold,
-                limit=payload.limit,
-                provider="auto",
+                payload,
+                existing_tags=str(asset.get("dataset_captions", {}).get("anima", "")),
+                model_connections=model_connections,
             )
             generation, tagged_asset = store_wd14_result(
                 project,
                 asset_id=asset_id,
                 result=result,
             )
-        except WD14Error as error:
+        except (WD14Error, LocalModelError) as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
         updated = creative_store.update_project(project_id, {"generation": generation})
         return {"asset": tagged_asset, "project": updated}
@@ -134,6 +144,7 @@ def create_dataset_router(settings: Settings, creative_store: CreativeStore) -> 
         project_id: str,
         payload: DatasetTagInput,
     ) -> dict[str, Any]:
+        _validate_tagger_input(payload)
         project = creative_store.get_project(project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="Creative project not found")
@@ -152,13 +163,12 @@ def create_dataset_router(settings: Settings, creative_store: CreativeStore) -> 
             asset_id = str(asset.get("asset_id", ""))
             try:
                 path = result_asset_path(settings, project_id, asset)
-                result = tag_image(
+                result = _tag_dataset_asset(
+                    settings,
                     path,
-                    model_root=settings.wd14_model_root,
-                    general_threshold=payload.general_threshold,
-                    character_threshold=payload.character_threshold,
-                    limit=payload.limit,
-                    provider="auto",
+                    payload,
+                    existing_tags=str(asset.get("dataset_captions", {}).get("anima", "")),
+                    model_connections=model_connections,
                 )
                 generation, _tagged_asset = store_wd14_result(
                     working,
@@ -167,7 +177,7 @@ def create_dataset_router(settings: Settings, creative_store: CreativeStore) -> 
                 )
                 working = {**working, "generation": generation}
                 results.append({"asset_id": asset_id, "status": "tagged"})
-            except (HTTPException, WD14Error) as error:
+            except (HTTPException, WD14Error, LocalModelError) as error:
                 detail = error.detail if isinstance(error, HTTPException) else str(error)
                 results.append({"asset_id": asset_id, "status": "failed", "detail": detail})
 
@@ -220,3 +230,34 @@ def create_dataset_router(settings: Settings, creative_store: CreativeStore) -> 
         return FileResponse(path, media_type="application/zip", filename=filename)
 
     return router
+
+
+def _tag_dataset_asset(
+    settings: Settings,
+    path: Path,
+    payload: DatasetTagInput,
+    *,
+    existing_tags: str,
+    model_connections: ModelConnectionStore | None,
+) -> dict[str, object]:
+    if payload.tagger == "model":
+        model = payload.model.strip()
+        return draft_anima_tags(
+            image_path=path,
+            model=model,
+            existing_tags=existing_tags,
+            connections=model_connections,
+        )
+    return tag_image(
+        path,
+        model_root=settings.wd14_model_root,
+        general_threshold=payload.general_threshold,
+        character_threshold=payload.character_threshold,
+        limit=payload.limit,
+        provider="auto",
+    )
+
+
+def _validate_tagger_input(payload: DatasetTagInput) -> None:
+    if payload.tagger == "model" and not payload.model.strip():
+        raise HTTPException(status_code=422, detail="使用模型打标时必须选择打标模型")

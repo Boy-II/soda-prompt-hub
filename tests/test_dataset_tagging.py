@@ -137,6 +137,22 @@ def test_single_tag_and_review_api(settings, monkeypatch) -> None:
         assert confirmed.json()["asset"]["dataset_captions"]["anima"].endswith("blue_eyes")
 
 
+def test_model_tagger_requires_model(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        project = _create_project(client)
+        asset = _upload(client, project["project_id"], "single.png", "navy")
+        base = f"/api/creative/projects/{project['project_id']}/results/{asset['asset_id']}"
+
+        single = client.post(f"{base}/tag", json={"tagger": "model"})
+        assert single.status_code == 422
+
+        batch = client.post(
+            f"/api/creative/projects/{project['project_id']}/dataset-tag",
+            json={"tagger": "model"},
+        )
+        assert batch.status_code == 422
+
+
 def test_selected_batch_returns_partial_failures(settings, monkeypatch) -> None:
     calls = 0
 
