@@ -4,7 +4,8 @@ import hashlib
 import io
 import json
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, Any, Protocol
@@ -14,6 +15,7 @@ import onnxruntime as ort
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from prompt_hub.embedding_index import (
+    MAX_EMBEDDING_DIMENSION,
     EmbeddingIndexError,
     EmbeddingIndexStore,
     embedding_index_id,
@@ -29,6 +31,8 @@ MODEL_FILENAME = "vision_model.onnx"
 MODEL_SIZE_BYTES = 351_685_709
 MODEL_SHA256 = "fd6e1402a588279d1723c7534d4bcba5bc0b14b47dfab0e46f8c47b8270d7d40"
 IMAGE_SIZE = 224
+MIN_INPUT_SIZE = 16
+MAX_INPUT_SIZE = 4096
 MAX_QUERY_BYTES = 25 * 1024 * 1024
 CLIP_MEAN = np.asarray([0.48145466, 0.4578275, 0.40821073], dtype=np.float32)
 CLIP_STD = np.asarray([0.26862954, 0.26130258, 0.27577711], dtype=np.float32)
@@ -38,20 +42,31 @@ class VisualIndexError(ValueError):
     pass
 
 
+class VisualModelError(ValueError):
+    pass
+
+
 class VisualJobProgress(Protocol):
     def update(self, current: int, total: int, message: str = "") -> None: ...
 
 
 class VisualEncoderProtocol(Protocol):
-    model_id: str
-    model_revision: str
-    dimension: int
+    @property
+    def model_id(self) -> str: ...
+
+    @property
+    def model_revision(self) -> str: ...
+
+    @property
+    def dimension(self) -> int: ...
 
     def status(self) -> dict[str, Any]: ...
 
     def encode_path(self, path: Path) -> list[float]: ...
 
     def encode_bytes(self, raw: bytes) -> list[float]: ...
+
+    def set_descriptor(self, descriptor: VisualModelDescriptor) -> None: ...
 
 
 class VisualCatalogProtocol(Protocol):
@@ -61,49 +76,146 @@ class VisualCatalogProtocol(Protocol):
 SessionFactory = Callable[[Path], Any]
 
 
+@dataclass(frozen=True, slots=True)
+class VisualModelDescriptor:
+    model_id: str
+    model_revision: str
+    dimension: int
+    path: Path
+    input_size: int
+    sha256: str
+    bundled: bool = False
+
+
+def bundled_visual_model_descriptor(model_root: Path) -> VisualModelDescriptor:
+    return VisualModelDescriptor(
+        model_id=MODEL_ID,
+        model_revision=MODEL_REVISION,
+        dimension=MODEL_DIMENSION,
+        path=model_root / MODEL_FILENAME,
+        input_size=IMAGE_SIZE,
+        sha256=MODEL_SHA256,
+        bundled=True,
+    )
+
+
+def validate_custom_visual_model(
+    path: Path,
+    *,
+    model_id: str,
+    model_revision: str,
+    dimension: int,
+    input_size: int,
+) -> VisualModelDescriptor:
+    if not path.is_file():
+        raise VisualModelError(f"模型文件不存在：{path}")
+    if not 1 <= dimension <= MAX_EMBEDDING_DIMENSION:
+        raise VisualModelError(f"输出维度超出范围：{dimension}")
+    if not MIN_INPUT_SIZE <= input_size <= MAX_INPUT_SIZE:
+        raise VisualModelError(f"输入边长超出范围：{input_size}")
+    digest = _sha256_file(path)
+    image = Image.new("RGB", (input_size, input_size), "gray")
+    tensor = prepare_clip_image(image, size=input_size)
+    try:
+        session = _create_session(path)
+    except Exception as error:
+        raise VisualModelError(f"无法载入 ONNX 模型：{error}") from error
+    try:
+        input_name = str(session.get_inputs()[0].name)
+        outputs = session.run(None, {input_name: tensor})
+    except Exception as error:
+        raise VisualModelError(f"模型推理失败：{error}") from error
+    try:
+        vector = _select_projection(outputs, dimension)
+    except VisualIndexError as error:
+        raise VisualModelError(str(error)) from error
+    norm = float(np.linalg.norm(vector))
+    if not np.isfinite(norm) or norm <= 1e-12:
+        raise VisualModelError("视觉模型返回了无效向量")
+    return VisualModelDescriptor(
+        model_id=model_id,
+        model_revision=model_revision,
+        dimension=dimension,
+        path=path,
+        input_size=input_size,
+        sha256=digest,
+    )
+
+
 class LocalVisualEncoder:
     def __init__(
         self,
-        model_root: Path,
+        descriptor: VisualModelDescriptor,
         *,
         session_factory: SessionFactory | None = None,
     ) -> None:
-        self.model_root = model_root
-        self.model_path = model_root / MODEL_FILENAME
+        self._descriptor = descriptor
         self.session_factory = session_factory or _create_session
-        self.model_id = MODEL_ID
-        self.model_revision = MODEL_REVISION
-        self.dimension = MODEL_DIMENSION
-        self._session: Any | None = None
         self._verify_digest = session_factory is None
+        self._session: Any | None = None
         self._lock = RLock()
 
+    @property
+    def model_id(self) -> str:
+        return self._descriptor.model_id
+
+    @property
+    def model_revision(self) -> str:
+        return self._descriptor.model_revision
+
+    @property
+    def dimension(self) -> int:
+        return self._descriptor.dimension
+
+    @property
+    def input_size(self) -> int:
+        return self._descriptor.input_size
+
+    @property
+    def model_path(self) -> Path:
+        return self._descriptor.path
+
+    def set_descriptor(self, descriptor: VisualModelDescriptor) -> None:
+        with self._lock:
+            self._descriptor = descriptor
+            self._session = None
+
     def status(self) -> dict[str, Any]:
-        available = self.model_path.is_file()
-        size = self.model_path.stat().st_size if available else 0
-        info = _read_model_info(self.model_root / "model-info.json")
-        metadata_valid = (
-            info.get("model_revision") == MODEL_REVISION and info.get("sha256") == MODEL_SHA256
-        )
+        descriptor = self._descriptor
+        exists = descriptor.path.is_file()
+        size = descriptor.path.stat().st_size if exists else 0
+        if descriptor.bundled:
+            info = _read_model_info(descriptor.path.parent / "model-info.json")
+            metadata_valid = (
+                info.get("model_revision") == MODEL_REVISION and info.get("sha256") == MODEL_SHA256
+            )
+            available = exists and size == MODEL_SIZE_BYTES and metadata_valid
+            expected_size = MODEL_SIZE_BYTES
+            sha256 = str(info.get("sha256", ""))
+            if available:
+                reason = "模型可用"
+            elif not exists:
+                reason = "模型文件尚未安装"
+            else:
+                reason = "模型文件或版本校验信息不一致"
+        else:
+            available = exists
+            expected_size = 0
+            sha256 = descriptor.sha256
+            reason = "自定义视觉模型已就绪" if available else "自定义视觉模型文件不存在"
         return {
-            "available": available and size == MODEL_SIZE_BYTES and metadata_valid,
-            "model_id": self.model_id,
-            "model_revision": self.model_revision,
-            "dimension": self.dimension,
-            "model_path": str(self.model_path),
+            "available": available,
+            "model_id": descriptor.model_id,
+            "model_revision": descriptor.model_revision,
+            "dimension": descriptor.dimension,
+            "model_path": str(descriptor.path),
             "size_bytes": size,
-            "expected_size_bytes": MODEL_SIZE_BYTES,
-            "sha256": info.get("sha256", ""),
-            "expected_sha256": MODEL_SHA256,
+            "expected_size_bytes": expected_size,
+            "sha256": sha256,
+            "expected_sha256": descriptor.sha256,
             "runtime": "ONNX Runtime",
-            "input_size": IMAGE_SIZE,
-            "reason": (
-                "模型可用"
-                if available and size == MODEL_SIZE_BYTES and metadata_valid
-                else "模型文件尚未安装"
-                if not available
-                else "模型文件或版本校验信息不一致"
-            ),
+            "input_size": descriptor.input_size,
+            "reason": reason,
         }
 
     def encode_path(self, path: Path) -> list[float]:
@@ -125,12 +237,13 @@ class LocalVisualEncoder:
             raise VisualIndexError("无法识别查询图片") from error
 
     def _encode_image(self, image: Image.Image) -> list[float]:
-        tensor = prepare_clip_image(image)
         with self._lock:
+            descriptor = self._descriptor
+            tensor = prepare_clip_image(image, size=descriptor.input_size)
             session = self._get_session()
             input_name = str(session.get_inputs()[0].name)
             outputs = session.run(None, {input_name: tensor})
-        vector = _select_projection(outputs, self.dimension)
+        vector = _select_projection(outputs, descriptor.dimension)
         norm = float(np.linalg.norm(vector))
         if not np.isfinite(norm) or norm <= 1e-12:
             raise VisualIndexError("视觉模型返回了无效向量")
@@ -138,12 +251,13 @@ class LocalVisualEncoder:
 
     def _get_session(self) -> Any:
         if self._session is None:
+            descriptor = self._descriptor
             status = self.status()
             if not status["available"]:
                 raise VisualIndexError(str(status["reason"]))
-            if self._verify_digest and _sha256_file(self.model_path) != MODEL_SHA256:
+            if self._verify_digest and _sha256_file(descriptor.path) != descriptor.sha256:
                 raise VisualIndexError("视觉模型 SHA-256 校验失败")
-            self._session = self.session_factory(self.model_path)
+            self._session = self.session_factory(descriptor.path)
         return self._session
 
 
@@ -306,11 +420,11 @@ class LocalVisualIndexService:
         return int(result["imported"])
 
 
-def prepare_clip_image(image: Image.Image) -> np.ndarray:
+def prepare_clip_image(image: Image.Image, *, size: int = IMAGE_SIZE) -> np.ndarray:
     prepared = ImageOps.exif_transpose(image).convert("RGB")
     prepared = ImageOps.fit(
         prepared,
-        (IMAGE_SIZE, IMAGE_SIZE),
+        (size, size),
         method=Image.Resampling.BICUBIC,
         centering=(0.5, 0.5),
     )
@@ -366,14 +480,14 @@ def _create_session(model_path: Path) -> ort.InferenceSession:
     )
 
 
-def _select_projection(outputs: list[Any], dimension: int) -> np.ndarray:
+def _select_projection(outputs: Sequence[Any], dimension: int) -> np.ndarray:
     candidates = []
     for output in outputs:
         array = np.asarray(output, dtype=np.float32)
         if array.ndim == 2 and array.shape[0] == 1 and array.shape[1] == dimension:
             candidates.append(array[0])
     if not candidates:
-        raise VisualIndexError("视觉模型输出中没有固定的 512 维投影")
+        raise VisualIndexError(f"视觉模型输出中没有固定的 {dimension} 维投影")
     return candidates[0]
 
 

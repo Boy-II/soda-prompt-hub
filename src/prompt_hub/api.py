@@ -41,7 +41,11 @@ from prompt_hub.local_model import (
     list_local_models,
     organize_slots,
 )
-from prompt_hub.local_visual import LocalVisualEncoder, LocalVisualIndexService
+from prompt_hub.local_visual import (
+    LocalVisualEncoder,
+    LocalVisualIndexService,
+    bundled_visual_model_descriptor,
+)
 from prompt_hub.lora_projects import LoraProjectStore
 from prompt_hub.lora_routes import create_lora_router
 from prompt_hub.media import resolve_media_path
@@ -59,6 +63,12 @@ from prompt_hub.source_sync import SourceSyncService
 from prompt_hub.sourcing import allowed_safety_levels, source_candidates
 from prompt_hub.tag_locale import TagLocaleError, localize_tags, tag_catalog
 from prompt_hub.visual_assets import VisualAssetCatalog
+from prompt_hub.visual_model import (
+    DOWNLOAD_JOB_TYPE,
+    VisualModelConfigStore,
+    VisualModelError,
+    make_download_handler,
+)
 from prompt_hub.visual_routes import create_visual_router
 from prompt_hub.web import INDEX_HTML
 from prompt_hub.web_capture import WebCaptureService
@@ -206,9 +216,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         remote_store,
         web_capture,
     )
-    visual_encoder = LocalVisualEncoder(
-        active_settings.models_root / "clip" / "clip-vit-base-patch32"
-    )
+    visual_config = VisualModelConfigStore(active_settings.library_root / "visual-model.json")
+    bundled_model_root = active_settings.models_root / "clip" / "clip-vit-base-patch32"
+    try:
+        descriptor = visual_config.resolve_descriptor(bundled_model_root)
+    except VisualModelError:
+        descriptor = bundled_visual_model_descriptor(bundled_model_root)
+    visual_encoder = LocalVisualEncoder(descriptor)
     local_visual = LocalVisualIndexService(embedding_store, visual_catalog, visual_encoder)
     job_runner = BackgroundJobRunner(
         job_store,
@@ -218,6 +232,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "dataset_krea2_vlm": curation_store.krea2_vlm_job,
             "source_sync": source_sync.job,
             "local_visual_index": local_visual.job,
+            DOWNLOAD_JOB_TYPE: make_download_handler(bundled_model_root),
         },
     )
 
@@ -235,6 +250,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         embedding_store.initialize()
         remote_store.initialize()
         workflow_store.initialize()
+        visual_config.initialize()
         job_runner.start()
         try:
             yield
@@ -268,7 +284,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_remote_router(remote_store))
     application.include_router(create_model_router(model_connections))
     application.include_router(create_source_router(source_sync, job_runner, web_capture))
-    application.include_router(create_visual_router(local_visual, embedding_store, job_runner))
+    application.include_router(
+        create_visual_router(
+            local_visual,
+            embedding_store,
+            job_runner,
+            job_store,
+            visual_config,
+            bundled_model_root,
+        )
+    )
     application.include_router(
         create_workflow_router(
             active_settings,
