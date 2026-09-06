@@ -52,9 +52,14 @@ class Settings:
             self.remote_nodes_root,
             self.workflow_profiles_root,
             self.imported_archives_root,
+            self.tag_completions_root,
         )
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def tag_completions_root(self) -> Path:
+        return self.library_root / "tags" / "danbooru"
 
     @property
     def thumbnails_root(self) -> Path:

@@ -61,6 +61,8 @@ from prompt_hub.search_routes import create_search_router
 from prompt_hub.source_routes import create_source_router
 from prompt_hub.source_sync import SourceSyncService
 from prompt_hub.sourcing import allowed_safety_levels, source_candidates
+from prompt_hub.tag_completion_routes import create_tag_completion_router
+from prompt_hub.tag_completions import TAG_DOWNLOAD_JOB_TYPE, TagCompletionStore
 from prompt_hub.tag_locale import TagLocaleError, localize_tags, tag_catalog
 from prompt_hub.visual_assets import VisualAssetCatalog
 from prompt_hub.visual_model import (
@@ -224,6 +226,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         descriptor = bundled_visual_model_descriptor(bundled_model_root)
     visual_encoder = LocalVisualEncoder(descriptor)
     local_visual = LocalVisualIndexService(embedding_store, visual_catalog, visual_encoder)
+    tag_store = TagCompletionStore(
+        active_settings.database_path,
+        active_settings.tag_completions_root,
+    )
     job_runner = BackgroundJobRunner(
         job_store,
         {
@@ -234,6 +240,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "source_sync": source_sync.job,
             "local_visual_index": local_visual.job,
             DOWNLOAD_JOB_TYPE: make_download_handler(bundled_model_root),
+            TAG_DOWNLOAD_JOB_TYPE: tag_store.download_job,
         },
     )
 
@@ -252,6 +259,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         remote_store.initialize()
         workflow_store.initialize()
         visual_config.initialize()
+        tag_store.initialize()
         job_runner.start()
         try:
             yield
@@ -318,6 +326,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         )
     )
+    application.include_router(create_tag_completion_router(tag_store, job_runner))
 
     @application.get("/", response_class=HTMLResponse, include_in_schema=False)
     def index() -> str:

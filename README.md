@@ -376,3 +376,5 @@ uv run pytest
 
 项目使用 [MIT License](LICENSE)。第三方提示词库、图片、模型、工作流和数据集仍遵循各自来源的
 许可证或使用条款，不因本项目采用 MIT 而改变。
+
+Danbooru 标签自动补全数据集来源于 Hugging Face 数据集 [newtextdoc1111/danbooru-tag-csv](https://huggingface.co/datasets/newtextdoc1111/danbooru-tag-csv)（固定 revision `fdf2772213f13d46bff60fc5ebd876e1a811a053`，遵循 MIT License），该数据集派生自 `itterative/danbooru_wikis_full` 与 `trojblue/danbooru2025-metadata`。

@@ -104,6 +104,25 @@ CREATIVE_STYLES = r"""
   .slot-lock { border: 1px solid var(--line); padding: 5px 7px; font: 800 9px monospace; }
   .slot-card.is-locked .slot-lock { background: var(--signal); color: white; border-color: var(--signal); }
   .slot-card textarea { min-height: 78px; resize: vertical; margin-top: 9px; }
+  .tag-completion-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; margin-bottom: 12px; border: 1px solid var(--line); background: rgba(246,240,228,.96); font-size: 11px; line-height: 1.45; }
+  .tag-completion-banner.is-ready { border-color: #16a34a; background: #f0fdf4; color: #15803d; }
+  .tag-completion-banner button { border: 1px solid var(--signal); background: var(--signal); color: white; padding: 5px 10px; font: 800 10px monospace; cursor: pointer; white-space: nowrap; }
+  .tag-completion-banner button:disabled { opacity: .6; cursor: not-allowed; }
+  .tag-autocomplete-dropdown { position: fixed; z-index: 1000; background: #fdfbf7; border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(31,29,25,.18); max-height: 250px; overflow-y: auto; font-family: monospace; font-size: 11px; }
+  .tag-autocomplete-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; border-bottom: 1px solid rgba(31,29,25,.06); user-select: none; }
+  .tag-autocomplete-item:last-child { border-bottom: none; }
+  .tag-autocomplete-item:hover, .tag-autocomplete-item.is-selected { background: rgba(31,29,25,.08); }
+  .tag-autocomplete-item.is-added { opacity: .48; }
+  .tag-cat-badge { display: inline-block; padding: 1px 5px; font-size: 9px; font-weight: 800; border-radius: 2px; text-transform: uppercase; flex-shrink: 0; }
+  .tag-cat-0 { background: #e0f2fe; color: #0369a1; }
+  .tag-cat-1 { background: #fef3c7; color: #b45309; }
+  .tag-cat-3 { background: #f3e8ff; color: #7e22ce; }
+  .tag-cat-4 { background: #dcfce7; color: #15803d; }
+  .tag-cat-5 { background: #fee2e2; color: #b91c1c; }
+  .tag-name { font-weight: 600; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag-alias { color: var(--muted); font-size: 10px; white-space: nowrap; }
+  .tag-count { color: var(--muted); font-size: 10px; white-space: nowrap; margin-left: auto; }
+  .tag-added-badge { font-size: 8px; font-weight: 700; color: var(--signal); border: 1px solid currentColor; padding: 0 3px; border-radius: 2px; flex-shrink: 0; }
   .creative-subsection { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--line); }
   .creative-subsection-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
   .creative-subsection-head h2 { margin: 0; font: 700 24px "Iowan Old Style", serif; }
@@ -306,7 +325,7 @@ CREATIVE_SCRIPT = r"""
   };
   const safetyLabels = {sfw:'普通',suggestive:'轻度成人向',adult:'成人向','explicit-adult':'明确成人向',unrated:'尚未分级'};
   const wd14RatingLabels = {general:'普通',sensitive:'轻度成人向',questionable:'成人向',explicit:'明确成人向',unknown:'尚未判断'};
-  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', workflowProfiles: [], windowsModels: [], windowsLoras: [], workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
+  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', tagStatus: null, tagDownloading: false, workflowProfiles: [], windowsModels: [], windowsLoras: [], workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
 
   async function creativeJson(url, options = {}) {
     const response = await fetch(url, options);
@@ -684,8 +703,201 @@ CREATIVE_SCRIPT = r"""
     if (!creativeState.loadedMeta) await loadCreativeMeta();
     if (!creativeState.project) creativeState.project = creativeState.projects[0] || await createCreativeProject();
     renderCreativeProject();
+    checkTagCompletionStatus();
   }
   window.ensureCreativeProject = ensureCreativeProject;
+
+  async function checkTagCompletionStatus() {
+    try {
+      creativeState.tagStatus = await creativeJson('/api/tag-completions/status');
+    } catch {
+      creativeState.tagStatus = null;
+    }
+    renderTagCompletionBanner();
+  }
+
+  function renderTagCompletionBanner() {
+    const banner = $('#tagCompletionBanner');
+    if (!banner) return;
+    if (creativeState.profile !== 'anima') {
+      banner.hidden = true;
+      return;
+    }
+    if (creativeState.tagDownloading) {
+      banner.hidden = false;
+      banner.className = 'tag-completion-banner';
+      banner.innerHTML = '<span>正在下载并导入 Danbooru 标签库……</span><button disabled>下载中</button>';
+      return;
+    }
+    if (!creativeState.tagStatus || !creativeState.tagStatus.installed) {
+      banner.hidden = false;
+      banner.className = 'tag-completion-banner';
+      banner.innerHTML = '<span>Danbooru 标签自动补全库未安装（约 1.5MB）。</span><button data-tag-action="download">下载安装标签库</button>';
+      return;
+    }
+    banner.hidden = true;
+  }
+
+  async function triggerTagDownload() {
+    creativeState.tagDownloading = true;
+    renderTagCompletionBanner();
+    try {
+      await creativeJson('/api/tag-completions/download', {method: 'POST'});
+      const poll = setInterval(async () => {
+        try {
+          const status = await creativeJson('/api/tag-completions/status');
+          if (status.installed) {
+            clearInterval(poll);
+            creativeState.tagStatus = status;
+            creativeState.tagDownloading = false;
+            const banner = $('#tagCompletionBanner');
+            if (banner) {
+              banner.className = 'tag-completion-banner is-ready';
+              banner.innerHTML = `<span>✓ Danbooru 标签库已就绪（共 ${(status.total_tags || 0).toLocaleString()} 个标签）。</span><button data-tag-action="dismiss">关闭</button>`;
+              setTimeout(() => { if (banner && banner.classList.contains('is-ready')) banner.hidden = true; }, 4000);
+            }
+          }
+        } catch {
+          // ignore transient poll errors
+        }
+      }, 1500);
+    } catch (err) {
+      creativeState.tagDownloading = false;
+      showCreativeError(err);
+      renderTagCompletionBanner();
+    }
+  }
+
+  let tagFetchTimer = null;
+  let tagAbortController = null;
+  let activeTagSlot = null;
+  let activeTagInput = null;
+  let tagCandidates = [];
+  let tagSelectedIndex = 0;
+
+  function hideTagDropdown() {
+    clearTimeout(tagFetchTimer);
+    tagAbortController?.abort();
+    tagAbortController = null;
+    tagCandidates = [];
+    tagSelectedIndex = 0;
+    activeTagInput = null;
+    activeTagSlot = null;
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (dropdown) dropdown.hidden = true;
+  }
+
+  function getTagTokenAtCursor(textarea) {
+    const text = textarea.value;
+    const pos = textarea.selectionStart;
+    const lastComma = text.lastIndexOf(',', pos - 1);
+    const start = lastComma === -1 ? 0 : lastComma + 1;
+    const rawToken = text.slice(start, pos);
+    if (rawToken.includes('\n')) return null;
+    const query = rawToken.trim();
+    return { query, start, end: pos };
+  }
+
+  function formatTagCount(count) {
+    const n = Number(count) || 0;
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(0) + 'k';
+    return String(n);
+  }
+
+  function updateTagHighlight() {
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (!dropdown || dropdown.hidden) return;
+    const items = dropdown.querySelectorAll('.tag-autocomplete-item');
+    items.forEach((el, idx) => {
+      el.classList.toggle('is-selected', idx === tagSelectedIndex);
+      if (idx === tagSelectedIndex) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+
+  function renderTagDropdown() {
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (!dropdown || !activeTagInput || !tagCandidates.length) {
+      hideTagDropdown();
+      return;
+    }
+
+    const currentSlotTags = new Set(
+      (activeTagInput.value || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+    );
+    const allProjectTags = new Set();
+    Object.values(creativeState.project?.slots || {}).forEach(val => {
+      (val || '').split(',').forEach(s => {
+        const t = s.trim().toLowerCase();
+        if (t) allProjectTags.add(t);
+      });
+    });
+
+    const catLabels = {0: '普通', 1: '画师', 3: '作品', 4: '角色', 5: '元标签'};
+
+    dropdown.innerHTML = tagCandidates.map((item, idx) => {
+      const tagLower = (item.tag || '').toLowerCase();
+      const inCurrent = currentSlotTags.has(tagLower);
+      const inProject = allProjectTags.has(tagLower);
+      const isAdded = inCurrent || inProject;
+      const isSelected = idx === tagSelectedIndex;
+      const catName = catLabels[item.category] || '标签';
+      const aliasHtml = item.matched_alias ? `<span class="tag-alias">别名: ${escapeHtml(item.matched_alias)}</span>` : '';
+      const addedBadge = inCurrent ? '<span class="tag-added-badge">当前已加</span>' : (inProject ? '<span class="tag-added-badge">已在其他槽</span>' : '');
+
+      return `<div class="tag-autocomplete-item ${isSelected ? 'is-selected' : ''} ${isAdded ? 'is-added' : ''}" data-tag-index="${idx}">` +
+        `<span class="tag-cat-badge tag-cat-${item.category}">${catName}</span>` +
+        `<span class="tag-name">${escapeHtml(item.tag)}</span>` +
+        aliasHtml +
+        `<span class="tag-count">${formatTagCount(item.post_count)}</span>` +
+        addedBadge +
+        `</div>`;
+    }).join('');
+
+    const rect = activeTagInput.getBoundingClientRect();
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.width = `${Math.max(rect.width, 320)}px`;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 220 && rect.top > 220) {
+      dropdown.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+      dropdown.style.top = 'auto';
+    } else {
+      dropdown.style.top = `${rect.bottom + 4}px`;
+      dropdown.style.bottom = 'auto';
+    }
+    dropdown.hidden = false;
+    updateTagHighlight();
+  }
+
+  function selectTagCandidate(candidate) {
+    if (!activeTagInput || !candidate) return;
+    const textarea = activeTagInput;
+    const text = textarea.value;
+    const pos = textarea.selectionStart;
+    const lastComma = text.lastIndexOf(',', pos - 1);
+    const start = lastComma === -1 ? 0 : lastComma + 1;
+    const nextComma = text.indexOf(',', pos);
+    const end = nextComma === -1 ? text.length : nextComma;
+
+    const before = text.slice(0, start);
+    const after = text.slice(end);
+
+    const cleanBefore = before.length > 0 && !before.endsWith(' ') ? before + ' ' : before;
+    const cleanAfter = after.replace(/^,\s*/, '');
+    const insertText = candidate.tag + ', ';
+
+    textarea.value = cleanBefore + insertText + cleanAfter;
+    const newCursorPos = cleanBefore.length + insertText.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+
+    hideTagDropdown();
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    renderOutput();
+  }
 
   async function addEntryToCreative(item, slot) {
     await ensureCreativeProject();
@@ -876,6 +1088,103 @@ CREATIVE_SCRIPT = r"""
   $('#newCreativeProject').addEventListener('click', () => createCreativeProject().catch(showCreativeError));
   ['creativeTitle','creativeBrief','creativeSafety','creativeNotes','genSteps','genCfg','genSeed','genResults'].forEach(id => $('#' + id).addEventListener('input', queueCreativeSave));
   $('#creativeSlots').addEventListener('input', queueCreativeSave);
+  $('#creativeSlots').addEventListener('input', (event) => {
+    const textarea = event.target.closest('[data-slot-input]');
+    if (!textarea) return;
+    if (creativeState.profile !== 'anima') {
+      hideTagDropdown();
+      return;
+    }
+    const token = getTagTokenAtCursor(textarea);
+    if (!token || !token.query) {
+      hideTagDropdown();
+      return;
+    }
+    activeTagInput = textarea;
+    activeTagSlot = textarea.dataset.slotInput;
+    clearTimeout(tagFetchTimer);
+    tagFetchTimer = setTimeout(async () => {
+      tagAbortController?.abort();
+      tagAbortController = new AbortController();
+      try {
+        const data = await creativeJson(`/api/tag-completions?q=${encodeURIComponent(token.query)}&limit=15`, {
+          signal: tagAbortController.signal,
+        });
+        if (!data.installed) {
+          creativeState.tagStatus = { installed: false };
+          renderTagCompletionBanner();
+          hideTagDropdown();
+          return;
+        }
+        if (!data.results || !data.results.length) {
+          hideTagDropdown();
+          return;
+        }
+        tagCandidates = data.results;
+        tagSelectedIndex = 0;
+        renderTagDropdown();
+      } catch (err) {
+        if (err.name !== 'AbortError') hideTagDropdown();
+      }
+    }, 120);
+  });
+  $('#creativeSlots').addEventListener('keydown', (event) => {
+    const textarea = event.target.closest('[data-slot-input]');
+    if (!textarea || creativeState.profile !== 'anima') return;
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (!dropdown || dropdown.hidden || !tagCandidates.length) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      tagSelectedIndex = (tagSelectedIndex + 1) % tagCandidates.length;
+      updateTagHighlight();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      tagSelectedIndex = (tagSelectedIndex - 1 + tagCandidates.length) % tagCandidates.length;
+      updateTagHighlight();
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      const candidate = tagCandidates[tagSelectedIndex];
+      if (candidate) selectTagCandidate(candidate);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      hideTagDropdown();
+    }
+  });
+  $('#tagAutocompleteDropdown').addEventListener('mousedown', (event) => {
+    event.preventDefault();
+    const itemEl = event.target.closest('[data-tag-index]');
+    if (!itemEl) return;
+    const idx = Number(itemEl.dataset.tagIndex);
+    const candidate = tagCandidates[idx];
+    if (candidate) selectTagCandidate(candidate);
+  });
+  $('#tagAutocompleteDropdown').addEventListener('mouseover', (event) => {
+    const itemEl = event.target.closest('[data-tag-index]');
+    if (!itemEl) return;
+    tagSelectedIndex = Number(itemEl.dataset.tagIndex);
+    updateTagHighlight();
+  });
+  $('#tagCompletionBanner').addEventListener('click', (event) => {
+    const downloadBtn = event.target.closest('[data-tag-action="download"]');
+    if (downloadBtn) {
+      triggerTagDownload().catch(showCreativeError);
+      return;
+    }
+    const dismissBtn = event.target.closest('[data-tag-action="dismiss"]');
+    if (dismissBtn) {
+      $('#tagCompletionBanner').hidden = true;
+    }
+  });
+  document.addEventListener('mousedown', (event) => {
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (dropdown && !dropdown.hidden && !dropdown.contains(event.target) && event.target !== activeTagInput) {
+      hideTagDropdown();
+    }
+  });
+  window.addEventListener('scroll', () => {
+    hideTagDropdown();
+  }, { passive: true });
   $('#creativeSlots').addEventListener('click', event => { const button = event.target.closest('[data-lock-slot]'); if (!button || !creativeState.project) return; creativeState.project = collectCreative(); const key = button.dataset.lockSlot; creativeState.project.slot_locks[key] = !creativeState.project.slot_locks[key]; renderCreativeProject(); queueCreativeSave(); });
   $('#creativeReferences').addEventListener('click', event => { const button = event.target.closest('[data-remove-reference]'); if (!button) return; creativeState.project.references.splice(Number(button.dataset.removeReference), 1); renderCreativeReferences(); queueCreativeSave(); });
   $('#creativeProjectList').addEventListener('click', async event => { const button = event.target.closest('[data-project-id]'); if (!button || button.dataset.projectId === creativeState.project?.project_id) return; try { clearTimeout(creativeState.saveTimer); await saveCreative(); creativeState.project = creativeState.projects.find(p => p.project_id === button.dataset.projectId); creativeState.review = null; creativeState.reviewProjectId = ''; renderCreativeProject(); } catch(error) { showCreativeError(error); } });
@@ -907,7 +1216,7 @@ CREATIVE_SCRIPT = r"""
   $('#branchReview').addEventListener('click', () => branchResultReview().catch(showResultReviewError));
   $('#applyIterationSuggestions').addEventListener('click', () => applyIterationSuggestions().catch(showCreativeError));
   $('#closeReview').addEventListener('click', () => { creativeState.review = null; $('#reviewProposal').hidden = true; });
-  document.querySelectorAll('[data-profile]').forEach(button => button.addEventListener('click', () => { creativeState.profile = button.dataset.profile; creativeState.project.target_profile = creativeState.profile; document.querySelectorAll('[data-profile]').forEach(b => b.classList.toggle('active', b === button)); renderOutput(); renderWorkflowProfiles(); queueCreativeSave(); }));
+  document.querySelectorAll('[data-profile]').forEach(button => button.addEventListener('click', () => { creativeState.profile = button.dataset.profile; creativeState.project.target_profile = creativeState.profile; document.querySelectorAll('[data-profile]').forEach(b => b.classList.toggle('active', b === button)); hideTagDropdown(); renderTagCompletionBanner(); renderOutput(); renderWorkflowProfiles(); queueCreativeSave(); }));
   $('#workflowProfile').addEventListener('change',()=>{ creativeState.workflowLoraPickerOpen=false; creativeState.workflowLoraQuery=''; creativeState.workflowLoraFolder=''; renderWorkflowProfiles(); });
   $('#workflowLowCost').addEventListener('change', renderWorkflowProfiles);
   $('#workflowControlList').addEventListener('change',()=>{ saveWorkflowControlsFromForm(); renderWorkflowControls(); });

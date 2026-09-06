@@ -63,7 +63,9 @@ CREATIVE_HTML = r"""
       </section>
       <section class="creative-subsection">
         <div class="creative-subsection-head"><h2>把画面拆成七部分</h2><span>不想被模型改动的内容可以锁定</span></div>
+        <div class="tag-completion-banner" id="tagCompletionBanner" hidden></div>
         <div class="slot-grid" id="creativeSlots"></div>
+        <div class="tag-autocomplete-dropdown" id="tagAutocompleteDropdown" hidden></div>
       </section>
       <section class="creative-subsection">
         <div class="creative-subsection-head"><h2>视觉与资料参考</h2><span>从提示词库或 OC 角色卡加入</span></div>
