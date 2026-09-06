@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 
 import pytest
@@ -372,3 +373,11 @@ def test_external_model_ui_keeps_existing_creative_actions() -> None:
     assert "document.querySelector(`[data-endpoint-model-enabled=" not in INDEX_HTML
     assert "document.querySelector(`[data-endpoint-model-vision=" not in INDEX_HTML
     assert "document.querySelector(`[data-endpoint-model-label=" not in INDEX_HTML
+
+
+def test_every_referenced_element_id_exists_in_page() -> None:
+    """A $('#id') lookup returning null throws and kills every later listener."""
+    rendered_ids = set(re.findall(r'id="([A-Za-z0-9_-]+)"', INDEX_HTML))
+    referenced_ids = set(re.findall(r"\$\('#([A-Za-z0-9_-]+)'\)", INDEX_HTML))
+    assert referenced_ids
+    assert not referenced_ids - rendered_ids

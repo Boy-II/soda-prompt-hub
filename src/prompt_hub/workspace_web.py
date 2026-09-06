@@ -26,6 +26,7 @@ WORKSPACE_HTML = r"""
         </details>
         <label class="dataset-zip-row">或上传 zip 数据包
           <button class="dataset-pick-folder" id="datasetPickZip" type="button">选择 zip 文件…</button>
+          <input id="datasetZipFile" type="file" accept=".zip,application/zip" hidden>
           <span class="dataset-picked-path" id="datasetPickedZip">尚未选择 zip</span>
           <button class="dataset-primary" id="datasetZipUpload" type="button" disabled>上传并导入 zip</button>
         </label>
