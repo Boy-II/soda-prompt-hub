@@ -282,3 +282,52 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+MAX_SCAN_DEPTH = 5
+MAX_SCAN_RESULTS = 200
+
+
+def scan_onnx_candidates(models_root: Path) -> list[dict[str, object]]:
+    if not models_root.is_dir():
+        return []
+    results: list[dict[str, object]] = []
+    _walk_onnx(models_root, models_root, 0, results)
+    results.sort(key=lambda item: str(item["filename"]).casefold())
+    return results
+
+
+def _walk_onnx(
+    root: Path,
+    current: Path,
+    depth: int,
+    results: list[dict[str, object]],
+) -> None:
+    if depth > MAX_SCAN_DEPTH or len(results) >= MAX_SCAN_RESULTS:
+        return
+    try:
+        entries = sorted(current.iterdir(), key=lambda item: item.name.casefold())
+    except PermissionError:
+        return
+    for entry in entries:
+        if len(results) >= MAX_SCAN_RESULTS:
+            return
+        if entry.is_dir() and not entry.name.startswith(".") and not entry.is_symlink():
+            _walk_onnx(root, entry, depth + 1, results)
+        elif entry.is_file() and entry.suffix.lower() == ".onnx":
+            try:
+                size = entry.stat().st_size
+            except OSError:
+                continue
+            try:
+                relative_dir = str(entry.parent.relative_to(root))
+            except ValueError:
+                relative_dir = str(entry.parent)
+            results.append(
+                {
+                    "path": str(entry),
+                    "filename": entry.name,
+                    "size_bytes": size,
+                    "directory": relative_dir,
+                }
+            )

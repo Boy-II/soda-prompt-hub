@@ -5,6 +5,7 @@ import io
 import json
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
@@ -140,6 +141,77 @@ def validate_custom_visual_model(
         input_size=input_size,
         sha256=digest,
     )
+
+
+def detect_custom_visual_model(
+    path: Path,
+    *,
+    session_factory: SessionFactory | None = None,
+) -> dict[str, Any]:
+    if not path.is_file():
+        raise VisualModelError(f"模型文件不存在：{path}")
+    digest = _sha256_file(path)
+    size_bytes = path.stat().st_size
+    factory = session_factory or _create_session
+    try:
+        session = factory(path)
+    except Exception as error:
+        raise VisualModelError(f"无法载入 ONNX 模型：{error}") from error
+    input_size, input_size_fallback = _infer_input_size(session)
+    image = Image.new("RGB", (input_size, input_size), "gray")
+    tensor = prepare_clip_image(image, size=input_size)
+    try:
+        input_name = str(session.get_inputs()[0].name)
+        outputs = session.run(None, {input_name: tensor})
+    except Exception as error:
+        raise VisualModelError(f"模型推理失败：{error}") from error
+    vector = _select_embedding_output(outputs)
+    dimension = len(vector)
+    norm = float(np.linalg.norm(vector))
+    if not np.isfinite(norm) or norm <= 1e-12:
+        raise VisualModelError("视觉模型返回了无效向量（全零或包含 NaN/Inf）")
+    model_id = path.stem
+    model_revision = digest[:16]
+    return {
+        "path": str(path),
+        "model_id": model_id,
+        "model_revision": model_revision,
+        "dimension": dimension,
+        "input_size": input_size,
+        "input_size_fallback": input_size_fallback,
+        "sha256": digest,
+        "size_bytes": size_bytes,
+    }
+
+
+def _infer_input_size(session: Any) -> tuple[int, bool]:
+    # Best-effort input-size inference; the second return value marks a fallback.
+    with suppress(AttributeError, IndexError, TypeError, ValueError):
+        inputs = session.get_inputs()
+        if inputs:
+            shape = inputs[0].shape
+            if isinstance(shape, (list, tuple)) and len(shape) >= 3:
+                spatial = [dim for dim in shape[-2:] if isinstance(dim, int) and dim > 0]
+                if spatial and MIN_INPUT_SIZE <= spatial[0] <= MAX_INPUT_SIZE:
+                    return spatial[0], False
+    return IMAGE_SIZE, True
+
+
+def _select_embedding_output(outputs: Sequence[Any]) -> np.ndarray:
+    candidates = []
+    for output in outputs:
+        array = np.asarray(output, dtype=np.float32)
+        if (
+            array.ndim == 2
+            and array.shape[0] == 1
+            and 1 <= array.shape[1] <= MAX_EMBEDDING_DIMENSION
+            and np.issubdtype(array.dtype, np.floating)
+        ):
+            candidates.append(array[0])
+    if not candidates:
+        raise VisualModelError("模型输出中没有可识别的嵌入向量（需要 ndim==2 的浮点输出）")
+    candidates.sort(key=len, reverse=True)
+    return candidates[0]
 
 
 class LocalVisualEncoder:

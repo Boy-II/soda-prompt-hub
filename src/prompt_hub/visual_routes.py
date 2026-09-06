@@ -10,17 +10,20 @@ from prompt_hub.embedding_index import EmbeddingIndexError, EmbeddingIndexStore
 from prompt_hub.local_visual import (
     LocalVisualIndexService,
     VisualIndexError,
+    VisualModelError,
     bundled_visual_model_descriptor,
+    detect_custom_visual_model,
     validate_custom_visual_model,
 )
 from prompt_hub.visual_model import (
     DOWNLOAD_JOB_TYPE,
     VisualModelConfigStore,
-    VisualModelError,
+    scan_onnx_candidates,
 )
 
 if TYPE_CHECKING:
     from prompt_hub.background_jobs import BackgroundJobRunner, BackgroundJobStore
+    from prompt_hub.config import Settings
 
 
 class VisualIndexBuildInput(BaseModel):
@@ -46,6 +49,23 @@ class VisualModelCustomInput(BaseModel):
     input_size: int = Field(default=224, ge=16, le=4096)
 
 
+class VisualModelDetectInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=4096)
+
+
+class VisualModelEnableDetectedInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=4096)
+    model_id: str = Field(default="", max_length=300)
+    model_revision: str = Field(default="", max_length=200)
+    dimension: int = Field(ge=1, le=8192)
+    input_size: int = Field(ge=16, le=4096)
+    sha256: str = Field(min_length=64, max_length=64)
+
+
 def create_visual_router(
     service: LocalVisualIndexService,
     store: EmbeddingIndexStore,
@@ -53,6 +73,7 @@ def create_visual_router(
     job_store: BackgroundJobStore,
     config_store: VisualModelConfigStore,
     bundled_model_root: Path,
+    settings: Settings,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -71,41 +92,14 @@ def create_visual_router(
         job = job_runner.submit("local_visual_index", payload.model_dump(), max_attempts=2)
         return {"job": job}
 
-    @router.post("/api/visual-index/model/download", status_code=status.HTTP_202_ACCEPTED)
-    def download_visual_model() -> dict[str, Any]:
-        job = job_runner.submit(DOWNLOAD_JOB_TYPE, {})
-        return {"job": job}
-
-    @router.post("/api/visual-index/model/custom")
-    def enable_custom_visual_model(payload: VisualModelCustomInput) -> dict[str, Any]:
-        try:
-            descriptor = validate_custom_visual_model(
-                Path(payload.path).expanduser(),
-                model_id=payload.model_id,
-                model_revision=payload.model_revision,
-                dimension=payload.dimension,
-                input_size=payload.input_size,
-            )
-            record = config_store.enable_custom(descriptor)
-            service.encoder.set_descriptor(descriptor)
-        except VisualModelError as error:
-            code = 404 if "不存在" in str(error) else 422
-            raise HTTPException(status_code=code, detail=str(error)) from error
-        return {
-            "mode": record["mode"],
-            "custom": record["custom"],
-            "reindex_required": True,
-        }
-
-    @router.delete("/api/visual-index/model/custom")
-    def disable_custom_visual_model() -> dict[str, Any]:
-        try:
-            config_store.disable_custom()
-            service.encoder.set_descriptor(bundled_visual_model_descriptor(bundled_model_root))
-        except VisualModelError as error:
-            code = 404 if "不存在" in str(error) else 422
-            raise HTTPException(status_code=code, detail=str(error)) from error
-        return {"mode": "bundled", "custom": None, "reindex_required": True}
+    _register_model_routes(
+        router,
+        service=service,
+        job_runner=job_runner,
+        config_store=config_store,
+        settings=settings,
+        bundled_model_root=bundled_model_root,
+    )
 
     @router.post("/api/visual-search/query")
     async def query_uploaded_image(
@@ -158,6 +152,91 @@ def create_visual_router(
             raise HTTPException(status_code=404, detail=str(error)) from error
 
     return router
+
+
+def _register_model_routes(
+    router: APIRouter,
+    *,
+    service: LocalVisualIndexService,
+    job_runner: BackgroundJobRunner,
+    config_store: VisualModelConfigStore,
+    settings: Settings,
+    bundled_model_root: Path,
+) -> None:
+    @router.post("/api/visual-index/model/download", status_code=status.HTTP_202_ACCEPTED)
+    def download_visual_model() -> dict[str, Any]:
+        job = job_runner.submit(DOWNLOAD_JOB_TYPE, {})
+        return {"job": job}
+
+    @router.get("/api/visual-index/model/candidates")
+    def list_onnx_candidates() -> dict[str, Any]:
+        candidates = scan_onnx_candidates(settings.models_root)
+        return {"models_root": str(settings.models_root), "candidates": candidates}
+
+    @router.post("/api/visual-index/model/detect")
+    def detect_visual_model(payload: VisualModelDetectInput) -> dict[str, Any]:
+        try:
+            return detect_custom_visual_model(Path(payload.path).expanduser())
+        except VisualModelError as error:
+            code = 404 if "不存在" in str(error) else 422
+            raise HTTPException(status_code=code, detail=str(error)) from error
+
+    @router.post("/api/visual-index/model/enable-detected")
+    def enable_detected_visual_model(
+        payload: VisualModelEnableDetectedInput,
+    ) -> dict[str, Any]:
+        resolved_path = Path(payload.path).expanduser()
+        model_id = payload.model_id.strip() or resolved_path.stem
+        model_revision = payload.model_revision.strip() or payload.sha256[:16]
+        try:
+            descriptor = validate_custom_visual_model(
+                resolved_path,
+                model_id=model_id,
+                model_revision=model_revision,
+                dimension=payload.dimension,
+                input_size=payload.input_size,
+            )
+            record = config_store.enable_custom(descriptor)
+            service.encoder.set_descriptor(descriptor)
+        except VisualModelError as error:
+            code = 404 if "不存在" in str(error) else 422
+            raise HTTPException(status_code=code, detail=str(error)) from error
+        return {
+            "mode": record["mode"],
+            "custom": record["custom"],
+            "reindex_required": True,
+        }
+
+    @router.post("/api/visual-index/model/custom")
+    def enable_custom_visual_model(payload: VisualModelCustomInput) -> dict[str, Any]:
+        try:
+            descriptor = validate_custom_visual_model(
+                Path(payload.path).expanduser(),
+                model_id=payload.model_id,
+                model_revision=payload.model_revision,
+                dimension=payload.dimension,
+                input_size=payload.input_size,
+            )
+            record = config_store.enable_custom(descriptor)
+            service.encoder.set_descriptor(descriptor)
+        except VisualModelError as error:
+            code = 404 if "不存在" in str(error) else 422
+            raise HTTPException(status_code=code, detail=str(error)) from error
+        return {
+            "mode": record["mode"],
+            "custom": record["custom"],
+            "reindex_required": True,
+        }
+
+    @router.delete("/api/visual-index/model/custom")
+    def disable_custom_visual_model() -> dict[str, Any]:
+        try:
+            config_store.disable_custom()
+            service.encoder.set_descriptor(bundled_visual_model_descriptor(bundled_model_root))
+        except VisualModelError as error:
+            code = 404 if "不存在" in str(error) else 422
+            raise HTTPException(status_code=code, detail=str(error)) from error
+        return {"mode": "bundled", "custom": None, "reindex_required": True}
 
 
 def _latest_download_job(job_store: BackgroundJobStore) -> dict[str, Any] | None:

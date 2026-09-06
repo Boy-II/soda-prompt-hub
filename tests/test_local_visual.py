@@ -227,6 +227,8 @@ def test_visual_api_reports_missing_model_without_fake_results(settings) -> None
         assert 'id="visualQueryFile"' in page
         assert 'id="visualClusterPanel"' in page
         assert 'id="sourceCaptureForm"' in page
+        assert 'id="visualCustomDetect"' in page
+        assert 'id="visualCustomSelect"' in page
 
 
 def _image_bytes() -> bytes:

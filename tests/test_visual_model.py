@@ -15,16 +15,18 @@ from prompt_hub.background_jobs import JobCancelledError
 from prompt_hub.local_visual import (
     MODEL_FILENAME,
     VisualModelDescriptor,
+    VisualModelError,
+    detect_custom_visual_model,
     validate_custom_visual_model,
 )
 from prompt_hub.visual_model import (
     DOWNLOAD_JOB_TYPE,
     DOWNLOAD_URL,
     VisualModelConfigStore,
-    VisualModelError,
     WhitelistedRedirectHandler,
     assert_https_download_url,
     download_bundled_visual_model,
+    scan_onnx_candidates,
 )
 
 
@@ -451,3 +453,173 @@ def test_visual_model_download_api_fails_cleanly_without_network(settings, monke
         assert not (bundled_root / MODEL_FILENAME).exists()
         assert not (bundled_root / f"{MODEL_FILENAME}.part").exists()
         assert not (bundled_root / "model-info.json").exists()
+
+
+def test_scan_onnx_candidates_returns_only_onnx_files(tmp_path) -> None:
+    models = tmp_path / "models"
+    sub = models / "clip"
+    sub.mkdir(parents=True)
+    (sub / "model.onnx").write_bytes(b"onnx")
+    (sub / "model.bin").write_bytes(b"bin")
+    (models / "top.ONNX").write_bytes(b"onnx2")  # case-insensitive
+    hidden = models / ".hidden"
+    hidden.mkdir()
+    (hidden / "secret.onnx").write_bytes(b"skip")
+
+    results = scan_onnx_candidates(models)
+    filenames = [item["filename"] for item in results]
+    assert "model.onnx" in filenames
+    assert "top.ONNX" in filenames
+    assert "model.bin" not in filenames
+    assert "secret.onnx" not in filenames  # hidden dir skipped
+    for item in results:
+        assert "path" in item
+        assert "size_bytes" in item
+        assert "directory" in item
+
+
+def test_scan_onnx_candidates_empty_when_dir_missing(tmp_path) -> None:
+    assert scan_onnx_candidates(tmp_path / "nonexistent") == []
+
+
+def test_scan_onnx_candidates_stays_inside_models_root(tmp_path) -> None:
+    models = tmp_path / "models"
+    models.mkdir()
+    (models / "local.onnx").write_bytes(b"onnx")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "escape.onnx").write_bytes(b"onnx")
+    (models / "linked").symlink_to(outside, target_is_directory=True)
+
+    results = scan_onnx_candidates(models)
+    filenames = [item["filename"] for item in results]
+    assert "local.onnx" in filenames
+    assert "escape.onnx" not in filenames
+
+
+class _DetectSession:
+    def __init__(self, outputs, *, shape=None) -> None:
+        self.outputs = outputs
+        self._shape = shape or [1, 3, 224, 224]
+
+    def get_inputs(self):
+        class _InputMeta:
+            name = "pixel_values"
+            shape = self._shape
+
+        return [_InputMeta()]
+
+    def run(self, _names, _values):
+        return self.outputs
+
+
+def test_detect_auto_derives_dimension_and_input_size(tmp_path) -> None:
+    model_path = tmp_path / "test.onnx"
+    model_path.write_bytes(b"fake-onnx")
+    session = _DetectSession(
+        [np.asarray([[1.0, 2.0] + [0.0] * 382], dtype=np.float32)],
+        shape=[1, 3, 336, 336],
+    )
+    result = detect_custom_visual_model(model_path, session_factory=lambda _p: session)
+    assert result["dimension"] == 384
+    assert result["input_size"] == 336
+    assert result["input_size_fallback"] is False
+    assert result["model_id"] == "test"
+    assert len(result["sha256"]) == 64
+    assert result["model_revision"] == result["sha256"][:16]
+
+
+def test_detect_falls_back_to_default_input_size_on_dynamic_shape(tmp_path) -> None:
+    model_path = tmp_path / "dynamic.onnx"
+    model_path.write_bytes(b"fake")
+    session = _DetectSession(
+        [np.asarray([[1.0] * 512], dtype=np.float32)],
+        shape=[1, 3, "batch", "height"],  # dynamic dims
+    )
+    result = detect_custom_visual_model(model_path, session_factory=lambda _p: session)
+    assert result["input_size"] == 224
+    assert result["input_size_fallback"] is True
+
+
+def test_detect_rejects_model_with_no_embedding_output(tmp_path) -> None:
+    model_path = tmp_path / "bad.onnx"
+    model_path.write_bytes(b"fake")
+    # 3D output, not 2D
+    session = _DetectSession([np.asarray([[[1.0, 2.0, 3.0]]], dtype=np.float32)])
+    with pytest.raises(VisualModelError, match="嵌入向量"):
+        detect_custom_visual_model(model_path, session_factory=lambda _p: session)
+
+
+def test_detect_rejects_missing_file(tmp_path) -> None:
+    with pytest.raises(VisualModelError, match="不存在"):
+        detect_custom_visual_model(tmp_path / "missing.onnx")
+
+
+def test_detect_picks_largest_dimension_output(tmp_path) -> None:
+    model_path = tmp_path / "multi.onnx"
+    model_path.write_bytes(b"multi-output")
+    session = _DetectSession(
+        [
+            np.asarray([[1.0] * 128], dtype=np.float32),
+            np.asarray([[2.0] * 768], dtype=np.float32),
+        ]
+    )
+    result = detect_custom_visual_model(model_path, session_factory=lambda _p: session)
+    assert result["dimension"] == 768
+
+
+def test_detect_api_roundtrip(settings, monkeypatch) -> None:
+    model_path = settings.library_root / "custom.onnx"
+    model_path.write_bytes(b"fake-onnx-bytes")
+    session = _Session([np.asarray([[1.0] * 512], dtype=np.float32)])
+    monkeypatch.setattr("prompt_hub.local_visual._create_session", lambda _path: session)
+    with TestClient(create_app(settings)) as client:
+        detect_resp = client.post(
+            "/api/visual-index/model/detect",
+            json={"path": str(model_path)},
+        )
+        assert detect_resp.status_code == 200
+        detected = detect_resp.json()
+        assert detected["dimension"] == 512
+        assert detected["model_id"] == "custom"
+        assert len(detected["sha256"]) == 64
+
+        enable_resp = client.post(
+            "/api/visual-index/model/enable-detected",
+            json={
+                "path": detected["path"],
+                "dimension": detected["dimension"],
+                "input_size": detected["input_size"],
+                "sha256": detected["sha256"],
+            },
+        )
+        assert enable_resp.status_code == 200
+        assert enable_resp.json()["reindex_required"] is True
+        assert enable_resp.json()["mode"] == "custom"
+        status = client.get("/api/visual-index/status").json()
+        assert status["mode"] == "custom"
+        assert status["model"]["model_id"] == "custom"
+
+
+def test_detect_api_rejects_missing_file(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        resp = client.post(
+            "/api/visual-index/model/detect",
+            json={"path": str(settings.library_root / "missing.onnx")},
+        )
+        assert resp.status_code == 404
+
+
+def test_candidates_api_returns_onnx_files(settings) -> None:
+    onnx_dir = settings.models_root / "test"
+    onnx_dir.mkdir(parents=True, exist_ok=True)
+    (onnx_dir / "model.onnx").write_bytes(b"fake")
+    (onnx_dir / "readme.txt").write_bytes(b"text")
+    with TestClient(create_app(settings)) as client:
+        resp = client.get("/api/visual-index/model/candidates")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "models_root" in data
+        filenames = [c["filename"] for c in data["candidates"]]
+        assert "model.onnx" in filenames
+        assert "readme.txt" not in filenames

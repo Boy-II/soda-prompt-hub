@@ -292,6 +292,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             job_store,
             visual_config,
             bundled_model_root,
+            active_settings,
         )
     )
     application.include_router(
