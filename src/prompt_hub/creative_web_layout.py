@@ -82,7 +82,7 @@ CREATIVE_HTML = r"""
         <p class="result-review-status" id="resultModelHint">正在读取可用的视觉模型…</p>
         <div class="result-gallery" id="resultGallery"></div>
         <div class="wd14-toolbar">
-          <div><strong>WD14 · 生成 Anima 标签草稿</strong><p>只处理已经选中的图片。自动结果需要人工检查，一次最多处理 24 张。</p></div>
+          <div class="wd14-toolbar-intro"><strong>WD14 · 生成 Anima 标签草稿</strong><p>只处理已经选中的图片。自动结果需要人工检查，一次最多处理 24 张。</p></div>
           <label>打标方式<select id="wd14TaggerMode"><option value="wd14">WD14 本地模型</option><option value="model">使用模型</option></select></label>
           <label id="wd14TaggerModelWrap" hidden>用于打标的模型<select id="wd14TaggerModel"><option value="">正在读取视觉模型……</option></select></label>
           <div class="wd14-thresholds" id="wd14Thresholds"><label>普通标签最低可信度<input id="wd14GeneralThreshold" type="number" min="0" max="1" step="0.05" value="0.35"></label><label>角色标签最低可信度<input id="wd14CharacterThreshold" type="number" min="0" max="1" step="0.05" value="0.85"></label></div>

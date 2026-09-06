@@ -153,13 +153,16 @@ CREATIVE_STYLES = r"""
   .dataset-caption { margin-top: 7px; border-top: 1px solid rgba(31,29,25,.2); padding-top: 7px; }
   .dataset-caption summary { cursor: pointer; color: var(--muted); font: 800 8px monospace; }
   .dataset-caption textarea { width: 100%; min-height: 78px; margin-top: 7px; resize: vertical; border: 1px solid var(--line); background: #fbf6ec; padding: 7px; color: var(--ink); font: 9px/1.45 monospace; }
-  .wd14-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 130px minmax(220px, 1.1fr) auto; gap: 9px; align-items: end; margin-top: 12px; border: 1px solid var(--line); background: #171714; color: #f4eddf; padding: 12px; box-shadow: inset 4px 0 var(--acid); }
+  .wd14-toolbar { display: flex; flex-wrap: wrap; gap: 12px 9px; align-items: end; margin-top: 12px; border: 1px solid var(--line); background: #171714; color: #f4eddf; padding: 12px; box-shadow: inset 4px 0 var(--acid); }
+  .wd14-toolbar-intro { flex: 1 1 100%; min-width: 0; }
+  .wd14-toolbar > label { flex: 0 1 190px; min-width: 148px; }
   .wd14-toolbar strong { display: block; font: 800 10px monospace; letter-spacing: .06em; }
   .wd14-toolbar p { margin: 4px 0 0; color: #aaa395; font-size: 9px; }
   .wd14-toolbar label { color: #aaa395; font: 800 8px monospace; text-transform: uppercase; }
   .wd14-toolbar input, .wd14-toolbar select { width: 100%; margin-top: 6px; border: 1px solid #706b61; background: #292824; color: #f4eddf; padding: 8px; font: 10px monospace; }
-  .wd14-thresholds { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .wd14-thresholds { flex: 1 1 300px; min-width: 220px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
   .wd14-thresholds[hidden], #wd14TaggerModelWrap[hidden] { display: none !important; }
+  .wd14-toolbar > button { flex: 0 0 auto; margin-left: auto; }
   .wd14-toolbar button { min-height: 34px; background: var(--acid); color: var(--ink); padding: 0 11px; font: 800 9px monospace; }
   .wd14-toolbar button:disabled { background: #383631; color: #777268; }
   .wd14-review { margin-top: 7px; border: 1px solid rgba(31,29,25,.26); background: #e9e1d1; padding: 7px; }
