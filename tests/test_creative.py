@@ -347,6 +347,10 @@ def test_external_model_ui_keeps_existing_creative_actions() -> None:
         "data-endpoint-model-name",
         "function updateEndpointModel",
         "function markEndpointDirty",
+        "function endpointConfigurationIsVerified",
+        "请先成功拉取模型列表",
+        "请至少勾选一个模型",
+        "端点信息有变化",
         "/api/model-endpoints",
         "function discoverEndpointModels",
         "state.discoveredEndpointModels.map(model=>({name:model.name,label:model.label||'',enabled:Boolean(model.enabled),supports_vision:Boolean(model.supports_vision)}))",
@@ -369,6 +373,8 @@ def test_external_model_ui_keeps_existing_creative_actions() -> None:
         "$('#sendWorkflow').addEventListener",
     ):
         assert marker in INDEX_HTML
+
+    assert "可手工填写模型名称" not in INDEX_HTML
 
     assert "document.querySelector(`[data-endpoint-model-enabled=" not in INDEX_HTML
     assert "document.querySelector(`[data-endpoint-model-vision=" not in INDEX_HTML

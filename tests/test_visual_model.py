@@ -355,7 +355,8 @@ def test_config_store_custom_roundtrip_and_corrupt_fallback(tmp_path) -> None:
 
 
 def test_visual_model_custom_api_roundtrip(settings, monkeypatch) -> None:
-    model_path = settings.library_root / "custom.onnx"
+    settings.models_root.mkdir(parents=True, exist_ok=True)
+    model_path = settings.models_root / "custom.onnx"
     model_path.write_bytes(b"fake-onnx-bytes")
     session = _Session([np.asarray([[1.0] * 512], dtype=np.float32)])
     monkeypatch.setattr("prompt_hub.local_visual._create_session", lambda _path: session)
@@ -385,7 +386,7 @@ def test_visual_model_custom_api_roundtrip(settings, monkeypatch) -> None:
         missing = client.post(
             "/api/visual-index/model/custom",
             json={
-                "path": str(settings.library_root / "missing.onnx"),
+                "path": str(settings.models_root / "missing.onnx"),
                 "model_id": "x",
                 "model_revision": "v1",
                 "dimension": 512,
@@ -402,7 +403,8 @@ def test_visual_model_custom_api_roundtrip(settings, monkeypatch) -> None:
 
 
 def test_visual_model_custom_api_rejects_dimension_mismatch(settings, monkeypatch) -> None:
-    model_path = settings.library_root / "custom.onnx"
+    settings.models_root.mkdir(parents=True, exist_ok=True)
+    model_path = settings.models_root / "custom.onnx"
     model_path.write_bytes(b"fake-onnx-bytes")
     session = _Session([np.asarray([[1.0] * 384], dtype=np.float32)])
     monkeypatch.setattr("prompt_hub.local_visual._create_session", lambda _path: session)
@@ -569,7 +571,8 @@ def test_detect_picks_largest_dimension_output(tmp_path) -> None:
 
 
 def test_detect_api_roundtrip(settings, monkeypatch) -> None:
-    model_path = settings.library_root / "custom.onnx"
+    settings.models_root.mkdir(parents=True, exist_ok=True)
+    model_path = settings.models_root / "custom.onnx"
     model_path.write_bytes(b"fake-onnx-bytes")
     session = _Session([np.asarray([[1.0] * 512], dtype=np.float32)])
     monkeypatch.setattr("prompt_hub.local_visual._create_session", lambda _path: session)
@@ -605,9 +608,87 @@ def test_detect_api_rejects_missing_file(settings) -> None:
     with TestClient(create_app(settings)) as client:
         resp = client.post(
             "/api/visual-index/model/detect",
-            json={"path": str(settings.library_root / "missing.onnx")},
+            json={"path": str(settings.models_root / "missing.onnx")},
         )
         assert resp.status_code == 404
+
+
+def test_detect_api_rejects_file_outside_models_root(settings) -> None:
+    outside = settings.library_root / "outside.onnx"
+    outside.write_bytes(b"not-allowed")
+
+    with TestClient(create_app(settings)) as client:
+        resp = client.post(
+            "/api/visual-index/model/detect",
+            json={"path": str(outside)},
+        )
+
+    assert resp.status_code == 422
+    assert "模型目录" in resp.json()["detail"]
+
+
+def test_custom_api_rejects_file_outside_models_root(settings) -> None:
+    outside = settings.library_root / "outside.onnx"
+    outside.write_bytes(b"not-allowed")
+
+    with TestClient(create_app(settings)) as client:
+        resp = client.post(
+            "/api/visual-index/model/custom",
+            json={
+                "path": str(outside),
+                "model_id": "outside",
+                "model_revision": "v1",
+                "dimension": 512,
+                "input_size": 224,
+            },
+        )
+
+    assert resp.status_code == 422
+    assert "模型目录" in resp.json()["detail"]
+
+
+def test_detect_api_rejects_symlink_inside_models_root(settings) -> None:
+    settings.models_root.mkdir(parents=True, exist_ok=True)
+    outside = settings.library_root / "outside.onnx"
+    outside.write_bytes(b"not-allowed")
+    linked = settings.models_root / "linked.onnx"
+    linked.symlink_to(outside)
+
+    with TestClient(create_app(settings)) as client:
+        resp = client.post(
+            "/api/visual-index/model/detect",
+            json={"path": str(linked)},
+        )
+
+    assert resp.status_code == 422
+    assert "符号链接" in resp.json()["detail"]
+
+
+def test_enable_detected_rejects_file_changed_after_detection(settings, monkeypatch) -> None:
+    settings.models_root.mkdir(parents=True, exist_ok=True)
+    model_path = settings.models_root / "changed.onnx"
+    model_path.write_bytes(b"first-version")
+    session = _Session([np.asarray([[1.0] * 512], dtype=np.float32)])
+    monkeypatch.setattr("prompt_hub.local_visual._create_session", lambda _path: session)
+
+    with TestClient(create_app(settings)) as client:
+        detected = client.post(
+            "/api/visual-index/model/detect",
+            json={"path": str(model_path)},
+        ).json()
+        model_path.write_bytes(b"second-version")
+        resp = client.post(
+            "/api/visual-index/model/enable-detected",
+            json={
+                "path": detected["path"],
+                "dimension": detected["dimension"],
+                "input_size": detected["input_size"],
+                "sha256": detected["sha256"],
+            },
+        )
+
+    assert resp.status_code == 422
+    assert "检测后发生变化" in resp.json()["detail"]
 
 
 def test_candidates_api_returns_onnx_files(settings) -> None:

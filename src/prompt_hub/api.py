@@ -334,7 +334,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/api/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "database": str(active_settings.database_path)}
+        return {
+            "status": "ok",
+            "service": "soda-prompt-hub",
+            "database": str(active_settings.database_path),
+        }
 
     @application.get("/api/compute/contract")
     def get_compute_contract() -> dict[str, Any]:

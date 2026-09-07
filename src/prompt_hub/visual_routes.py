@@ -176,7 +176,8 @@ def _register_model_routes(
     @router.post("/api/visual-index/model/detect")
     def detect_visual_model(payload: VisualModelDetectInput) -> dict[str, Any]:
         try:
-            return detect_custom_visual_model(Path(payload.path).expanduser())
+            model_path = _resolve_visual_model_path(payload.path, settings.models_root)
+            return detect_custom_visual_model(model_path)
         except VisualModelError as error:
             code = 404 if "不存在" in str(error) else 422
             raise HTTPException(status_code=code, detail=str(error)) from error
@@ -185,10 +186,10 @@ def _register_model_routes(
     def enable_detected_visual_model(
         payload: VisualModelEnableDetectedInput,
     ) -> dict[str, Any]:
-        resolved_path = Path(payload.path).expanduser()
-        model_id = payload.model_id.strip() or resolved_path.stem
-        model_revision = payload.model_revision.strip() or payload.sha256[:16]
         try:
+            resolved_path = _resolve_visual_model_path(payload.path, settings.models_root)
+            model_id = payload.model_id.strip() or resolved_path.stem
+            model_revision = payload.model_revision.strip() or payload.sha256[:16]
             descriptor = validate_custom_visual_model(
                 resolved_path,
                 model_id=model_id,
@@ -196,6 +197,7 @@ def _register_model_routes(
                 dimension=payload.dimension,
                 input_size=payload.input_size,
             )
+            _ensure_matching_digest(descriptor.sha256, payload.sha256)
             record = config_store.enable_custom(descriptor)
             service.encoder.set_descriptor(descriptor)
         except VisualModelError as error:
@@ -210,8 +212,9 @@ def _register_model_routes(
     @router.post("/api/visual-index/model/custom")
     def enable_custom_visual_model(payload: VisualModelCustomInput) -> dict[str, Any]:
         try:
+            model_path = _resolve_visual_model_path(payload.path, settings.models_root)
             descriptor = validate_custom_visual_model(
-                Path(payload.path).expanduser(),
+                model_path,
                 model_id=payload.model_id,
                 model_revision=payload.model_revision,
                 dimension=payload.dimension,
@@ -237,6 +240,39 @@ def _register_model_routes(
             code = 404 if "不存在" in str(error) else 422
             raise HTTPException(status_code=code, detail=str(error)) from error
         return {"mode": "bundled", "custom": None, "reindex_required": True}
+
+
+def _resolve_visual_model_path(value: str, models_root: Path) -> Path:
+    root = models_root.expanduser().resolve()
+    requested = Path(value).expanduser()
+    if not requested.is_absolute() or ".." in requested.parts:
+        raise VisualModelError(f"模型文件必须使用模型目录内的绝对路径: {root}")
+    try:
+        requested.relative_to(root)
+    except ValueError as error:
+        raise VisualModelError(f"模型文件必须位于模型目录内: {root}") from error
+    try:
+        resolved = requested.resolve(strict=True)
+    except FileNotFoundError as error:
+        raise VisualModelError(f"模型文件不存在: {requested}") from error
+    except OSError as error:
+        raise VisualModelError(f"模型文件无法访问: {requested}") from error
+    if resolved != requested:
+        raise VisualModelError("视觉模型路径不允许使用符号链接")
+    try:
+        resolved.relative_to(root)
+    except ValueError as error:
+        raise VisualModelError(f"模型文件必须位于模型目录内: {root}") from error
+    if not resolved.is_file():
+        raise VisualModelError(f"模型文件不存在: {resolved}")
+    if resolved.suffix.lower() != ".onnx":
+        raise VisualModelError("视觉模型必须是 .onnx 文件")
+    return resolved
+
+
+def _ensure_matching_digest(actual: str, expected: str) -> None:
+    if actual != expected.lower():
+        raise VisualModelError("模型文件在检测后发生变化。请重新检测")
 
 
 def _latest_download_job(job_store: BackgroundJobStore) -> dict[str, Any] | None:

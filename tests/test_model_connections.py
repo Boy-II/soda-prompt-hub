@@ -67,6 +67,55 @@ def test_endpoint_update_preserves_secret_when_key_is_blank(settings) -> None:
     assert store.get_endpoint(first["id"]).api_key == "secret-model-key"
 
 
+def test_endpoint_update_requires_new_key_when_base_url_changes(settings) -> None:
+    store = ModelConnectionStore(settings)
+    first = store.save_endpoint(_endpoint_payload())
+
+    with pytest.raises(ModelConnectionError, match=r"地址.*API Key|重新输入"):
+        store.save_endpoint(
+            _endpoint_payload(
+                endpoint_id=first["id"],
+                base_url="https://other.example.test/v1",
+                api_key="",
+            )
+        )
+
+    assert store.get_endpoint(first["id"]).base_url == "https://models.example.test/v1"
+    assert store.get_endpoint(first["id"]).api_key == "secret-model-key"
+
+
+def test_endpoint_update_accepts_new_key_when_base_url_changes(settings) -> None:
+    store = ModelConnectionStore(settings)
+    first = store.save_endpoint(_endpoint_payload())
+
+    updated = store.save_endpoint(
+        _endpoint_payload(
+            endpoint_id=first["id"],
+            base_url="https://other.example.test/v1",
+            api_key="new-secret-key",
+        )
+    )
+
+    assert updated["base_url"] == "https://other.example.test/v1"
+    assert store.get_endpoint(first["id"]).api_key == "new-secret-key"
+
+
+def test_endpoint_without_saved_key_can_change_base_url_without_key(settings) -> None:
+    store = ModelConnectionStore(settings)
+    first = store.save_endpoint(_endpoint_payload(api_key=""))
+
+    updated = store.save_endpoint(
+        _endpoint_payload(
+            endpoint_id=first["id"],
+            base_url="http://127.0.0.1:11434/v1",
+            api_key="",
+        )
+    )
+
+    assert updated["base_url"] == "http://127.0.0.1:11434/v1"
+    assert store.get_endpoint(first["id"]).api_key == ""
+
+
 def test_connection_store_reports_damaged_private_config(settings) -> None:
     store = ModelConnectionStore(settings)
     store.initialize()

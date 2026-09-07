@@ -23,6 +23,11 @@ pause_before_close() {
   fi
 }
 
+is_prompt_hub() {
+  curl -fsS --max-time 2 "${URL}api/health" 2> /dev/null \
+    | grep -Eq '"service"[[:space:]]*:[[:space:]]*"soda-prompt-hub"'
+}
+
 print -r -- "── Soda Prompt Hub ──────────────────────────────"
 
 # 1. 定位仓库：先从脚本自身位置向上找，找不到再用 PROMPT_HUB_REPO / 默认路径
@@ -57,18 +62,24 @@ if ! command -v uv > /dev/null 2>&1; then
   exit 1
 fi
 
-# 3. 已经在跑就直接开页面，不重复启动
+# 3. 已经在跑就先确认身份，不把其他占用端口的程序当成 Prompt Hub
 if lsof -nP -iTCP:"$PORT" -sTCP:LISTEN > /dev/null 2>&1; then
-  print -r -- "服务已经在 ${PORT} 端口运行，直接打开页面。"
-  open "$URL"
+  if is_prompt_hub; then
+    print -r -- "Prompt Hub 已经在 ${PORT} 端口运行，直接打开页面。"
+    open "$URL"
+    pause_before_close
+    exit 0
+  fi
+  print -r -- "无法启动：${PORT} 端口正被其他程序占用。"
+  print -r -- "Prompt Hub 不会打开这个程序，也不会自动结束它。请先关闭占用端口的程序，或换一个 PROMPT_HUB_PORT。"
   pause_before_close
-  exit 0
+  exit 1
 fi
 
 # 4. 服务起来之后再打开浏览器
 {
   for _ in {1..90}; do
-    if curl -fsS --max-time 2 -o /dev/null "$URL"; then
+    if is_prompt_hub; then
       open "$URL"
       exit 0
     fi

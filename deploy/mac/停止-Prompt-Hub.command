@@ -25,6 +25,11 @@ pause_before_close() {
   fi
 }
 
+is_prompt_hub() {
+  curl -fsS --max-time 2 "${BASE_URL}/api/health" 2> /dev/null \
+    | grep -Eq '"service"[[:space:]]*:[[:space:]]*"soda-prompt-hub"'
+}
+
 # 列出仍持有端口的进程是否全部退出
 all_stopped() {
   local pid
@@ -46,7 +51,14 @@ if (( ${#pids[@]} == 0 )); then
   exit 0
 fi
 
-print -r -- "端口 ${PORT} 上的服务进程："
+if ! is_prompt_hub; then
+  print -r -- "不会停止：${PORT} 端口上的程序不是可确认身份的 Prompt Hub。"
+  print -r -- "请在「活动监视器」中确认程序身份；这个停止器不会结束未知进程。"
+  pause_before_close
+  exit 1
+fi
+
+print -r -- "已确认 Prompt Hub，端口 ${PORT} 上的服务进程："
 ps -p "${(j:,:)pids}" -o pid=,command= | while IFS= read -r line; do
   print -r -- "  $line"
 done

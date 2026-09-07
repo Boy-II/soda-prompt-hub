@@ -245,6 +245,9 @@ class ModelConnectionStore:
                 raise ModelConnectionError(message)
             endpoint_id = f"external-{secrets.token_hex(8)}"
         if not api_key and current is not None:
+            if base_url != current.base_url and current.api_key:
+                message = "模型服务地址已变化。请重新输入对应的 API Key"
+                raise ModelConnectionError(message)
             api_key = current.api_key
         endpoint = ModelEndpoint(
             endpoint_id=endpoint_id,
