@@ -5,7 +5,8 @@ import json
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import TYPE_CHECKING, Any, ClassVar
+from pathlib import Path
+from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
 import pytest
@@ -21,9 +22,6 @@ from prompt_hub.windows_worker import (
     WorkerLock,
     worker_lock_path,
 )
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 class ComfyHandler(BaseHTTPRequestHandler):
@@ -95,6 +93,14 @@ class ComfyHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+
+def test_distributable_worker_matches_source() -> None:
+    source_path = Path(worker_module.__file__).resolve()
+    release_path = source_path.parents[2] / "deploy" / "windows-worker" / "prompt_hub_worker.py"
+
+    assert release_path.is_file()
+    assert release_path.read_bytes() == source_path.read_bytes()
 
 
 @contextmanager

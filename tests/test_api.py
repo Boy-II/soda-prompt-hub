@@ -137,7 +137,7 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
                 "function deliveryState()",
                 "function renderJourney()",
                 "datasetPagination",
-                "pageSize: 200",
+                "pageSize: 24",
                 "loraPage",
                 "loraCreateForm",
                 "Windows 出图",
@@ -171,6 +171,12 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
                 "remoteTaskSummary",
                 "条历史记录",
                 "条需要处理",
+                "旧清单任务已收起",
+                "已被较新的清单取代",
+                "正在检查文件…",
+                "正在接收 LoRA…",
+                "正在接收底模…",
+                "正在接收图片…",
                 "remoteTaskList",
                 "查看 Windows 上的 LoRA",
                 "来自 LoRA Manager",
@@ -306,6 +312,34 @@ def test_page_has_mobile_menu_and_workspace_resume_entry(settings) -> None:
     assert 'id="datasetContinueButton"' in page.text
     assert "hasWorkspaces?'导入另一个文件夹':'01 · 导入素材'" in page.text
     assert "deliveryState().recommended" in page.text
+
+
+def test_page_paginates_long_lists_and_loads_model_tabs_on_demand(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        page = client.get("/").text
+
+    for marker in (
+        'id="archivePagination"',
+        "archivePageSize = 12",
+        "renderPromptPage()",
+        "pageSize: 24",
+        "workspacePageSize()",
+        'id="loraJourney"',
+        'data-lora-step="3"',
+        'id="loraPagination"',
+        "assetPageSize:12",
+        "sourcePageSize:12",
+        "renderSourceImages",
+        "state.sourceSelected",
+        "renderCoverageEditor",
+        'id="remoteLoraPagination"',
+        'id="remoteModelPagination"',
+        "catalogPageSize()",
+        "ensureRemoteViewData",
+    ):
+        assert marker in page
+    assert "await Promise.all([loadLoras(),loadModels(),loadTasks()])" not in page
+    assert "project.assets.map(assetCard)" not in page
 
 
 def test_compute_contract(settings) -> None:

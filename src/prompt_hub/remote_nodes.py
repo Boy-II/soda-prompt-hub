@@ -35,6 +35,7 @@ MAX_LORA_PREVIEW_BYTES = 32 * 1024 * 1024
 MAX_LORA_PREVIEW_COUNT = 1024
 MAX_LORA_PREVIEW_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_CIVITAI_URL_LENGTH = 2000
+TASK_RECEIPT_KINDS = {"comfyui_images", "lora_catalog", "model_catalog"}
 TASK_LOCATION_STATUS = {
     "outbox": "queued",
     "processing": "running",
@@ -416,6 +417,38 @@ class RemoteNodeStore:
             "outputs": checked_outputs,
         }
 
+    def mark_task_received(
+        self,
+        node_id: str,
+        task_id: str,
+        *,
+        receipt_kind: str,
+    ) -> dict[str, Any]:
+        clean_task = _safe_id(task_id, "task_id")
+        if receipt_kind not in TASK_RECEIPT_KINDS:
+            raise RemoteNodeError("任务接收类型无效")
+        current = self.get_task(node_id, clean_task)
+        summary = current["summary"]
+        local = current["local_task"]
+        if not local:
+            raise RemoteNodeError("缺少 Mac 本地任务事实副本，不能记录接收状态")
+        if summary.get("result_status") != "completed":
+            raise RemoteNodeError("Windows 任务尚未成功返回，不能记录接收状态")
+        received_at = str(local.get("received_at", "")) or _now()
+        updated = {
+            **local,
+            "received_at": received_at,
+            "receipt_kind": receipt_kind,
+        }
+        with self._lock:
+            _write_json(self._task_record_path(node_id, clean_task), updated)
+        return {
+            **summary,
+            "status": "completed",
+            "received_at": received_at,
+            "receipt_kind": receipt_kind,
+        }
+
     def cancel_task(self, node_id: str, task_id: str) -> dict[str, Any]:
         clean_task = _safe_id(task_id, "task_id")
         bridge_root = self._ready_bridge(node_id)
@@ -557,7 +590,13 @@ class RemoteNodeStore:
             source_manager=str(catalog.get("source_manager", "")),
             items=catalog_items,
         )
-        return {**imported, "task_id": clean_task, "integrity_verified": True}
+        receipt = self.mark_task_received(node_id, clean_task, receipt_kind="lora_catalog")
+        return {
+            **imported,
+            "task_id": clean_task,
+            "integrity_verified": True,
+            "received_at": receipt["received_at"],
+        }
 
     def _import_lora_previews(
         self,
@@ -817,7 +856,13 @@ class RemoteNodeStore:
             source_manager=str(catalog.get("source_manager", "")),
             items=catalog_items,
         )
-        return {**imported, "task_id": clean_task, "integrity_verified": True}
+        receipt = self.mark_task_received(node_id, clean_task, receipt_kind="model_catalog")
+        return {
+            **imported,
+            "task_id": clean_task,
+            "integrity_verified": True,
+            "received_at": receipt["received_at"],
+        }
 
     def _import_model_previews(
         self,
@@ -1271,6 +1316,9 @@ def _task_summary(
     status = TASK_LOCATION_STATUS.get(location, "recorded")
     if location == "failed" and result_status == "canceled":
         status = "canceled"
+    received_at = str(local.get("received_at", ""))
+    if received_at and result_status == "completed":
+        status = "completed"
     return {
         "task_id": str(merged.get("task_id", "")),
         "task_type": str(merged.get("task_type", "")),
@@ -1293,6 +1341,8 @@ def _task_summary(
             or local.get("created_at")
             or merged.get("created_at", "")
         ),
+        "received_at": received_at,
+        "receipt_kind": str(local.get("receipt_kind", "")),
         "error": str(envelope.get("error", ""))[:2000],
     }
 

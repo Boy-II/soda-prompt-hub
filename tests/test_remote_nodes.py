@@ -290,6 +290,10 @@ def test_windows_lora_catalog_task_routes_verify_and_import(settings, tmp_path) 
         assert imported.status_code == 201
         assert imported.json()["integrity_verified"] is True
         assert imported.json()["preview_count"] == 1
+        accepted = client.get("/api/remote-nodes/compute-5060ti/tasks").json()[0]
+        assert accepted["status"] == "completed"
+        assert accepted["received_at"]
+        assert accepted["receipt_kind"] == "lora_catalog"
         searched = client.get("/api/windows-loras", params={"query": "Route Test"}).json()
         assert searched["count"] == 1
         preview_url = searched["results"][0]["preview_urls"][0]
@@ -326,6 +330,10 @@ def test_windows_model_catalog_task_routes_verify_filter_and_import(settings, tm
         assert imported.status_code == 201
         assert imported.json()["integrity_verified"] is True
         assert imported.json()["type_counts"] == {"checkpoint": 1, "vae": 1}
+        accepted = client.get("/api/remote-nodes/compute-5060ti/tasks").json()[0]
+        assert accepted["status"] == "completed"
+        assert accepted["received_at"]
+        assert accepted["receipt_kind"] == "model_catalog"
         status = client.get("/api/windows-models/status").json()
         assert status["count"] == 2
         assert status["with_source_count"] == 1

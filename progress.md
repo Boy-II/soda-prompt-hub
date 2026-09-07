@@ -1,5 +1,57 @@
 # 进度日志
 
+## 2026-09-07：阶段 47 PR 6 后的已完成工作收口
+
+- 用户确认执行收口计划：保存当前未提交成果，从最新 `main` 建立干净整合分支，带入 Windows Worker、公开教程、阶段 45–46 优化，完成验证并创建 PR。
+- 已核对远程 `main=48e05a3`，PR 6 合并后的 GitHub Actions CI 成功；远程没有开放 PR 或 issue。
+- 已确认当前分支尚有 `894bc99`、`8d6eba2` 两个未合入提交，以及 12 个未提交文件；主重叠风险为 `remote_web.py`。
+- 本轮不直接合并 `main`，不修改个人图片、模型、数据集、任务或 Windows 文件。
+- 阶段 45–46 的 12 个文件通过 `git diff --check`、Ruff format、Ruff lint 与 `ty check src/`；敏感信息形状扫描只命中历史任务 ID 和文件哈希，没有发现凭据。
+- 35 项相关测试全部通过；因为项目对任何 pytest 运行都启用 80% 全局覆盖率门槛，定向运行最终以 36.78% 退出，属于测试子集覆盖范围不足，完整验收将改用全量测试结果。
+- 已将阶段 45–46 保存为 checkpoint `4daeffb`；从 `origin/main=48e05a3` 建立独立整合分支 `codex/post-pr6-release-polish`。
+- Windows Worker 独立包与公开教程已无冲突带入；阶段 45–46 仅在 `remote_web.py`、`workspace_web.py` 出现预期冲突。
+- 冲突按 PR 6 优先原则解决：完整保留模型端点/API Key/拉取后保存安全流、数据集文件夹浏览、ZIP 导入和模型打标；只叠加任务收纳、清单分页、延迟加载与窄屏分页。
+- 整合后的完整工程门通过：281/281 pytest、81.88% coverage、118 文件 Ruff format、Ruff lint、`ty check src/`、`uv lock --check`、8/8 JavaScript 语法与 `git diff --check` 全部正常。
+- 在 `/tmp/prompt-hub-post-pr6-qa.suaDtn` 隔离资料库和 `127.0.0.1:8767` 完成真实页面验收；没有读取或修改正式个人资料，也没有连接 Windows。
+- 桌面 1280px 与手机 390×844 均无横向溢出且 console 0 warning/error；手机主菜单、设备四个子页、LoRA/底模按需加载、模型接入禁用保存门、文件夹/ZIP 导入与 WD14/视觉模型双打标入口均实际显示和切换。
+- 手机模型接入页未出现“手动添加/填写模型”，未拉取模型时两个保存按钮保持禁用；这与 PR 6 的安全交互一致。
+- 已推送 `codex/post-pr6-release-polish` 并创建 PR #7：`https://github.com/cOkieeman/soda-prompt-hub/pull/7`；GitHub 判定为 `MERGEABLE`，未合并 `main`。
+- PR 初次 CI 已启动；本次任务书收尾提交推送后会触发最终 CI，完成状态以最终 run 为准。
+- 最新代码提交 `ed93207` 的 GitHub Actions CI run `34076173004` 全部通过：format、lint、type check、281 项测试和 package build 均成功。唯一 annotation 是 GitHub 对第三方 Action 的 Node.js 20 弃用提醒，不影响本次构建结果。
+
+## 2026-09-06：阶段 46 长列表分页与工作步骤收敛
+
+- 用户确认可以修改。范围固定为 Mac 前端信息密度：设备模型库、LoRA 项目、数据集工作台和提示词库；不连接 Windows，不修改个人图片、模型、任务或审核数据。
+- 已完成桌面 1462×711 与窄屏 684×756 的真实页面基线测量，确认五处长列表均无横向溢出但存在一次渲染数量过大的问题；控制台 0 warning/error。
+- 实施顺序：先写失败回归固定分页与延迟加载契约，再修改四个前端模块，最后运行完整工程门并复测真实页面。
+- 已完成四个前端模块主体修改：提示词 12 条分页、数据集桌面 24/手机 12 张分页、设备模型桌面 24/手机 12 张分页并延迟加载、LoRA 项目五步切换与两类 12 张分页。
+- LoRA 选图使用跨页 `Set` 保留勾选；审核卡的覆盖分类控件改为展开时生成。72 张真实项目首屏从 3,528 个输入控件降为 12 个状态选择器，展开一张时才增加 48 个分类控件。
+- 回归过程中发现 `test_api_health_stats_search_and_page` 仍断言旧的 `pageSize: 200`，已更新为新分页契约；相关 API、LoRA、远程节点测试 21/21 通过，8 段页面 JavaScript 均通过 Node 语法检查。
+- Browser 桌面实测提示词、数据集、LoRA 项目、设备 LoRA/底模的分页与延迟加载均工作；Playwright wrapper 直接执行先后因无执行位和 CRLF 两次失败，改为临时去除 CRLF 后由 bash 调用，390×844 实测 LoRA、设备 LoRA 和数据集均无横向溢出。
+- 完整工程门通过：181/181 pytest、80.78% coverage、108 文件 Ruff format、Ruff lint、ty、`uv lock --check`、8/8 前端 JavaScript 与 `git diff --check` 全部正常。
+- 正式 8765 服务已通过原启动器安全重启，健康接口返回 `ok`；正式设备页首次进入模型网格为 0，打开 LoRA 后显示 1–24 / 258 和第 1 / 11 页，console 0 warning/error。
+- 阶段 46 标记 complete。没有修改个人图片、数据集内容、LoRA/底模清单、任务状态或 Windows 文件；未 commit、未 push、未创建 PR。
+
+## 2026-09-06：阶段 45 设备任务收尾与紧凑任务页
+
+- 根据用户截图复现：设备连接页的 LoRA/底模快照任务以完整三列卡片重复铺开，占用大量页面空间。
+- 只读点击第一条完整性检查，约数秒后成功返回“162 个回传文件完整”，无浏览器 warning/error；确认主要点击问题是缺少处理中反馈。
+- 正式 LoRA 与底模缓存均已更新到当天最新快照，但任务仍显示 returned；代码追踪确认三类接收入口成功后都未记录验收完成。
+- 已确定最小修复方案：本地任务验收标记、旧缓存兼容识别、重复清单折叠和按钮忙碌文案；不删除任务、不隐藏未接收的 ComfyUI 图片。
+- 首次同时更新三个规划文件时，因误判 `findings.md` 标题而补丁整体未应用；读取真实标题后使用正确锚点重新更新，没有产生部分写入。
+- 已先补接收后状态、重复清单折叠文案和忙碌按钮文案的失败回归；首次定向测试误用了不存在的 workflow 测试名，pytest 收集阶段停止且 0 项执行。真实函数名为 `test_workflow_api_archives_and_submits_identical_package`，下一轮使用该名称。
+- 正确测试名的红灯回归得到 4/4 预期失败，分别证明三类接收仍停留 returned、页面没有新反馈。首次实现后的 lint 在测试层拦截全角逗号和 53 条 statements；生产代码尚未报错，改为断言稳定短语并抽取接收状态辅助函数。
+- 已实现 Mac 本地 `received_at` / `receipt_kind` 验收标记；LoRA、底模与 ComfyUI 图片接收成功后均显示 completed，同时保留 SMB inbox 原件与重复导入能力。
+- 任务页现在只把每类最新成功清单作为可操作项，旧的 LoRA/底模快照统一折叠成一行历史摘要；ComfyUI 图片仍逐条显示。校验、接收、重试和取消会立即替换为中文忙碌文案并设置 `aria-busy`。
+- 定向 Ruff format、Ruff lint、ty 与 4 项红灯回归转绿。正式最新 LoRA/底模任务与当前快照 ID 完全匹配后，只给这两条补了验收标记；没有修改图片任务或删除任何文件。
+- 临时 8766 真实页面显示从 18 条待处理降为 5 条，恰好都是 ComfyUI 图片；最新两条清单进入历史，11 条旧清单压成可展开的一行。折叠展开和“正在检查文件…”均实际验证，console 0 warning/error。
+- 核对正式快照前首次 curl URL 未加引号，zsh 把 `?` 当通配符而拒绝执行；该查询没有副作用，随后通过本地文件和精确任务 ID 完成快照核对。
+- 完整工程门重新通过：180/180 pytest、80.78% coverage、Ruff format、Ruff lint、ty、`uv lock --check`、8/8 前端 JavaScript、`git diff --check`；390px 手机端无横向溢出。
+- 正式 8765 服务已更新并复核：任务区只剩 5 条真实待接收的 ComfyUI 图片；最新 LoRA/底模清单显示“已完成”，11 条旧清单折叠为一行，按钮忙碌状态与折叠交互正常，console 0 warning/error。
+- 阶段 45 标记 complete。没有删除历史任务、图片、LoRA、底模或 Windows 共享目录中的文件；未 commit、未 push、未更新 PR。
+- 收尾文档更新后再次执行完整验证：180/180 pytest、80.78% coverage、108 文件 Ruff format、Ruff lint、ty、锁文件、设备页 JavaScript 和 `git diff --check` 全部通过；正式健康接口返回 `ok`。
+- 正式 Edge 页面再次读取：任务页显示“5 条需要处理 · 15 条历史记录”，5 条需要处理均为独立 ComfyUI 图片；最新两张清单卡为“已完成”，其余 11 条旧 LoRA/底模清单只显示一条可展开摘要，和用户截图中的重复铺满问题形成直接对照。
+
 ## 2026-09-05：阶段 41 外部模型 API 补充层（开始）
 
 - 用户确认由我们接手修改 PR #2 的方向；不直接合并对方分支。
