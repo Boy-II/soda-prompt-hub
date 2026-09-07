@@ -17,6 +17,7 @@ from prompt_hub.local_visual import (
     LocalVisualEncoder,
     LocalVisualIndexService,
     VisualIndexError,
+    bundled_visual_model_descriptor,
     prepare_clip_image,
     write_model_info,
 )
@@ -69,7 +70,10 @@ def test_clip_preprocess_center_crop_and_projection_normalization(tmp_path) -> N
         sha256="fd6e1402a588279d1723c7534d4bcba5bc0b14b47dfab0e46f8c47b8270d7d40",
     )
     session = _Session()
-    encoder = LocalVisualEncoder(model_root, session_factory=lambda _path: session)
+    encoder = LocalVisualEncoder(
+        bundled_visual_model_descriptor(model_root),
+        session_factory=lambda _path: session,
+    )
     image_path = tmp_path / "query.png"
     wide.save(image_path)
     vector = np.asarray(encoder.encode_path(image_path))
@@ -166,7 +170,7 @@ def test_local_visual_index_is_incremental_resumable_and_queryable(tmp_path) -> 
 
 def test_local_visual_query_has_truthful_empty_states(tmp_path) -> None:
     model_root = tmp_path / "missing"
-    encoder = LocalVisualEncoder(model_root)
+    encoder = LocalVisualEncoder(bundled_visual_model_descriptor(model_root))
     assert encoder.status()["available"] is False
     with pytest.raises(VisualIndexError, match="尚未安装"):
         encoder.encode_bytes(_image_bytes())
@@ -223,6 +227,8 @@ def test_visual_api_reports_missing_model_without_fake_results(settings) -> None
         assert 'id="visualQueryFile"' in page
         assert 'id="visualClusterPanel"' in page
         assert 'id="sourceCaptureForm"' in page
+        assert 'id="visualCustomDetect"' in page
+        assert 'id="visualCustomSelect"' in page
 
 
 def _image_bytes() -> bytes:

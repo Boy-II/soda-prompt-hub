@@ -187,6 +187,10 @@ INDEX_HTML = r"""<!doctype html>
     .source-sync-state { padding: 5px 7px; background: var(--paper-deep); color: var(--ink); font: 900 8px monospace; }
     .source-sync-state.ready { background: var(--acid); }
     .source-sync-state.dirty, .source-sync-state.failed { background: var(--signal); color: white; }
+    .source-sync-status { display: inline-flex; align-items: center; gap: 6px; }
+    .source-sync-fetch { border: 1px solid var(--ink); background: transparent; padding: 4px 7px; color: var(--ink); font: 900 8px monospace; letter-spacing: .06em; cursor: pointer; }
+    .source-sync-fetch:hover:not(:disabled) { background: var(--ink); color: var(--acid); }
+    .source-sync-fetch:disabled { opacity: .45; cursor: not-allowed; }
     .archive-notice { margin: 0 0 18px; padding: 14px 16px; background: #ded7c7; border-left: 4px solid var(--signal); color: #55564f; font-size: 12px; line-height: 1.6; }
     .archive-notice strong { color: var(--ink); }
     .archive-header {
@@ -885,13 +889,18 @@ INDEX_HTML = r"""<!doctype html>
     }
 
     async function loadSourceSyncStatus() {
-      const labels = {ready:'可以安全更新',dirty:'有本地改动',no_upstream:'没有上游',missing:'本地缺失',not_git:'不是 Git 仓库',failed:'检查失败'};
+      const labels = {ready:'可以安全更新',dirty:'有本地改动',no_upstream:'没有上游',missing:'本地缺失',not_git:'不是 Git 仓库',cloned:'已拉取',failed:'检查失败'};
       const response = await fetch('/api/sources/sync-status');
       const sources = response.ok ? await response.json() : [];
-      $('#sourceSyncList').innerHTML = sources.map(item => `<div class="source-sync-row"><strong>${escapeHtml(item.name)}</strong><span class="source-sync-state ${escapeHtml(item.status)}">${escapeHtml(labels[item.status] || item.status)}</span><code>${escapeHtml(item.branch || '—')} · ${escapeHtml((item.before || '').slice(0, 10) || '暂无版本')}</code></div>`).join('');
+      $('#sourceSyncList').innerHTML = sources.map(item => {
+        const action = item.status === 'missing' ? `<button class="source-sync-fetch" data-clone-source="${escapeHtml(item.source_id)}" title="从 ${escapeHtml(item.url)} 拉取到本地">拉取</button>` : '';
+        return `<div class="source-sync-row"><strong>${escapeHtml(item.name)}</strong><span class="source-sync-status"><span class="source-sync-state ${escapeHtml(item.status)}">${escapeHtml(labels[item.status] || item.status)}</span>${action}</span><code>${escapeHtml(item.branch || '—')} · ${escapeHtml((item.before || '').slice(0, 10) || '暂无版本')}</code></div>`;
+      }).join('');
+      $('#sourceSyncList').querySelectorAll('[data-clone-source]').forEach(button => button.addEventListener('click', () => cloneSource(button.dataset.cloneSource, button)));
       const dirty = sources.filter(item => item.status === 'dirty').length;
       const ready = sources.filter(item => item.status === 'ready').length;
-      $('#sourceSyncMessage').textContent = dirty ? `${dirty} 个资料源有本地改动，会自动跳过；其余 ${ready} 个可以安全更新。` : `${ready} 个资料源可以安全检查更新；只允许 fast-forward，不会覆盖本地修改。`;
+      const missing = sources.filter(item => item.status === 'missing').length;
+      $('#sourceSyncMessage').textContent = missing ? `${missing} 个预设资料源尚未拉取到本机，点状态旁的“拉取”即可下载；其余 ${ready} 个可以安全更新。` : dirty ? `${dirty} 个资料源有本地改动，会自动跳过；其余 ${ready} 个可以安全更新。` : `${ready} 个资料源可以安全检查更新；只允许 fast-forward，不会覆盖本地修改。`;
     }
 
     async function loadOcWorlds() {
@@ -1063,11 +1072,31 @@ INDEX_HTML = r"""<!doctype html>
         const result = await fetch('/api/import', {method: 'POST'}).then(r => r.json());
         await loadStats();
         await searchPrompts();
-        $('#status').textContent = `索引已更新，共 ${formatNumber(result.stats.entries)} 条资料`;
+        const failed = result.failed || [], skipped = result.skipped || [];
+        const rebuilt = Object.keys(result.sources || {}).length;
+        let message = `索引已更新，共 ${formatNumber(result.stats.entries)} 条资料`;
+        if (rebuilt === 0) message = `没有任何来源被重建，现有 ${formatNumber(result.stats.entries)} 条资料保持不变`;
+        if (skipped.length) message += `；${skipped.length} 个来源的本地目录不存在（${skipped.map(item => item.name).join('、')}）`;
+        if (failed.length) message += `；${failed.length} 个来源本次失败：${failed.map(item => `${item.name} — ${item.message}`).join('；')}`;
+        $('#status').textContent = message;
       } finally {
         button.disabled = false;
         button.textContent = '仅重建本地索引';
       }
+    }
+
+    async function runSourceSyncJob(body) {
+      const response = await fetch('/api/sources/sync', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || `启动更新失败：${response.status}`);
+      let job = payload.job;
+      while (['queued','running'].includes(job.status)) {
+        $('#sourceSyncMessage').textContent = job.progress_message || '等待资料更新任务…';
+        await new Promise(resolve => setTimeout(resolve, 500));
+        job = await fetch(`/api/jobs/${encodeURIComponent(job.job_id)}`).then(result => result.json());
+      }
+      if (job.status !== 'completed') throw new Error(job.error || `资料更新${job.status}`);
+      return job.result || {};
     }
 
     async function syncPublicSources() {
@@ -1075,17 +1104,7 @@ INDEX_HTML = r"""<!doctype html>
       button.disabled = true;
       button.textContent = '正在检查资料源…';
       try {
-        const response = await fetch('/api/sources/sync', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{"source_ids":[]}'});
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.detail || `启动更新失败：${response.status}`);
-        let job = payload.job;
-        while (['queued','running'].includes(job.status)) {
-          $('#sourceSyncMessage').textContent = job.progress_message || '等待资料更新任务…';
-          await new Promise(resolve => setTimeout(resolve, 500));
-          job = await fetch(`/api/jobs/${encodeURIComponent(job.job_id)}`).then(result => result.json());
-        }
-        if (job.status !== 'completed') throw new Error(job.error || `资料更新${job.status}`);
-        const result = job.result || {};
+        const result = await runSourceSyncJob({source_ids: [], clone_missing: false});
         $('#sourceSyncMessage').textContent = `更新完成：${result.updated || 0} 个有新版本，${result.unchanged || 0} 个已是最新，${result.skipped || 0} 个已安全跳过。`;
         await Promise.all([loadStats(), loadSourceSyncStatus()]);
       } catch (error) {
@@ -1093,6 +1112,23 @@ INDEX_HTML = r"""<!doctype html>
       } finally {
         button.disabled = false;
         button.textContent = '↻ 更新公共提示词库';
+      }
+    }
+
+    async function cloneSource(sourceId, button) {
+      button.disabled = true;
+      button.textContent = '拉取中';
+      try {
+        const result = await runSourceSyncJob({source_ids: [sourceId], clone_missing: true});
+        const detail = (result.sources || []).find(item => item.source_id === sourceId) || {};
+        if (detail.status === 'failed') throw new Error(detail.message || '拉取失败');
+        const indexed = (result.entry_counts || {})[sourceId];
+        $('#sourceSyncMessage').textContent = `${detail.name || sourceId} 已拉取到本地${indexed ? `，索引 ${formatNumber(indexed)} 条资料` : ''}。`;
+        await Promise.all([loadStats(), loadSourceSyncStatus(), searchPrompts()]);
+      } catch (error) {
+        $('#sourceSyncMessage').textContent = error.message;
+        button.disabled = false;
+        button.textContent = '拉取';
       }
     }
 

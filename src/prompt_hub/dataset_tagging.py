@@ -19,6 +19,7 @@ def store_wd14_result(
     result: dict[str, object],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     tagging = {
+        "tagger": str(result.get("tagger", "wd14")),
         "model": str(result.get("model", "SmilingWolf/wd-swinv2-tagger-v3")),
         "provider": str(result.get("provider", "")),
         "tagged_at": datetime.now(UTC).isoformat(),
@@ -29,6 +30,7 @@ def store_wd14_result(
         "characters": _scored_tags(result.get("characters")),
         "draft_tags": normalize_tag_draft(str(result.get("tag_string", ""))),
         "elapsed_seconds": result.get("elapsed_seconds"),
+        "safety_warning": str(result.get("safety_warning", "")),
     }
     return _update_asset(project, asset_id=asset_id, values={"wd14_tagging": tagging})
 
@@ -122,7 +124,14 @@ def _scored_tag(value: object) -> dict[str, Any] | None:
     tag = str(value.get("tag", "")).strip()
     if not tag:
         return None
-    return {"tag": tag, "score": float(value.get("score", 0))}
+    raw_score = value.get("score")
+    if raw_score is None:
+        return {"tag": tag}
+    try:
+        score = float(raw_score)
+    except (TypeError, ValueError):
+        return {"tag": tag}
+    return {"tag": tag, "score": score}
 
 
 def _scored_tags(value: object) -> list[dict[str, Any]]:

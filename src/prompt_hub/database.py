@@ -954,6 +954,133 @@ class PromptDatabase:
             "oc_manager": self.oc_stats(),
         }
 
+    def get_source(self, source_id: str) -> dict[str, Any] | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT s.*, COUNT(e.id) AS entry_count,
+                       SUM(CASE
+                           WHEN json_extract(e.metadata_json, '$.visual_path') != '' THEN 1
+                           WHEN json_extract(e.metadata_json, '$.cached_media_path') != '' THEN 1
+                           WHEN json_array_length(e.metadata_json, '$.image_paths') > 0 THEN 1
+                           ELSE 0
+                       END) AS visual_count
+                FROM sources s
+                LEFT JOIN entries e ON e.source_id = s.source_id
+                WHERE s.source_id = ?
+                GROUP BY s.source_id
+                """,
+                (source_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            **dict(row),
+            "visual_count": int(row["visual_count"] or 0),
+            "deletable": row["source_type"] != "git",
+        }
+
+    def delete_source(self, source_id: str, *, purge_marks: bool = False) -> dict[str, int]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT source_id, source_type FROM sources WHERE source_id = ?",
+                (source_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(source_id)
+
+            marks_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM user_marks WHERE source_id = ?",
+                    (source_id,),
+                ).fetchone()[0]
+            )
+
+            cursor = connection.execute("DELETE FROM entries WHERE source_id = ?", (source_id,))
+            deleted_entries = cursor.rowcount
+
+            if purge_marks:
+                connection.execute("DELETE FROM user_marks WHERE source_id = ?", (source_id,))
+                purged_marks = marks_count
+                retained_marks = 0
+            else:
+                purged_marks = 0
+                retained_marks = marks_count
+
+            connection.execute("DELETE FROM sources WHERE source_id = ?", (source_id,))
+            connection.commit()
+
+            return {
+                "deleted_entries": deleted_entries,
+                "retained_marks": retained_marks,
+                "purged_marks": purged_marks,
+            }
+
+    def delete_entry(
+        self,
+        source_id: str,
+        external_id: str,
+        *,
+        purge_marks: bool = False,
+    ) -> dict[str, Any]:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT id FROM entries WHERE source_id = ? AND external_id = ?",
+                (source_id, external_id),
+            ).fetchone()
+            if row is None:
+                raise KeyError(external_id)
+
+            marks_count = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM user_marks WHERE source_id = ? AND external_id = ?",
+                    (source_id, external_id),
+                ).fetchone()[0]
+            )
+
+            connection.execute(
+                "DELETE FROM entries WHERE source_id = ? AND external_id = ?",
+                (source_id, external_id),
+            )
+
+            if purge_marks:
+                connection.execute(
+                    "DELETE FROM user_marks WHERE source_id = ? AND external_id = ?",
+                    (source_id, external_id),
+                )
+                purged_marks = marks_count
+                retained_marks = 0
+            else:
+                purged_marks = 0
+                retained_marks = marks_count
+
+            remaining_entries = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM entries WHERE source_id = ?",
+                    (source_id,),
+                ).fetchone()[0]
+            )
+
+            source_deleted = False
+            if remaining_entries == 0:
+                source_row = connection.execute(
+                    "SELECT source_type FROM sources WHERE source_id = ?",
+                    (source_id,),
+                ).fetchone()
+                if source_row and source_row[0] != "git":
+                    connection.execute("DELETE FROM sources WHERE source_id = ?", (source_id,))
+                    source_deleted = True
+
+            connection.commit()
+
+            return {
+                "deleted_entries": 1,
+                "retained_marks": retained_marks,
+                "purged_marks": purged_marks,
+                "remaining_entries": remaining_entries,
+                "source_deleted": source_deleted,
+            }
+
     def list_sources(self) -> list[dict[str, Any]]:
         with self.connect() as connection:
             rows = connection.execute(
@@ -971,7 +1098,14 @@ class PromptDatabase:
                 ORDER BY s.name
                 """
             ).fetchall()
-        return [{**dict(row), "visual_count": int(row["visual_count"] or 0)} for row in rows]
+        return [
+            {
+                **dict(row),
+                "visual_count": int(row["visual_count"] or 0),
+                "deletable": row["source_type"] != "git",
+            }
+            for row in rows
+        ]
 
     def list_visual_entries(self) -> list[dict[str, Any]]:
         with self.connect() as connection:

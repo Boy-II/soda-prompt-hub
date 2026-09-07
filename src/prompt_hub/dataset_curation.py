@@ -33,12 +33,13 @@ from prompt_hub.dataset_curation_support import (
 )
 from prompt_hub.dataset_tagging import normalize_tag_draft
 from prompt_hub.dataset_workspace import DatasetWorkspaceError, DatasetWorkspaceStore
-from prompt_hub.local_model import draft_krea2_caption
+from prompt_hub.local_model import draft_anima_tags, draft_krea2_caption
 from prompt_hub.project_journey import read_project_lineage
 from prompt_hub.wd14 import ProviderMode, WD14Tagger
 
 if TYPE_CHECKING:
     from prompt_hub.config import Settings
+    from prompt_hub.model_connections import ModelConnectionStore
 
 CaptionProfile = Literal["anima", "krea2"]
 Tagger = Callable[[Path], dict[str, object]]
@@ -64,12 +65,14 @@ class DatasetCurationStore:
         *,
         tagger_factory: TaggerFactory | None = None,
         krea2_captioner: Krea2Captioner | None = None,
+        model_connections: ModelConnectionStore | None = None,
     ) -> None:
         self.settings = settings
         self.workspace_store = workspace_store
         self._lock = RLock()
         self._tagger_factory = tagger_factory or self._default_tagger_factory
         self._krea2_captioner = krea2_captioner or self._default_krea2_captioner
+        self._model_connections = model_connections
 
     def initialize(self) -> None:
         self.settings.dataset_exports_root.mkdir(parents=True, exist_ok=True)
@@ -127,6 +130,12 @@ class DatasetCurationStore:
         provider = str(payload.get("provider", "auto"))
         if provider not in {"auto", "coreml", "cpu"}:
             raise DatasetWorkspaceError("Unsupported WD14 provider")
+        tagger_mode = str(payload.get("tagger", "wd14"))
+        if tagger_mode not in {"wd14", "model"}:
+            raise DatasetWorkspaceError("Unsupported tagger")
+        model = str(payload.get("model", "")).strip()
+        if tagger_mode == "model" and not model:
+            raise DatasetWorkspaceError("使用模型打标时必须选择打标模型")
         paths = self._select_tag_paths(workspace_id, payload)
         job_id = str(getattr(context, "job_id", ""))
         state = self.read_state(workspace_id)
@@ -142,18 +151,23 @@ class DatasetCurationStore:
                 "failed": 0,
                 "skipped": 0,
             }
-        context.update(0, len(paths), "正在加载 WD14 模型")
-        tagger = self._tagger_factory(
-            general_threshold,
-            character_threshold,
-            provider,  # type: ignore[arg-type]
+        label = "模型打标" if tagger_mode == "model" else "WD14"
+        context.update(0, len(paths), f"正在准备{label}")
+        tagger = (
+            None
+            if tagger_mode == "model"
+            else self._tagger_factory(
+                general_threshold,
+                character_threshold,
+                provider,  # type: ignore[arg-type]
+            )
         )
         completed = 0
         failed = 0
         skipped = 0
         overwrite = bool(payload.get("overwrite", False))
         for index, relative_path in enumerate(paths, start=1):
-            context.update(index - 1, len(paths), f"WD14 {index}/{len(paths)} · {relative_path}")
+            context.update(index - 1, len(paths), f"{label} {index}/{len(paths)} · {relative_path}")
             current = _state_item(state, relative_path)
             wd14 = current.get("wd14", {})
             if (
@@ -176,7 +190,17 @@ class DatasetCurationStore:
                 failed += 1
                 continue
             try:
-                result = tagger(image_path)
+                if tagger_mode == "model":
+                    result = draft_anima_tags(
+                        image_path=image_path,
+                        model=model,
+                        existing_tags=_current_caption(current, "anima"),
+                        connections=self._model_connections,
+                    )
+                elif tagger is not None:
+                    result = tagger(image_path)
+                else:
+                    raise DatasetWorkspaceError("WD14 模型尚未准备完成")
             except Exception as error:  # noqa: BLE001
                 self._store_tag_failure(
                     workspace_id,
@@ -184,6 +208,8 @@ class DatasetCurationStore:
                     relative_path,
                     str(error),
                     job_id=job_id,
+                    tagger=tagger_mode,
+                    model=model,
                 )
                 failed += 1
             else:
@@ -193,11 +219,13 @@ class DatasetCurationStore:
                     relative_path,
                     result,
                     job_id=job_id,
+                    tagger=tagger_mode,
+                    model=model,
                 )
                 completed += 1
             context.update(index, len(paths), f"已处理 {index}/{len(paths)}")
         if paths and completed == 0 and failed:
-            raise DatasetWorkspaceError(f"WD14 队列全部失败, 共 {failed} 张")
+            raise DatasetWorkspaceError(f"{label} 队列全部失败, 共 {failed} 张")
         return {
             "workspace_id": workspace_id,
             "requested": len(paths),
@@ -1360,6 +1388,8 @@ class DatasetCurationStore:
         result: Mapping[str, object],
         *,
         job_id: str,
+        tagger: str = "wd14",
+        model: str = "",
     ) -> None:
         with self._lock:
             latest = self.read_state(workspace_id)
@@ -1368,6 +1398,7 @@ class DatasetCurationStore:
             item["wd14"] = {
                 "status": "completed",
                 "job_id": job_id,
+                "tagger": tagger,
                 "model": str(result.get("model", "SmilingWolf/wd-swinv2-tagger-v3")),
                 "provider": str(result.get("provider", "")),
                 "tagged_at": _now(),
@@ -1377,8 +1408,11 @@ class DatasetCurationStore:
                 "general": result.get("general", []),
                 "characters": result.get("characters", []),
                 "elapsed_seconds": result.get("elapsed_seconds"),
+                "safety_warning": str(result.get("safety_warning", ""))[:2000],
                 "error": "",
             }
+            if tagger == "model" and model:
+                item["wd14"]["model"] = model
             current = _caption_record(item.get("captions", {}).get("anima"))
             if current["status"] != "reviewed":
                 _set_caption(
@@ -1386,7 +1420,7 @@ class DatasetCurationStore:
                     "anima",
                     draft,
                     status="draft",
-                    source="wd14",
+                    source=tagger,
                     snapshot="",
                 )
             self._write_state(workspace_id, latest)
@@ -1401,6 +1435,8 @@ class DatasetCurationStore:
         error: str,
         *,
         job_id: str,
+        tagger: str = "wd14",
+        model: str = "",
     ) -> None:
         with self._lock:
             latest = self.read_state(workspace_id)
@@ -1408,6 +1444,8 @@ class DatasetCurationStore:
             item["wd14"] = {
                 "status": "failed",
                 "job_id": job_id,
+                "tagger": tagger,
+                "model": model,
                 "error": error[:2000],
                 "tagged_at": _now(),
             }

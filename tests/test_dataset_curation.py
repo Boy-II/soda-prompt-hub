@@ -102,6 +102,26 @@ def _fake_krea2_captioner(calls: list[tuple[str, str, str]]):
     return caption
 
 
+def _fake_anima_tagger(calls: list[tuple[str, str, str]]):
+    def tag(path: Path, model: str, existing: str) -> dict[str, object]:
+        calls.append((path.name, model, existing))
+        return {
+            "tagger": "model",
+            "model": model,
+            "provider": "vision",
+            "rating": {"tag": "safe", "score": 1.0},
+            "general": [
+                {"tag": "1girl", "score": 1.0},
+                {"tag": "solo", "score": 1.0},
+            ],
+            "characters": [],
+            "tag_string": "1girl, solo",
+            "safety_warning": "",
+        }
+
+    return tag
+
+
 def test_workspace_wd14_captions_bulk_snapshots_and_export(settings, tmp_path) -> None:
     source, workspace_store, workspace = _scanned_workspace(settings, tmp_path)
     source_before = {path.name: path.read_bytes() for path in source.iterdir()}
@@ -604,6 +624,56 @@ def test_wd14_queue_over_24_resumes_without_overwriting_reviewed_captions(
         "Soda trigger appears in a carefully reviewed portrait."
     )
     assert factory_calls == ["loaded", "loaded"]
+
+
+def test_workspace_wd14_job_can_use_vision_model_tagger(settings, tmp_path, monkeypatch) -> None:
+    _source_path, workspace_store, workspace = _scanned_workspace(settings, tmp_path, count=1)
+    calls: list[tuple[str, str, str]] = []
+
+    def fake_draft_anima_tags(
+        *,
+        image_path: Path,
+        model: str,
+        existing_tags: str = "",
+        connections=None,
+    ) -> dict[str, object]:
+        del connections
+        return _fake_anima_tagger(calls)(image_path, model, existing_tags)
+
+    monkeypatch.setattr(
+        "prompt_hub.dataset_curation.draft_anima_tags",
+        fake_draft_anima_tags,
+    )
+    curation = DatasetCurationStore(settings, workspace_store)
+
+    result = curation.tag_job(
+        {
+            "workspace_id": workspace["workspace_id"],
+            "scope": "all",
+            "tagger": "model",
+            "model": "vision-model",
+        },
+        _RecordingContext(),
+    )
+
+    assert result["completed"] == 1
+    state = curation.read_state(workspace["workspace_id"])
+    wd14 = state["items"]["image-0.png"]["wd14"]
+    assert wd14["tagger"] == "model"
+    assert wd14["model"] == "vision-model"
+    assert state["items"]["image-0.png"]["captions"]["anima"]["current"] == "1girl, solo"
+    assert calls == [("image-0.png", "vision-model", "")]
+
+
+def test_workspace_model_tagger_requires_model(settings, tmp_path) -> None:
+    _source_path, workspace_store, workspace = _scanned_workspace(settings, tmp_path, count=1)
+    curation = DatasetCurationStore(settings, workspace_store)
+
+    with pytest.raises(DatasetWorkspaceError, match="打标模型"):
+        curation.tag_job(
+            {"workspace_id": workspace["workspace_id"], "scope": "all", "tagger": "model"},
+            _RecordingContext(),
+        )
 
 
 def test_krea2_vlm_draft_is_separate_until_confirmed(settings, tmp_path) -> None:

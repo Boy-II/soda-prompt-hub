@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 
 import pytest
@@ -315,21 +316,90 @@ def test_local_models_unavailable_is_graceful(settings, monkeypatch) -> None:
 
 
 def test_external_model_ui_keeps_existing_creative_actions() -> None:
-    for marker in (
+    for removed_marker in (
         'id="externalModelSettings"',
         'id="externalModelBaseUrl"',
         'id="externalModelApiKey"',
-        'autocomplete="new-password"',
         'id="discoverExternalModels"',
         'id="saveExternalModel"',
         'id="cancelExternalModelEdit"',
         "function editExternalModel",
-        "data-edit-external-model",
+    ):
+        assert removed_marker not in INDEX_HTML
+
+    for marker in (
+        'id="openModelEndpointSettings"',
+        "模型接入",
+        'data-remote-view="endpoints"',
+        'id="remoteEndpointsPanel"',
+        'id="endpointApiKey"',
+        'id="discoverEndpointModels"',
+        'id="saveEndpointTop"',
+        'id="saveEndpointBottom"',
+        'id="endpointModelToolbar"',
+        'id="endpointModelSearch"',
+        'id="endpointModelSelectionCount"',
+        'id="endpointDiscoveredModels" tabindex="0"',
+        "max-height: min(52vh,560px)",
+        "remote-endpoint-model-footer",
+        'data-endpoint-model-select="all"',
+        'data-endpoint-model-select="none"',
+        "data-endpoint-model-name",
+        "function updateEndpointModel",
+        "function markEndpointDirty",
+        "function endpointConfigurationIsVerified",
+        "请先成功拉取模型列表",
+        "请至少勾选一个模型",
+        "端点信息有变化",
+        "/api/model-endpoints",
+        "function discoverEndpointModels",
+        "state.discoveredEndpointModels.map(model=>({name:model.name,label:model.label||'',enabled:Boolean(model.enabled),supports_vision:Boolean(model.supports_vision)}))",
         "function runCreativeSourcing",
         "function uploadResultImage",
         "function exportDataset",
         "function analyzeResultAsset",
+        'id="datasetTaggerMode"',
+        'id="datasetTaggerModel"',
+        'id="datasetTaggerHint"',
+        'id="datasetWd14Thresholds"',
+        'id="wd14TaggerMode"',
+        'id="wd14TaggerModel"',
+        'id="wd14TaggerHint"',
+        'id="wd14Thresholds"',
+        "function updateDatasetTaggerMode",
+        "function updateWd14TaggerMode",
+        "tagger==='model'",
         "$('#newCreativeProject').addEventListener",
         "$('#sendWorkflow').addEventListener",
     ):
         assert marker in INDEX_HTML
+
+    assert "可手工填写模型名称" not in INDEX_HTML
+
+    assert "document.querySelector(`[data-endpoint-model-enabled=" not in INDEX_HTML
+    assert "document.querySelector(`[data-endpoint-model-vision=" not in INDEX_HTML
+    assert "document.querySelector(`[data-endpoint-model-label=" not in INDEX_HTML
+
+
+def test_every_referenced_element_id_exists_in_page() -> None:
+    """A $('#id') lookup returning null throws and kills every later listener."""
+    rendered_ids = set(re.findall(r'id="([A-Za-z0-9_-]+)"', INDEX_HTML))
+    referenced_ids = set(re.findall(r"\$\('#([A-Za-z0-9_-]+)'\)", INDEX_HTML))
+    assert referenced_ids
+    assert not referenced_ids - rendered_ids
+
+
+def _script_blocks() -> list[str]:
+    return re.findall(r"<script>(.*?)</script>", INDEX_HTML, re.DOTALL)
+
+
+def test_named_event_handlers_are_defined() -> None:
+    """A listener naming an undefined function throws and kills the whole block."""
+    blocks = _script_blocks()
+    shared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", blocks[0]))
+    for block in blocks:
+        referenced = set(
+            re.findall(r"addEventListener\(\s*'[^']+'\s*,\s*([A-Za-z_$][\w$]*)\s*[,)]", block)
+        )
+        declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", block))
+        assert not referenced - declared - shared

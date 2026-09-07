@@ -28,11 +28,11 @@ from prompt_hub.creative import (
 from prompt_hub.database import PromptDatabase
 from prompt_hub.dataset_curation import DatasetCurationStore
 from prompt_hub.dataset_routes import create_dataset_router
-from prompt_hub.dataset_workspace import DatasetWorkspaceStore
+from prompt_hub.dataset_workspace import ARCHIVE_JOB_TYPE, DatasetWorkspaceStore
 from prompt_hub.embedding_index import EmbeddingIndexStore
 from prompt_hub.embedding_routes import create_embedding_router
 from prompt_hub.hybrid_search import HybridSearchService
-from prompt_hub.importers import import_all
+from prompt_hub.importers import import_report
 from prompt_hub.local_model import (
     LocalModelError,
     analyze_result_image,
@@ -41,11 +41,15 @@ from prompt_hub.local_model import (
     list_local_models,
     organize_slots,
 )
-from prompt_hub.local_visual import LocalVisualEncoder, LocalVisualIndexService
+from prompt_hub.local_visual import (
+    LocalVisualEncoder,
+    LocalVisualIndexService,
+    bundled_visual_model_descriptor,
+)
 from prompt_hub.lora_projects import LoraProjectStore
 from prompt_hub.lora_routes import create_lora_router
 from prompt_hub.media import resolve_media_path
-from prompt_hub.model_connections import CONNECTION_ID_PATTERN, ModelConnectionStore
+from prompt_hub.model_connections import MODEL_REF_PATTERN, ModelConnectionStore
 from prompt_hub.model_routes import create_model_router
 from prompt_hub.oc_manager import archive_import, parse_oc_manager_json
 from prompt_hub.project_journey import ProjectJourneyServices, create_project_journey_router
@@ -57,8 +61,16 @@ from prompt_hub.search_routes import create_search_router
 from prompt_hub.source_routes import create_source_router
 from prompt_hub.source_sync import SourceSyncService
 from prompt_hub.sourcing import allowed_safety_levels, source_candidates
+from prompt_hub.tag_completion_routes import create_tag_completion_router
+from prompt_hub.tag_completions import TAG_DOWNLOAD_JOB_TYPE, TagCompletionStore
 from prompt_hub.tag_locale import TagLocaleError, localize_tags, tag_catalog
 from prompt_hub.visual_assets import VisualAssetCatalog
+from prompt_hub.visual_model import (
+    DOWNLOAD_JOB_TYPE,
+    VisualModelConfigStore,
+    VisualModelError,
+    make_download_handler,
+)
 from prompt_hub.visual_routes import create_visual_router
 from prompt_hub.web import INDEX_HTML
 from prompt_hub.web_capture import WebCaptureService
@@ -119,7 +131,7 @@ class LocalAssistInput(BaseModel):
     brief: str = Field(min_length=1, max_length=6000)
     slots: dict[str, str] = Field(default_factory=dict)
     slot_locks: dict[str, bool] = Field(default_factory=dict)
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
     target_profile: Literal["anima", "krea2"] = "anima"
 
 
@@ -136,11 +148,11 @@ class CreativeSourcingExpandInput(BaseModel):
     brief: str = Field(min_length=1, max_length=6000)
     slots: dict[str, str] = Field(default_factory=dict)
     slot_locks: dict[str, bool] = Field(default_factory=dict)
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
 
 
 class CreativeImageAnalysisInput(BaseModel):
-    model: str = Field(min_length=1, max_length=300)
+    model: str = Field(min_length=1, max_length=400)
 
 
 class CreativeReviewApplyInput(BaseModel):
@@ -166,7 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model: str,
         existing_caption: str,
     ) -> dict[str, Any]:
-        if not CONNECTION_ID_PATTERN.fullmatch(model):
+        if not MODEL_REF_PATTERN.fullmatch(model):
             return DatasetCurationStore._default_krea2_captioner(  # noqa: SLF001
                 image_path,
                 model,
@@ -187,6 +199,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         active_settings,
         workspace_store,
         krea2_captioner=krea2_captioner,
+        model_connections=model_connections,
     )
     lora_store = LoraProjectStore(active_settings.lora_projects_root)
     comfy_store = ComfyResultStore(active_settings.comfy_results_root)
@@ -205,18 +218,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         remote_store,
         web_capture,
     )
-    visual_encoder = LocalVisualEncoder(
-        active_settings.models_root / "clip" / "clip-vit-base-patch32"
-    )
+    visual_config = VisualModelConfigStore(active_settings.library_root / "visual-model.json")
+    bundled_model_root = active_settings.models_root / "clip" / "clip-vit-base-patch32"
+    try:
+        descriptor = visual_config.resolve_descriptor(bundled_model_root)
+    except VisualModelError:
+        descriptor = bundled_visual_model_descriptor(bundled_model_root)
+    visual_encoder = LocalVisualEncoder(descriptor)
     local_visual = LocalVisualIndexService(embedding_store, visual_catalog, visual_encoder)
+    tag_store = TagCompletionStore(
+        active_settings.database_path,
+        active_settings.tag_completions_root,
+    )
     job_runner = BackgroundJobRunner(
         job_store,
         {
             "dataset_scan": workspace_store.scan_job,
+            ARCHIVE_JOB_TYPE: workspace_store.import_archive_job,
             "dataset_wd14": curation_store.tag_job,
             "dataset_krea2_vlm": curation_store.krea2_vlm_job,
             "source_sync": source_sync.job,
             "local_visual_index": local_visual.job,
+            DOWNLOAD_JOB_TYPE: make_download_handler(bundled_model_root),
+            TAG_DOWNLOAD_JOB_TYPE: tag_store.download_job,
         },
     )
 
@@ -234,6 +258,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         embedding_store.initialize()
         remote_store.initialize()
         workflow_store.initialize()
+        visual_config.initialize()
+        tag_store.initialize()
         job_runner.start()
         try:
             yield
@@ -246,7 +272,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         description="Local-first prompt, style, tag, dataset, and workflow hub.",
         lifespan=lifespan,
     )
-    application.include_router(create_dataset_router(active_settings, creative_store))
+    application.include_router(
+        create_dataset_router(active_settings, creative_store, model_connections)
+    )
     application.include_router(
         create_workspace_router(
             workspace_store,
@@ -265,7 +293,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_remote_router(remote_store))
     application.include_router(create_model_router(model_connections))
     application.include_router(create_source_router(source_sync, job_runner, web_capture))
-    application.include_router(create_visual_router(local_visual, embedding_store, job_runner))
+    application.include_router(
+        create_visual_router(
+            local_visual,
+            embedding_store,
+            job_runner,
+            job_store,
+            visual_config,
+            bundled_model_root,
+            active_settings,
+        )
+    )
     application.include_router(
         create_workflow_router(
             active_settings,
@@ -288,6 +326,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         )
     )
+    application.include_router(create_tag_completion_router(tag_store, job_runner))
 
     @application.get("/", response_class=HTMLResponse, include_in_schema=False)
     def index() -> str:
@@ -295,7 +334,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/api/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "database": str(active_settings.database_path)}
+        return {
+            "status": "ok",
+            "service": "soda-prompt-hub",
+            "database": str(active_settings.database_path),
+        }
 
     @application.get("/api/compute/contract")
     def get_compute_contract() -> dict[str, Any]:
@@ -647,8 +690,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.post("/api/import")
     def rebuild_index() -> dict[str, Any]:
-        results = import_all(active_settings, database)
-        return {"status": "imported", "sources": results, "stats": database.stats()}
+        report = import_report(active_settings, database)
+        return {"status": "imported", **report, "stats": database.stats()}
 
     return application
 

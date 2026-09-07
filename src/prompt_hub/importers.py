@@ -14,6 +14,10 @@ from prompt_hub.database import EntryInput, PromptDatabase
 from prompt_hub.media import build_kisega_thumbnails
 
 
+class SourceVersionError(RuntimeError):
+    """Raised when a local source directory has no usable Git version."""
+
+
 @dataclass(frozen=True, slots=True)
 class SourceSpec:
     source_id: str
@@ -96,34 +100,88 @@ def discover_sources(settings: Settings) -> list[SourceSpec]:
 
 
 def import_all(settings: Settings, database: PromptDatabase) -> dict[str, int]:
+    """Rebuild indexes and return only the per-source entry counts."""
+    return import_report(settings, database)["sources"]
+
+
+def import_report(settings: Settings, database: PromptDatabase) -> dict[str, Any]:
+    """Rebuild indexes source by source and report what was skipped or failed.
+
+    One unusable source never aborts the rest of the rebuild, and a source that
+    scans to zero entries never silently replaces entries that are already indexed.
+    """
     database.initialize()
     build_kisega_thumbnails(settings)
-    results: dict[str, int] = {}
+    previous_counts = _existing_entry_counts(database)
+    sources: dict[str, int] = {}
+    skipped: list[dict[str, Any]] = []
+    failed: list[dict[str, Any]] = []
     for spec in discover_sources(settings):
-        if not spec.path.exists():
-            continue
-        commit_hash = _git_commit(spec.path)
-        entries = _load_entries(spec, commit_hash)
-        with database.connect() as connection:
-            database.upsert_source(
-                source_id=spec.source_id,
-                name=spec.name,
-                source_type="git",
-                url=spec.url,
-                local_path=str(spec.path),
-                commit_hash=commit_hash,
-                license_name=spec.license_name,
-                notes=spec.notes,
-                connection=connection,
-            )
-            results[spec.source_id] = database.replace_source_entries(
-                spec.source_id,
-                entries,
-                connection=connection,
-            )
-            connection.commit()
+        outcome = _import_one(spec, database, previous_counts.get(spec.source_id, 0))
+        if outcome["status"] == "imported":
+            sources[spec.source_id] = int(outcome["count"])
+        elif outcome["status"] == "missing":
+            skipped.append(outcome)
+        else:
+            failed.append(outcome)
     _write_manifest(settings, database.list_sources())
-    return results
+    return {"sources": sources, "skipped": skipped, "failed": failed}
+
+
+def _import_one(spec: SourceSpec, database: PromptDatabase, previous_count: int) -> dict[str, Any]:
+    outcome = {
+        "source_id": spec.source_id,
+        "name": spec.name,
+        "local_path": str(spec.path),
+        "previous_count": previous_count,
+        "count": 0,
+    }
+    if not spec.path.is_dir():
+        return {**outcome, "status": "missing", "message": "本地资料目录不存在，本次未重建这个来源"}
+    try:
+        commit_hash = _git_commit(spec.path)
+    except SourceVersionError as error:
+        return {**outcome, "status": "not_git", "message": _error_message(error)}
+    try:
+        entries = _load_entries(spec, commit_hash)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return {**outcome, "status": "load_error", "message": _error_message(error)}
+    if not entries and previous_count > 0:
+        return {
+            **outcome,
+            "status": "empty_result",
+            "message": (
+                f"本次扫描到 0 条，已保留原有 {previous_count} 条，未覆盖。"
+                "请确认资料目录内容是否缺失。"
+            ),
+        }
+    with database.connect() as connection:
+        database.upsert_source(
+            source_id=spec.source_id,
+            name=spec.name,
+            source_type="git",
+            url=spec.url,
+            local_path=str(spec.path),
+            commit_hash=commit_hash,
+            license_name=spec.license_name,
+            notes=spec.notes,
+            connection=connection,
+        )
+        count = database.replace_source_entries(spec.source_id, entries, connection=connection)
+        connection.commit()
+    return {**outcome, "status": "imported", "count": count, "message": ""}
+
+
+def _existing_entry_counts(database: PromptDatabase) -> dict[str, int]:
+    return {
+        str(source["source_id"]): int(source.get("entry_count") or 0)
+        for source in database.list_sources()
+    }
+
+
+def _error_message(error: Exception) -> str:
+    detail = str(error).strip() or error.__class__.__name__
+    return detail[:400]
 
 
 def _load_entries(spec: SourceSpec, commit_hash: str) -> list[EntryInput]:
@@ -326,15 +384,21 @@ def _classify_safety(tags: list[str]) -> str:
 def _git_commit(path: Path) -> str:
     git_executable = shutil.which("git")
     if git_executable is None:
-        msg = "git executable not found"
-        raise RuntimeError(msg)
+        msg = "本机找不到 git 命令，无法确定资料版本"
+        raise SourceVersionError(msg)
+    if not (path / ".git").exists():
+        msg = "本地目录不是 Git 仓库，无法确定资料版本"
+        raise SourceVersionError(msg)
     result = subprocess.run(  # noqa: S603 - executable is resolved locally; args are static.
         [git_executable, "rev-parse", "HEAD"],
         cwd=path,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
+    if result.returncode != 0:
+        msg = result.stderr.strip() or "git rev-parse HEAD 执行失败"
+        raise SourceVersionError(msg)
     return result.stdout.strip()
 
 

@@ -104,6 +104,26 @@ CREATIVE_STYLES = r"""
   .slot-lock { border: 1px solid var(--line); padding: 5px 7px; font: 800 9px monospace; }
   .slot-card.is-locked .slot-lock { background: var(--signal); color: white; border-color: var(--signal); }
   .slot-card textarea { min-height: 78px; resize: vertical; margin-top: 9px; }
+  .tag-completion-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 13px; margin-bottom: 12px; border: 1px solid var(--line); background: rgba(246,240,228,.96); font-size: 11px; line-height: 1.45; }
+  .tag-completion-banner.is-ready { border-color: #16a34a; background: #f0fdf4; color: #15803d; }
+  .tag-completion-banner button { border: 1px solid var(--signal); background: var(--signal); color: white; padding: 5px 10px; font: 800 10px monospace; cursor: pointer; white-space: nowrap; }
+  .tag-completion-banner button:disabled { opacity: .6; cursor: not-allowed; }
+  .tag-autocomplete-dropdown { position: fixed; z-index: 1000; background: #fdfbf7; border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(31,29,25,.18); max-height: 250px; overflow-y: auto; font-family: monospace; font-size: 11px; }
+  .tag-autocomplete-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; cursor: pointer; border-bottom: 1px solid rgba(31,29,25,.06); user-select: none; }
+  .tag-autocomplete-item:last-child { border-bottom: none; }
+  .tag-autocomplete-item:hover, .tag-autocomplete-item.is-selected { background: rgba(31,29,25,.08); }
+  .tag-autocomplete-item.is-added { opacity: .48; }
+  .tag-cat-badge { display: inline-block; padding: 1px 5px; font-size: 9px; font-weight: 800; border-radius: 2px; text-transform: uppercase; flex-shrink: 0; }
+  .tag-cat-0 { background: #e0f2fe; color: #0369a1; }
+  .tag-cat-1 { background: #fef3c7; color: #b45309; }
+  .tag-cat-3 { background: #f3e8ff; color: #7e22ce; }
+  .tag-cat-4 { background: #dcfce7; color: #15803d; }
+  .tag-cat-5 { background: #fee2e2; color: #b91c1c; }
+  .tag-name { font-weight: 600; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag-alias { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag-zh { margin-right: 6px; color: var(--ink); font-size: 10px; font-weight: 700; white-space: nowrap; }
+  .tag-count { color: var(--muted); font-size: 10px; white-space: nowrap; margin-left: auto; }
+  .tag-added-badge { font-size: 8px; font-weight: 700; color: var(--signal); border: 1px solid currentColor; padding: 0 3px; border-radius: 2px; flex-shrink: 0; }
   .creative-subsection { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--line); }
   .creative-subsection-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
   .creative-subsection-head h2 { margin: 0; font: 700 24px "Iowan Old Style", serif; }
@@ -133,11 +153,16 @@ CREATIVE_STYLES = r"""
   .dataset-caption { margin-top: 7px; border-top: 1px solid rgba(31,29,25,.2); padding-top: 7px; }
   .dataset-caption summary { cursor: pointer; color: var(--muted); font: 800 8px monospace; }
   .dataset-caption textarea { width: 100%; min-height: 78px; margin-top: 7px; resize: vertical; border: 1px solid var(--line); background: #fbf6ec; padding: 7px; color: var(--ink); font: 9px/1.45 monospace; }
-  .wd14-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 110px 110px auto; gap: 9px; align-items: end; margin-top: 12px; border: 1px solid var(--line); background: #171714; color: #f4eddf; padding: 12px; box-shadow: inset 4px 0 var(--acid); }
+  .wd14-toolbar { display: flex; flex-wrap: wrap; gap: 12px 9px; align-items: end; margin-top: 12px; border: 1px solid var(--line); background: #171714; color: #f4eddf; padding: 12px; box-shadow: inset 4px 0 var(--acid); }
+  .wd14-toolbar-intro { flex: 1 1 100%; min-width: 0; }
+  .wd14-toolbar > label { flex: 0 1 190px; min-width: 148px; }
   .wd14-toolbar strong { display: block; font: 800 10px monospace; letter-spacing: .06em; }
   .wd14-toolbar p { margin: 4px 0 0; color: #aaa395; font-size: 9px; }
   .wd14-toolbar label { color: #aaa395; font: 800 8px monospace; text-transform: uppercase; }
-  .wd14-toolbar input { width: 100%; margin-top: 6px; border: 1px solid #706b61; background: #292824; color: #f4eddf; padding: 8px; font: 10px monospace; }
+  .wd14-toolbar input, .wd14-toolbar select { width: 100%; margin-top: 6px; border: 1px solid #706b61; background: #292824; color: #f4eddf; padding: 8px; font: 10px monospace; }
+  .wd14-thresholds { flex: 1 1 300px; min-width: 220px; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .wd14-thresholds[hidden], #wd14TaggerModelWrap[hidden] { display: none !important; }
+  .wd14-toolbar > button { flex: 0 0 auto; margin-left: auto; }
   .wd14-toolbar button { min-height: 34px; background: var(--acid); color: var(--ink); padding: 0 11px; font: 800 9px monospace; }
   .wd14-toolbar button:disabled { background: #383631; color: #777268; }
   .wd14-review { margin-top: 7px; border: 1px solid rgba(31,29,25,.26); background: #e9e1d1; padding: 7px; }
@@ -304,7 +329,7 @@ CREATIVE_SCRIPT = r"""
   };
   const safetyLabels = {sfw:'普通',suggestive:'轻度成人向',adult:'成人向','explicit-adult':'明确成人向',unrated:'尚未分级'};
   const wd14RatingLabels = {general:'普通',sensitive:'轻度成人向',questionable:'成人向',explicit:'明确成人向',unknown:'尚未判断'};
-  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', workflowProfiles: [], windowsModels: [], windowsLoras: [], modelConnections: [], discoveredModels: [], editingModelConnectionId: '', workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
+  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', tagStatus: null, tagDownloading: false, workflowProfiles: [], windowsModels: [], windowsLoras: [], workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
 
   async function creativeJson(url, options = {}) {
     const response = await fetch(url, options);
@@ -446,18 +471,19 @@ CREATIVE_SCRIPT = r"""
 
   function renderResultCard(asset, profileLabel) {
     const selected = asset.dataset_selected === true; const captions = asset.dataset_captions || {}; const caption = captions[creativeState.datasetProfile] || '';
-    return `<article class="result-card ${selected ? 'is-dataset-selected' : ''}"><a href="${escapeHtml(asset.original_url)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(asset.thumbnail_url)}" alt="${escapeHtml(asset.filename || '本地结果图')}" loading="lazy"></a><div class="result-card-body"><strong>${escapeHtml(asset.filename || '本地结果图')}</strong><span>${Number(asset.width) || '?'} × ${Number(asset.height) || '?'} · ${escapeHtml(safetyLabels[asset.safety] || '尚未分级')}</span><button class="dataset-toggle ${selected ? 'is-selected' : ''}" data-dataset-toggle="${escapeHtml(asset.asset_id)}">${selected ? '✓ 已加入数据集' : '＋ 加入数据集'}</button><button class="wd14-run" data-wd14-tag="${escapeHtml(asset.asset_id)}">${asset.wd14_tagging ? '重新运行 WD14' : '用 WD14 生成标签'}</button>${renderWd14Review(asset)}<details class="dataset-caption"><summary>${profileLabel}说明 · 留空时使用项目输出</summary><textarea data-dataset-caption="${escapeHtml(asset.asset_id)}" maxlength="12000" placeholder="留空时采用当前项目的 ${profileLabel}正向提示词">${escapeHtml(caption)}</textarea><button data-save-caption="${escapeHtml(asset.asset_id)}">保存此图说明</button></details><button data-review-asset="${escapeHtml(asset.asset_id)}" ${creativeState.visionAvailable ? '' : 'disabled'}>${creativeState.visionAvailable ? '用所选模型分析图片' : '暂无视觉模型'}</button></div></article>`;
+    const taggerLabel=activeTaggerLabel();
+    return `<article class="result-card ${selected ? 'is-dataset-selected' : ''}"><a href="${escapeHtml(asset.original_url)}" target="_blank" rel="noreferrer"><img src="${escapeHtml(asset.thumbnail_url)}" alt="${escapeHtml(asset.filename || '本地结果图')}" loading="lazy"></a><div class="result-card-body"><strong>${escapeHtml(asset.filename || '本地结果图')}</strong><span>${Number(asset.width) || '?'} × ${Number(asset.height) || '?'} · ${escapeHtml(safetyLabels[asset.safety] || '尚未分级')}</span><button class="dataset-toggle ${selected ? 'is-selected' : ''}" data-dataset-toggle="${escapeHtml(asset.asset_id)}">${selected ? '✓ 已加入数据集' : '＋ 加入数据集'}</button><button class="wd14-run" data-wd14-tag="${escapeHtml(asset.asset_id)}">${asset.wd14_tagging ? `重新运行 ${taggerLabel}` : `用 ${taggerLabel} 生成标签`}</button>${renderWd14Review(asset)}<details class="dataset-caption"><summary>${profileLabel}说明 · 留空时使用项目输出</summary><textarea data-dataset-caption="${escapeHtml(asset.asset_id)}" maxlength="12000" placeholder="留空时采用当前项目的 ${profileLabel}正向提示词">${escapeHtml(caption)}</textarea><button data-save-caption="${escapeHtml(asset.asset_id)}">保存此图说明</button></details><button data-review-asset="${escapeHtml(asset.asset_id)}" ${creativeState.visionAvailable ? '' : 'disabled'}>${creativeState.visionAvailable ? '用所选模型分析图片' : '暂无视觉模型'}</button></div></article>`;
   }
 
   function renderWd14Review(asset) {
     const tagging = asset.wd14_tagging; if (!tagging) return '';
-    const rating = tagging.rating?.tag || 'unknown'; const ratingScore = Number(tagging.rating?.score); const characters = (tagging.characters || []).map(item => item.tag).filter(Boolean);
+    const rating = tagging.rating?.tag || 'unknown'; const ratingScore = Number(tagging.rating?.score); const ratingScoreLabel = Number.isFinite(ratingScore) ? Math.round(ratingScore * 100) + '%' : (tagging.tagger === 'model' ? '模型未提供置信度' : '—'); const characters = (tagging.characters || []).map(item => item.tag).filter(Boolean);
     const draft = tagging.draft_tags || ''; const draftValues = draft.split(',').map(value => value.trim()).filter(Boolean); const selectedTags = new Set(draftValues.map(value => value.toLowerCase())); const candidates = [...new Set([...(tagging.general || []).map(item => item.tag).filter(Boolean), ...draftValues])]; const animaCaption = asset.dataset_captions?.anima || ''; const confirmed = Boolean(tagging.confirmed_at) && animaCaption === draft;
     const state = confirmed ? '已用作 Anima 标签' : tagging.confirmed_at ? 'Anima 标签后来又有修改' : '尚未确认';
     const chips = candidates.map(tag => `<button class="wd14-tag-chip ${selectedTags.has(tag.toLowerCase()) ? 'selected' : ''}" data-wd14-chip="${escapeHtml(asset.asset_id)}" data-tag-value="${escapeHtml(tag)}" aria-pressed="${selectedTags.has(tag.toLowerCase())}">${escapeHtml(window.displayCanonicalTag ? window.displayCanonicalTag(tag) : tag)}</button>`).join('');
     const language = window.getTagDisplayLanguage?.() === 'en' ? '只看英文标签' : '查看中英标签';
     const characterLabels = characters.map(tag => window.displayCanonicalTag ? window.displayCanonicalTag(tag) : tag);
-    return `<details class="wd14-review" open><summary>WD14 草稿 · ${escapeHtml(wd14RatingLabels[rating] || rating)} ${Number.isFinite(ratingScore) ? Math.round(ratingScore * 100) + '%' : ''} · ${state}</summary><p>角色候选：${escapeHtml(characterLabels.join(', ') || '无（原创 OC 常见）')}<br>普通标签最低可信度 ${Number(tagging.general_threshold).toFixed(2)} · 角色标签最低可信度 ${Number(tagging.character_threshold).toFixed(2)} · 运行方式 ${escapeHtml(tagging.provider || 'CPU')}</p><div class="wd14-tag-locale"><span>点击标签保留或移除；保存和导出始终使用英文标签。</span><button data-toggle-tag-language>${language}</button></div><div class="wd14-tag-chips">${chips}</div><details class="wd14-advanced"><summary>直接编辑英文标签</summary><textarea data-wd14-draft="${escapeHtml(asset.asset_id)}" maxlength="12000" aria-label="WD14 Anima 标签草稿">${escapeHtml(draft)}</textarea></details><div class="wd14-actions"><button data-save-wd14="${escapeHtml(asset.asset_id)}">保存审核草稿</button><button data-confirm-wd14="${escapeHtml(asset.asset_id)}">确认用作 Anima 标签</button></div></details>`;
+    return `<details class="wd14-review" open><summary>${escapeHtml(taggingSourceLabel(tagging))} 草稿 · ${escapeHtml(wd14RatingLabels[rating] || rating)} ${ratingScoreLabel} · ${state}</summary><p>角色候选：${escapeHtml(characterLabels.join(', ') || '无（原创 OC 常见）')}<br>普通标签最低可信度 ${Number(tagging.general_threshold).toFixed(2)} · 角色标签最低可信度 ${Number(tagging.character_threshold).toFixed(2)} · 运行方式 ${escapeHtml(tagging.provider || 'CPU')}</p><div class="wd14-tag-locale"><span>点击标签保留或移除；保存和导出始终使用英文标签。</span><button data-toggle-tag-language>${language}</button></div><div class="wd14-tag-chips">${chips}</div><details class="wd14-advanced"><summary>直接编辑英文标签</summary><textarea data-wd14-draft="${escapeHtml(asset.asset_id)}" maxlength="12000" aria-label="Anima 标签草稿">${escapeHtml(draft)}</textarea></details><div class="wd14-actions"><button data-save-wd14="${escapeHtml(asset.asset_id)}">保存审核草稿</button><button data-confirm-wd14="${escapeHtml(asset.asset_id)}">确认用作 Anima 标签</button></div></details>`;
   }
 
   function toggleWd14Chip(assetId, tag) {
@@ -474,6 +500,19 @@ CREATIVE_SCRIPT = r"""
       ? '● 当前视觉模型已加载，可以直接分析图片。'
       : '○ 当前模型尚未加载。24GB Mac 请先在 LM Studio 卸载文字模型，再只加载这一只视觉模型。';
   }
+
+  function updateWd14TaggerMode() {
+    const mode=$('#wd14TaggerMode').value, hasVision=creativeState.visionAvailable, option=[...$('#wd14TaggerMode').options].find(item=>item.value==='model');
+    if(option) option.disabled=!hasVision;
+    if(mode==='model'&&!hasVision) $('#wd14TaggerMode').value='wd14';
+    const usingModel=$('#wd14TaggerMode').value==='model';
+    $('#wd14Thresholds').hidden=usingModel; $('#wd14TaggerModelWrap').hidden=!usingModel;
+    $('#wd14TaggerHint').textContent=usingModel?'模型会生成 Anima Booru 标签草稿；图片会发送到所选模型服务。':hasVision?'默认使用 WD14；也可以改用已连接的视觉模型生成 Booru 标签草稿。':'没有可用视觉模型；“使用模型”已禁用，请先在 LM Studio 加载视觉模型或在模型接入中启用支持看图的模型。';
+    renderResultGallery();
+  }
+
+  function activeTaggerLabel() { return $('#wd14TaggerMode').value==='model'?'模型':'WD14'; }
+  function taggingSourceLabel(tagging) { return tagging?.tagger==='model'?`模型${tagging.model ? ' · ' + tagging.model : ''}`:'WD14'; }
 
   function renderReviewProposal() {
     const proposal = $('#reviewProposal'); const review = creativeState.review;
@@ -638,77 +677,26 @@ CREATIVE_SCRIPT = r"""
     creativeState.project = project; creativeState.sourcing = null; creativeState.sourcingProjectId = ''; creativeState.review = null; creativeState.reviewProjectId = ''; creativeState.projects.unshift(project); renderCreativeProject(); $('#creativeSaveState').textContent = '新项目已保存到本机 · R1'; return project;
   }
 
-  function renderExternalModelConnections() {
-    const candidates = $('#externalModelCandidates');
-    candidates.innerHTML = creativeState.discoveredModels.length ? creativeState.discoveredModels.map(model => `<div class="external-model-candidate"><span title="${escapeHtml(model.id)}">${escapeHtml(model.name || model.id)}</span><button type="button" data-use-external-model="${escapeHtml(model.id)}">选择</button></div>`).join('') : '';
-    const list = $('#externalModelList');
-    list.innerHTML = creativeState.modelConnections.length ? creativeState.modelConnections.map(item => `<div class="external-model-item"><span title="${escapeHtml(item.base_url)} · ${escapeHtml(item.model_name)}">${escapeHtml(item.label)}${item.supports_vision ? ' · 可看图' : ''}${item.has_api_key ? ' · 已保存密钥' : ''}</span><div class="external-model-item-actions"><button type="button" data-edit-external-model="${escapeHtml(item.id)}">编辑</button><button type="button" data-delete-external-model="${escapeHtml(item.id)}">删除</button></div></div>`).join('') : '<p class="external-model-status">还没有保存外部模型。</p>';
-  }
-
-  function clearExternalModelForm() {
-    creativeState.editingModelConnectionId = '';
-    $('#externalModelLabel').value = ''; $('#externalModelBaseUrl').value = ''; $('#externalModelApiKey').value = ''; $('#externalModelName').value = ''; $('#externalModelVision').checked = false;
-    $('#saveExternalModel').textContent = '保存这个模型'; $('#cancelExternalModelEdit').hidden = true;
-  }
-
-  function editExternalModel(connectionId) {
-    const item = creativeState.modelConnections.find(connection => connection.id === connectionId);
-    if (!item) return;
-    creativeState.editingModelConnectionId = item.id;
-    $('#externalModelLabel').value = item.label || ''; $('#externalModelBaseUrl').value = item.base_url || ''; $('#externalModelApiKey').value = ''; $('#externalModelName').value = item.model_name || ''; $('#externalModelVision').checked = Boolean(item.supports_vision);
-    $('#saveExternalModel').textContent = '保存修改'; $('#cancelExternalModelEdit').hidden = false; $('#externalModelSettings').open = true;
-    $('#externalModelStatus').textContent = '正在编辑已有连接。API Key 留空会保留原密钥。';
-  }
-
-  async function discoverExternalModels() {
-    const baseUrl = $('#externalModelBaseUrl').value.trim();
-    if (!baseUrl) throw new Error('请先填写 Base URL');
-    const button = $('#discoverExternalModels'); button.disabled = true; button.textContent = '正在读取…';
-    $('#externalModelStatus').textContent = '正在由本机后端读取模型列表，密钥不会返回网页。';
-    try {
-      const result = await creativeJson('/api/model-connections/discover', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({base_url:baseUrl, api_key:$('#externalModelApiKey').value})});
-      creativeState.discoveredModels = result.models || []; renderExternalModelConnections();
-      $('#externalModelStatus').textContent = creativeState.discoveredModels.length ? `读取到 ${creativeState.discoveredModels.length} 个模型，请选择一个。` : '服务没有返回模型列表，可以在下方手工填写模型名称。';
-    } finally { button.disabled = false; button.textContent = '读取可用模型'; }
-  }
-
-  async function saveExternalModel() {
-    const baseUrl = $('#externalModelBaseUrl').value.trim(); const modelName = $('#externalModelName').value.trim();
-    if (!baseUrl || !modelName) throw new Error('请填写 Base URL 和模型名称');
-    const button = $('#saveExternalModel'); button.disabled = true; button.textContent = '正在保存…';
-    try {
-      const saved = await creativeJson('/api/model-connections', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({connection_id:creativeState.editingModelConnectionId, label:$('#externalModelLabel').value.trim() || modelName, provider:'openai_compatible', base_url:baseUrl, api_key:$('#externalModelApiKey').value, model_name:modelName, supports_vision:$('#externalModelVision').checked})});
-      clearExternalModelForm(); $('#externalModelStatus').textContent = `已保存 ${saved.label}。密钥输入框已清空。`;
-      await loadCreativeMeta();
-    } finally { button.disabled = false; button.textContent = creativeState.editingModelConnectionId ? '保存修改' : '保存这个模型'; }
-  }
-
-  async function deleteExternalModel(connectionId) {
-    if (!confirm('确定删除这个外部模型连接吗？本地 LM Studio 不受影响。')) return;
-    await creativeJson(`/api/model-connections/${encodeURIComponent(connectionId)}`, {method:'DELETE'});
-    if (creativeState.editingModelConnectionId === connectionId) clearExternalModelForm();
-    $('#externalModelStatus').textContent = '外部模型连接已删除。'; await loadCreativeMeta();
-  }
-
   async function loadCreativeMeta() {
     const modelCatalog = creativeJson('/api/models').catch(() => creativeJson('/api/local-models'));
-    const savedConnections = creativeJson('/api/model-connections').catch(error => { $('#externalModelStatus').textContent = `外部模型配置读取失败：${error.message}`; return []; });
-    const [projects, recipes, models, workflowProfiles, windowsModels, windowsLoras, connections] = await Promise.all([creativeJson('/api/creative/projects'), creativeJson('/api/creative/recipes'), modelCatalog, creativeJson('/api/workflow-profiles'), creativeJson('/api/windows-models?limit=2000'), creativeJson('/api/windows-loras?limit=500'), savedConnections]);
+    const [projects, recipes, models, workflowProfiles, windowsModels, windowsLoras] = await Promise.all([creativeJson('/api/creative/projects'), creativeJson('/api/creative/recipes'), modelCatalog, creativeJson('/api/workflow-profiles'), creativeJson('/api/windows-models?limit=2000'), creativeJson('/api/windows-loras?limit=500')]);
     creativeState.projects = projects; creativeState.recipes = recipes; renderCreativeProjects(); renderCreativeRecipes();
     creativeState.workflowProfiles = workflowProfiles; creativeState.windowsModels=windowsModels.results||[]; creativeState.windowsLoras=windowsLoras.results||[]; renderWorkflowProfiles();
-    creativeState.modelConnections = connections; renderExternalModelConnections();
     const select = $('#lmModel'); select.innerHTML = models.models.map(model => `<option value="${escapeHtml(model.id)}" data-source="${escapeHtml(model.source || 'local')}">${model.loaded ? '● ' : ''}${escapeHtml(model.name || model.id)}${model.params ? ` · ${escapeHtml(model.params)}` : ''}</option>`).join('');
     const loaded = models.models.find(model => model.loaded);
     const quickFallback = models.models.find(model => model.id.includes('qwen3.5-9b'));
     const preferred = loaded || quickFallback || models.models[0];
     if (preferred) select.value = preferred.id; else select.innerHTML = '<option value="">暂无可用模型</option>';
     select.disabled = !preferred;
-    const visionModels = models.models.filter(model => model.vision); const visionSelect = $('#visionModel');
-    visionSelect.innerHTML = visionModels.map(model => `<option value="${escapeHtml(model.id)}" data-source="${escapeHtml(model.source || 'local')}">${model.loaded ? '● ' : ''}${escapeHtml(model.name || model.id)}${model.params ? ` · ${escapeHtml(model.params)}` : ''}</option>`).join('');
+    const visionModels = models.models.filter(model => model.vision); const visionSelect = $('#visionModel'), taggerSelect=$('#wd14TaggerModel'), previousTagger=taggerSelect.value;
+    const visionOptions = visionModels.map(model => `<option value="${escapeHtml(model.id)}" data-source="${escapeHtml(model.source || 'local')}">${model.loaded ? '● ' : ''}${escapeHtml(model.name || model.id)}${model.params ? ` · ${escapeHtml(model.params)}` : ''}</option>`).join('');
+    visionSelect.innerHTML = visionOptions;
+    taggerSelect.innerHTML = visionOptions || '<option value="">没有可用视觉模型</option>';
     const loadedVision = visionModels.find(model => model.loaded); const visionFallback = visionModels.find(model => model.id.includes('qwen3.5-9b')); const preferredVision = visionFallback || loadedVision || visionModels[0];
     if (preferredVision) visionSelect.value = preferredVision.id;
+    if (visionModels.some(model => model.id === previousTagger)) taggerSelect.value = previousTagger; else if (preferredVision) taggerSelect.value = preferredVision.id;
     creativeState.visionAvailable = Boolean(models.available && visionModels.length); visionSelect.disabled = !creativeState.visionAvailable;
-    updateVisionHint();
+    taggerSelect.disabled = !creativeState.visionAvailable; updateVisionHint(); updateWd14TaggerMode();
     const localCount = Number(models.local_count ?? models.models.filter(model => model.source !== 'external').length); const externalCount = Number(models.external_count ?? models.models.filter(model => model.source === 'external').length);
     $('#lmStatus').textContent = models.available ? `可用模型：LM Studio ${localCount} 个，外部 ${externalCount} 个；默认优先已加载的本地模型。` : '当前没有可用模型，手动编辑与双格式输出仍可使用。';
     $('#assistCreative').disabled = !models.available || !models.models.length;
@@ -719,8 +707,205 @@ CREATIVE_SCRIPT = r"""
     if (!creativeState.loadedMeta) await loadCreativeMeta();
     if (!creativeState.project) creativeState.project = creativeState.projects[0] || await createCreativeProject();
     renderCreativeProject();
+    checkTagCompletionStatus();
   }
   window.ensureCreativeProject = ensureCreativeProject;
+
+  async function checkTagCompletionStatus() {
+    try {
+      creativeState.tagStatus = await creativeJson('/api/tag-completions/status');
+    } catch {
+      creativeState.tagStatus = null;
+    }
+    renderTagCompletionBanner();
+  }
+
+  function renderTagCompletionBanner() {
+    const banner = $('#tagCompletionBanner');
+    if (!banner) return;
+    if (creativeState.profile !== 'anima') {
+      banner.hidden = true;
+      return;
+    }
+    if (creativeState.tagDownloading) {
+      banner.hidden = false;
+      banner.className = 'tag-completion-banner';
+      banner.innerHTML = '<span>正在下载并导入 Danbooru 标签库……</span><button disabled>下载中</button>';
+      return;
+    }
+    if (!creativeState.tagStatus || !creativeState.tagStatus.installed) {
+      banner.hidden = false;
+      banner.className = 'tag-completion-banner';
+      banner.innerHTML = '<span>Danbooru 标签自动补全库未安装（约 1.5MB）。</span><button data-tag-action="download">下载安装标签库</button>';
+      return;
+    }
+    banner.hidden = true;
+  }
+
+  async function triggerTagDownload() {
+    creativeState.tagDownloading = true;
+    renderTagCompletionBanner();
+    try {
+      await creativeJson('/api/tag-completions/download', {method: 'POST'});
+      const poll = setInterval(async () => {
+        try {
+          const status = await creativeJson('/api/tag-completions/status');
+          if (status.installed) {
+            clearInterval(poll);
+            creativeState.tagStatus = status;
+            creativeState.tagDownloading = false;
+            const banner = $('#tagCompletionBanner');
+            if (banner) {
+              banner.className = 'tag-completion-banner is-ready';
+              banner.innerHTML = `<span>✓ Danbooru 标签库已就绪（共 ${(status.total_tags || 0).toLocaleString()} 个标签）。</span><button data-tag-action="dismiss">关闭</button>`;
+              setTimeout(() => { if (banner && banner.classList.contains('is-ready')) banner.hidden = true; }, 4000);
+            }
+          }
+        } catch {
+          // ignore transient poll errors
+        }
+      }, 1500);
+    } catch (err) {
+      creativeState.tagDownloading = false;
+      showCreativeError(err);
+      renderTagCompletionBanner();
+    }
+  }
+
+  let tagFetchTimer = null;
+  let tagAbortController = null;
+  let activeTagSlot = null;
+  let activeTagInput = null;
+  let tagCandidates = [];
+  const normalizeTagKey = (value) => String(value || '').replace(/_/g, ' ').trim().toLowerCase();
+  let tagSelectedIndex = 0;
+
+  function hideTagDropdown() {
+    clearTimeout(tagFetchTimer);
+    tagAbortController?.abort();
+    tagAbortController = null;
+    tagCandidates = [];
+    tagSelectedIndex = 0;
+    activeTagInput = null;
+    activeTagSlot = null;
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (dropdown) dropdown.hidden = true;
+  }
+
+  function getTagTokenAtCursor(textarea) {
+    const text = textarea.value;
+    const pos = textarea.selectionStart;
+    const lastComma = text.lastIndexOf(',', pos - 1);
+    const start = lastComma === -1 ? 0 : lastComma + 1;
+    const rawToken = text.slice(start, pos);
+    if (rawToken.includes('\n')) return null;
+    const query = rawToken.trim();
+    return { query, start, end: pos };
+  }
+
+  function formatTagCount(count) {
+    const n = Number(count) || 0;
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(0) + 'k';
+    return String(n);
+  }
+
+  function updateTagHighlight() {
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (!dropdown || dropdown.hidden) return;
+    const items = dropdown.querySelectorAll('.tag-autocomplete-item');
+    items.forEach((el, idx) => {
+      el.classList.toggle('is-selected', idx === tagSelectedIndex);
+      if (idx === tagSelectedIndex) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+
+  function renderTagDropdown() {
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (!dropdown || !activeTagInput || !tagCandidates.length) {
+      hideTagDropdown();
+      return;
+    }
+
+    const currentSlotTags = new Set(
+      (activeTagInput.value || '').split(',').map(normalizeTagKey).filter(Boolean)
+    );
+    const allProjectTags = new Set();
+    Object.values(creativeState.project?.slots || {}).forEach(val => {
+      (val || '').split(',').forEach(s => {
+        const t = normalizeTagKey(s);
+        if (t) allProjectTags.add(t);
+      });
+    });
+
+    const catLabels = {0: '普通', 1: '画师', 3: '作品', 4: '角色', 5: '元标签'};
+
+    dropdown.innerHTML = tagCandidates.map((item, idx) => {
+      const tagText = item.display_tag || (item.tag || '').replace(/_/g, ' ');
+      const tagLower = normalizeTagKey(tagText);
+      const inCurrent = currentSlotTags.has(tagLower);
+      const inProject = allProjectTags.has(tagLower);
+      const isAdded = inCurrent || inProject;
+      const isSelected = idx === tagSelectedIndex;
+      const catName = catLabels[item.category] || '标签';
+      const zhHtml = item.translation_zh ? `<span class="tag-zh">${escapeHtml(item.translation_zh)}</span>` : '';
+      const aliasList = (item.aliases || []).slice(0, 4);
+      const aliasHtml = zhHtml + (aliasList.length ? `<span class="tag-alias">别名: ${escapeHtml(aliasList.join('、'))}</span>` : '');
+      const addedBadge = inCurrent ? '<span class="tag-added-badge">当前已加</span>' : (inProject ? '<span class="tag-added-badge">已在其他槽</span>' : '');
+
+      return `<div class="tag-autocomplete-item ${isSelected ? 'is-selected' : ''} ${isAdded ? 'is-added' : ''}" data-tag-index="${idx}">` +
+        `<span class="tag-cat-badge tag-cat-${item.category}">${catName}</span>` +
+        `<span class="tag-name">${escapeHtml(tagText)}</span>` +
+        aliasHtml +
+        `<span class="tag-count">${formatTagCount(item.post_count)}</span>` +
+        addedBadge +
+        `</div>`;
+    }).join('');
+
+    const rect = activeTagInput.getBoundingClientRect();
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.width = `${Math.max(rect.width, 320)}px`;
+
+    const spaceBelow = window.innerHeight - rect.bottom;
+    if (spaceBelow < 220 && rect.top > 220) {
+      dropdown.style.bottom = `${window.innerHeight - rect.top + 4}px`;
+      dropdown.style.top = 'auto';
+    } else {
+      dropdown.style.top = `${rect.bottom + 4}px`;
+      dropdown.style.bottom = 'auto';
+    }
+    dropdown.hidden = false;
+    updateTagHighlight();
+  }
+
+  function selectTagCandidate(candidate) {
+    if (!activeTagInput || !candidate) return;
+    const textarea = activeTagInput;
+    const text = textarea.value;
+    const pos = textarea.selectionStart;
+    const lastComma = text.lastIndexOf(',', pos - 1);
+    const start = lastComma === -1 ? 0 : lastComma + 1;
+    const nextComma = text.indexOf(',', pos);
+    const end = nextComma === -1 ? text.length : nextComma;
+
+    const before = text.slice(0, start);
+    const after = text.slice(end);
+
+    const cleanBefore = before.length > 0 && !before.endsWith(' ') ? before + ' ' : before;
+    const cleanAfter = after.replace(/^,\s*/, '');
+    const insertText = (candidate.display_tag || (candidate.tag || '').replace(/_/g, ' ')) + ', ';
+
+    textarea.value = cleanBefore + insertText + cleanAfter;
+    const newCursorPos = cleanBefore.length + insertText.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+
+    hideTagDropdown();
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    renderOutput();
+  }
 
   async function addEntryToCreative(item, slot) {
     await ensureCreativeProject();
@@ -811,9 +996,11 @@ CREATIVE_SCRIPT = r"""
   }
 
   function wd14Payload() {
+    const tagger=$('#wd14TaggerMode').value, model=$('#wd14TaggerModel').value;
+    if(tagger==='model' && !model) throw new Error('请先选择用于打标的视觉模型');
     const general = Number($('#wd14GeneralThreshold').value); const character = Number($('#wd14CharacterThreshold').value);
-    if (!Number.isFinite(general) || general < 0 || general > 1 || !Number.isFinite(character) || character < 0 || character > 1) throw new Error('WD14 阈值必须在 0 到 1 之间');
-    return {general_threshold:general, character_threshold:character, limit:80};
+    if (tagger==='wd14' && (!Number.isFinite(general) || general < 0 || general > 1 || !Number.isFinite(character) || character < 0 || character > 1)) throw new Error('WD14 阈值必须在 0 到 1 之间');
+    return {tagger, model, general_threshold:general, character_threshold:character, limit:80};
   }
 
   function applyDatasetProject(project, message) {
@@ -822,21 +1009,23 @@ CREATIVE_SCRIPT = r"""
   }
 
   async function tagResultAsset(assetId) {
-    await saveCreative(); const button = document.querySelector(`[data-wd14-tag="${CSS.escape(assetId)}"]`); if (button) { button.disabled = true; button.textContent = 'WD14 打标中…'; }
-    creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = '正在本机使用 WD14 分析图片…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
+    const payload=wd14Payload(), label=payload.tagger==='model'?'模型':'WD14';
+    await saveCreative(); const button = document.querySelector(`[data-wd14-tag="${CSS.escape(assetId)}"]`); if (button) { button.disabled = true; button.textContent = `${label} 打标中…`; }
+    creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = payload.tagger==='model'?`正在使用 ${payload.model} 生成标签草稿…`:'正在本机使用 WD14 分析图片…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
     try {
-      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/results/${encodeURIComponent(assetId)}/tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(wd14Payload())});
-      applyDatasetProject(response.project, `WD14 已生成 ${response.asset.wd14_tagging?.general?.length || 0} 个 general 标签；请审核后确认。`);
-    } finally { if (button) { button.disabled = false; button.textContent = '用 WD14 生成标签'; } }
+      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/results/${encodeURIComponent(assetId)}/tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+      applyDatasetProject(response.project, `${label} 已生成 ${response.asset.wd14_tagging?.general?.length || 0} 个 general 标签；请审核后确认。`);
+    } finally { if (button) { button.disabled = false; button.textContent = `用 ${label} 生成标签`; } }
   }
 
   async function tagSelectedDataset() {
+    const payload=wd14Payload(), label=payload.tagger==='model'?'模型':'WD14';
     await saveCreative(); const button = $('#tagSelectedDataset'); button.disabled = true; button.textContent = '精选图片打标中…';
     creativeState.datasetMessageProjectId = creativeState.project.project_id; creativeState.datasetMessage = '正在逐张处理精选图片，请保持页面打开…'; $('#datasetExportStatus').textContent = creativeState.datasetMessage;
     try {
-      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/dataset-tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(wd14Payload())});
+      const response = await creativeJson(`/api/creative/projects/${encodeURIComponent(creativeState.project.project_id)}/dataset-tag`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
       const suffix = response.failed_count ? `；${response.failed_count} 张失败，可单独重试` : '';
-      applyDatasetProject(response.project, `WD14 已完成 ${response.tagged_count}/${response.selected_count} 张${suffix}。`);
+      applyDatasetProject(response.project, `${label} 已完成 ${response.tagged_count}/${response.selected_count} 张${suffix}。`);
     } finally { button.textContent = '打标全部精选'; renderResultGallery(); }
   }
 
@@ -907,6 +1096,103 @@ CREATIVE_SCRIPT = r"""
   $('#newCreativeProject').addEventListener('click', () => createCreativeProject().catch(showCreativeError));
   ['creativeTitle','creativeBrief','creativeSafety','creativeNotes','genSteps','genCfg','genSeed','genResults'].forEach(id => $('#' + id).addEventListener('input', queueCreativeSave));
   $('#creativeSlots').addEventListener('input', queueCreativeSave);
+  $('#creativeSlots').addEventListener('input', (event) => {
+    const textarea = event.target.closest('[data-slot-input]');
+    if (!textarea) return;
+    if (creativeState.profile !== 'anima') {
+      hideTagDropdown();
+      return;
+    }
+    const token = getTagTokenAtCursor(textarea);
+    if (!token || !token.query) {
+      hideTagDropdown();
+      return;
+    }
+    activeTagInput = textarea;
+    activeTagSlot = textarea.dataset.slotInput;
+    clearTimeout(tagFetchTimer);
+    tagFetchTimer = setTimeout(async () => {
+      tagAbortController?.abort();
+      tagAbortController = new AbortController();
+      try {
+        const data = await creativeJson(`/api/tag-completions?q=${encodeURIComponent(token.query)}&limit=15`, {
+          signal: tagAbortController.signal,
+        });
+        if (!data.installed) {
+          creativeState.tagStatus = { installed: false };
+          renderTagCompletionBanner();
+          hideTagDropdown();
+          return;
+        }
+        if (!data.results || !data.results.length) {
+          hideTagDropdown();
+          return;
+        }
+        tagCandidates = data.results;
+        tagSelectedIndex = 0;
+        renderTagDropdown();
+      } catch (err) {
+        if (err.name !== 'AbortError') hideTagDropdown();
+      }
+    }, 120);
+  });
+  $('#creativeSlots').addEventListener('keydown', (event) => {
+    const textarea = event.target.closest('[data-slot-input]');
+    if (!textarea || creativeState.profile !== 'anima') return;
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (!dropdown || dropdown.hidden || !tagCandidates.length) return;
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      tagSelectedIndex = (tagSelectedIndex + 1) % tagCandidates.length;
+      updateTagHighlight();
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      tagSelectedIndex = (tagSelectedIndex - 1 + tagCandidates.length) % tagCandidates.length;
+      updateTagHighlight();
+    } else if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      const candidate = tagCandidates[tagSelectedIndex];
+      if (candidate) selectTagCandidate(candidate);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      hideTagDropdown();
+    }
+  });
+  $('#tagAutocompleteDropdown').addEventListener('mousedown', (event) => {
+    event.preventDefault();
+    const itemEl = event.target.closest('[data-tag-index]');
+    if (!itemEl) return;
+    const idx = Number(itemEl.dataset.tagIndex);
+    const candidate = tagCandidates[idx];
+    if (candidate) selectTagCandidate(candidate);
+  });
+  $('#tagAutocompleteDropdown').addEventListener('mouseover', (event) => {
+    const itemEl = event.target.closest('[data-tag-index]');
+    if (!itemEl) return;
+    tagSelectedIndex = Number(itemEl.dataset.tagIndex);
+    updateTagHighlight();
+  });
+  $('#tagCompletionBanner').addEventListener('click', (event) => {
+    const downloadBtn = event.target.closest('[data-tag-action="download"]');
+    if (downloadBtn) {
+      triggerTagDownload().catch(showCreativeError);
+      return;
+    }
+    const dismissBtn = event.target.closest('[data-tag-action="dismiss"]');
+    if (dismissBtn) {
+      $('#tagCompletionBanner').hidden = true;
+    }
+  });
+  document.addEventListener('mousedown', (event) => {
+    const dropdown = $('#tagAutocompleteDropdown');
+    if (dropdown && !dropdown.hidden && !dropdown.contains(event.target) && event.target !== activeTagInput) {
+      hideTagDropdown();
+    }
+  });
+  window.addEventListener('scroll', () => {
+    hideTagDropdown();
+  }, { passive: true });
   $('#creativeSlots').addEventListener('click', event => { const button = event.target.closest('[data-lock-slot]'); if (!button || !creativeState.project) return; creativeState.project = collectCreative(); const key = button.dataset.lockSlot; creativeState.project.slot_locks[key] = !creativeState.project.slot_locks[key]; renderCreativeProject(); queueCreativeSave(); });
   $('#creativeReferences').addEventListener('click', event => { const button = event.target.closest('[data-remove-reference]'); if (!button) return; creativeState.project.references.splice(Number(button.dataset.removeReference), 1); renderCreativeReferences(); queueCreativeSave(); });
   $('#creativeProjectList').addEventListener('click', async event => { const button = event.target.closest('[data-project-id]'); if (!button || button.dataset.projectId === creativeState.project?.project_id) return; try { clearTimeout(creativeState.saveTimer); await saveCreative(); creativeState.project = creativeState.projects.find(p => p.project_id === button.dataset.projectId); creativeState.review = null; creativeState.reviewProjectId = ''; renderCreativeProject(); } catch(error) { showCreativeError(error); } });
@@ -915,6 +1201,8 @@ CREATIVE_SCRIPT = r"""
   $('#sourcingGroups').addEventListener('click', async event => { const button = event.target.closest('[data-source-slot]'); if (!button || !creativeState.sourcing) return; const group = creativeState.sourcing.slots?.[button.dataset.sourceSlot]; const item = group?.candidates?.[Number(button.dataset.sourceIndex)]; if (!item) return; try { await addEntryToCreative(item, button.dataset.sourceSlot); renderSourcing(); } catch(error) { showCreativeError(error); } });
   $('#creativeBrief').addEventListener('input', () => { if (creativeState.sourcing) $('#sourcingRailStatus').textContent = '创作想法已变化，请重新取材。'; });
   $('#visionModel').addEventListener('change', updateVisionHint);
+  $('#wd14TaggerMode').addEventListener('change',updateWd14TaggerMode);
+  $('#wd14TaggerModel').addEventListener('change',updateWd14TaggerMode);
   $('#uploadResultImage').addEventListener('click', () => uploadResultImage().catch(showResultReviewError));
   $('#datasetProfile').addEventListener('change', event => { creativeState.datasetProfile = event.target.value; creativeState.datasetMessage = ''; renderResultGallery(); });
   $('#tagSelectedDataset').addEventListener('click', () => tagSelectedDataset().catch(showResultReviewError));
@@ -936,7 +1224,7 @@ CREATIVE_SCRIPT = r"""
   $('#branchReview').addEventListener('click', () => branchResultReview().catch(showResultReviewError));
   $('#applyIterationSuggestions').addEventListener('click', () => applyIterationSuggestions().catch(showCreativeError));
   $('#closeReview').addEventListener('click', () => { creativeState.review = null; $('#reviewProposal').hidden = true; });
-  document.querySelectorAll('[data-profile]').forEach(button => button.addEventListener('click', () => { creativeState.profile = button.dataset.profile; creativeState.project.target_profile = creativeState.profile; document.querySelectorAll('[data-profile]').forEach(b => b.classList.toggle('active', b === button)); renderOutput(); renderWorkflowProfiles(); queueCreativeSave(); }));
+  document.querySelectorAll('[data-profile]').forEach(button => button.addEventListener('click', () => { creativeState.profile = button.dataset.profile; creativeState.project.target_profile = creativeState.profile; document.querySelectorAll('[data-profile]').forEach(b => b.classList.toggle('active', b === button)); hideTagDropdown(); renderTagCompletionBanner(); renderOutput(); renderWorkflowProfiles(); queueCreativeSave(); }));
   $('#workflowProfile').addEventListener('change',()=>{ creativeState.workflowLoraPickerOpen=false; creativeState.workflowLoraQuery=''; creativeState.workflowLoraFolder=''; renderWorkflowProfiles(); });
   $('#workflowLowCost').addEventListener('change', renderWorkflowProfiles);
   $('#workflowControlList').addEventListener('change',()=>{ saveWorkflowControlsFromForm(); renderWorkflowControls(); });
@@ -957,11 +1245,7 @@ CREATIVE_SCRIPT = r"""
   $('#assistCreative').addEventListener('click', async () => { try { const payload=collectCreative(); if (!payload.brief_zh) throw new Error('请先写一段中文创作想法'); $('#assistCreative').disabled=true; $('#assistCreative').textContent='所选模型正在补全…'; creativeState.suggestion=await creativeJson('/api/creative/assist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({brief:payload.brief_zh,slots:payload.slots,slot_locks:payload.slot_locks,model:$('#lmModel').value,target_profile:creativeState.profile})}); $('#assistPreview').textContent=JSON.stringify(creativeState.suggestion.suggested_slots,null,2); $('#assistProposal').hidden=false; } catch(error) { showCreativeError(error); } finally { $('#assistCreative').disabled=false; $('#assistCreative').textContent='用所选模型补全空白项'; } });
   $('#applyAssist').addEventListener('click', () => { if (!creativeState.suggestion) return; creativeState.project.slots=creativeState.suggestion.suggested_slots; creativeState.suggestion=null; $('#assistProposal').hidden=true; renderCreativeProject(); queueCreativeSave(); });
   $('#cancelAssist').addEventListener('click', () => { creativeState.suggestion=null; $('#assistProposal').hidden=true; });
-  $('#discoverExternalModels').addEventListener('click', () => discoverExternalModels().catch(showCreativeError));
-  $('#saveExternalModel').addEventListener('click', () => saveExternalModel().catch(showCreativeError));
-  $('#cancelExternalModelEdit').addEventListener('click', () => { clearExternalModelForm(); $('#externalModelStatus').textContent='已取消编辑。'; });
-  $('#externalModelCandidates').addEventListener('click', event => { const button=event.target.closest('[data-use-external-model]'); if(!button) return; $('#externalModelName').value=button.dataset.useExternalModel; $('#externalModelStatus').textContent='已填入模型名称。确认是否支持看图，然后保存。'; });
-  $('#externalModelList').addEventListener('click', event => { const editButton=event.target.closest('[data-edit-external-model]'); if(editButton) { editExternalModel(editButton.dataset.editExternalModel); return; } const deleteButton=event.target.closest('[data-delete-external-model]'); if(deleteButton) deleteExternalModel(deleteButton.dataset.deleteExternalModel).catch(showCreativeError); });
+  $('#openModelEndpointSettings').addEventListener('click', () => { window.openModelEndpoints?.(); });
 
   $('#results').addEventListener('click', event => {
     const add = event.target.closest('[data-creative-add]'); if (add) { const card=add.closest('[data-result-index]'); const item=currentResults[Number(card.dataset.resultIndex)]; const slot=card.querySelector('[data-creative-slot]').value; addEntryToCreative(item,slot).catch(showCreativeError); return; }

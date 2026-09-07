@@ -180,7 +180,10 @@ def test_web_capture_api_saves_link_only_source_and_exposes_page_marker(settings
         assert captures.json()[0]["title"] == "Civitai 提示词参考"
         media = client.get(f"/api/web-captures/{saved.json()['capture_id']}/media")
         assert media.status_code == 404
-        assert 'id="sourceCaptureForm"' in client.get("/").text
+        html = client.get("/").text
+        assert 'id="sourceCaptureForm"' in html
+        assert "source-delete-btn" in html
+        assert "capture-delete-btn" in html
 
     def oversized(_url: str, limit: int) -> FetchResult:
         return FetchResult(
@@ -198,3 +201,162 @@ def test_web_capture_api_saves_link_only_source_and_exposes_page_marker(settings
             safety="sfw",
             license_name="unknown",
         )
+
+
+def test_delete_git_preset_source_rejected(source_tree) -> None:
+    app = create_app(source_tree)
+    with TestClient(app) as client:
+        res = client.delete("/api/sources/clio-style-preview")
+        assert res.status_code == 400
+        assert "内置资料库不能在页面删除" in res.json()["detail"]
+
+        res2 = client.delete("/api/sources/krea-open-prompts")
+        assert res2.status_code == 400
+        assert "内置资料库不能在页面删除" in res2.json()["detail"]
+
+        clio_dir = source_tree.git_sources_root / "clio-style-preview"
+        assert clio_dir.is_dir()
+        assert (clio_dir / "styles.json").exists()
+
+
+def test_delete_nonexistent_source_returns_404(source_tree) -> None:
+    app = create_app(source_tree)
+    with TestClient(app) as client:
+        res = client.delete("/api/sources/web-nonexistent")
+        assert res.status_code == 404
+        assert "不存在" in res.json()["detail"]
+
+
+def test_delete_custom_source_with_marks_retention_and_purge(settings) -> None:
+    app = create_app(settings)
+    database = PromptDatabase(settings.database_path)
+    with TestClient(app) as client:
+        saved = client.post(
+            "/api/web-captures",
+            json={
+                "url": "https://civitai.com/models/999/test-model",
+                "title": "测试模型网页资料",
+                "note": "测试检索关键词 unique_keyword_alpha",
+                "safety": "sfw",
+                "license_name": "MIT",
+            },
+        )
+        assert saved.status_code == 201
+        capture = saved.json()
+        capture_id = capture["capture_id"]
+        source_id = capture["source_id"]
+
+        capture_dir = settings.web_sources_root / capture_id
+        test_file = capture_dir / "extra.txt"
+        test_file.write_text("extra cached file", encoding="utf-8")
+
+        database.save_mark(
+            source_id=source_id,
+            external_id=capture_id,
+            favorite=True,
+            rating=5,
+            note="人工优质标记",
+        )
+
+        assert len(database.search("unique_keyword_alpha")) == 1
+
+        res = client.delete(f"/api/sources/{source_id}")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["deleted"] is True
+        assert data["deleted_entries"] == 1
+        assert data["deleted_files"] >= 2
+        assert data["retained_marks"] == 1
+        assert data["purged_marks"] == 0
+
+        assert database.get_source(source_id) is None
+        assert len(database.search("unique_keyword_alpha")) == 0
+        assert not capture_dir.exists()
+
+        with database.connect() as conn:
+            marks = conn.execute(
+                "SELECT * FROM user_marks WHERE source_id = ?",
+                (source_id,),
+            ).fetchall()
+            assert len(marks) == 1
+
+        # Re-add to test purge_marks=True
+        saved2 = client.post(
+            "/api/web-captures",
+            json={
+                "url": "https://civitai.com/models/999/test-model",
+                "title": "测试模型网页资料2",
+                "note": "重新添加 unique_keyword_alpha",
+                "safety": "sfw",
+                "license_name": "MIT",
+            },
+        )
+        assert saved2.status_code == 201
+
+        res_purge = client.delete(f"/api/sources/{source_id}?purge_marks=true")
+        assert res_purge.status_code == 200
+        data_purge = res_purge.json()
+        assert data_purge["purged_marks"] == 1
+        assert data_purge["retained_marks"] == 0
+
+        with database.connect() as conn:
+            marks_purged = conn.execute(
+                "SELECT * FROM user_marks WHERE source_id = ?",
+                (source_id,),
+            ).fetchall()
+            assert len(marks_purged) == 0
+
+
+def test_delete_single_web_capture(settings) -> None:
+    app = create_app(settings)
+    database = PromptDatabase(settings.database_path)
+    with TestClient(app) as client:
+        res1 = client.post(
+            "/api/web-captures",
+            json={
+                "url": "https://civitai.com/models/111/one",
+                "title": "摘录一",
+                "note": "笔记一 unique_token_one",
+                "safety": "sfw",
+                "license_name": "MIT",
+            },
+        )
+        res2 = client.post(
+            "/api/web-captures",
+            json={
+                "url": "https://civitai.com/models/222/two",
+                "title": "摘录二",
+                "note": "笔记二 unique_token_two",
+                "safety": "sfw",
+                "license_name": "MIT",
+            },
+        )
+        cap1 = res1.json()
+        cap2 = res2.json()
+        source_id = cap1["source_id"]
+        assert cap2["source_id"] == source_id
+
+        del1 = client.delete(f"/api/web-captures/{cap1['capture_id']}")
+        assert del1.status_code == 200
+        assert del1.json()["source_deleted"] is False
+        assert not (settings.web_sources_root / cap1["capture_id"]).exists()
+        assert (settings.web_sources_root / cap2["capture_id"]).exists()
+        assert len(database.search("unique_token_one")) == 0
+        assert len(database.search("unique_token_two")) == 1
+
+        src = database.get_source(source_id)
+        assert src is not None
+        assert src["entry_count"] == 1
+
+        del2 = client.delete(f"/api/web-captures/{cap2['capture_id']}")
+        assert del2.status_code == 200
+        assert del2.json()["source_deleted"] is True
+        assert not (settings.web_sources_root / cap2["capture_id"]).exists()
+        assert len(database.search("unique_token_two")) == 0
+        assert database.get_source(source_id) is None
+
+        del_missing = client.delete(f"/api/web-captures/{cap1['capture_id']}")
+        assert del_missing.status_code == 404
+
+        del_invalid = client.delete("/api/web-captures/invalid-id")
+        assert del_invalid.status_code == 422

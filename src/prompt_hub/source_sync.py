@@ -15,6 +15,9 @@ if TYPE_CHECKING:
 
 Reindexer = Callable[[], Mapping[str, int]]
 
+GIT_TIMEOUT_SECONDS = 120.0
+CLONE_TIMEOUT_SECONDS = 1800.0
+
 
 class SyncProgress(Protocol):
     def update(self, current: int, total: int, message: str = "") -> None: ...
@@ -52,11 +55,14 @@ class SourceSyncService:
         if not sources:
             msg = "没有可更新的资料源"
             raise ValueError(msg)
+        clone_missing = bool(payload.get("clone_missing", False))
         results = []
         for index, spec in enumerate(sources, start=1):
-            context.update(index - 1, len(sources) + 1, f"检查 {spec.name}")
-            results.append(self._sync_one(spec))
-            context.update(index, len(sources) + 1, f"已检查 {index}/{len(sources)} 个资料源")
+            context.update(
+                index - 1, len(sources) + 1, _progress_label(spec, clone_missing=clone_missing)
+            )
+            results.append(self._sync_one(spec, clone_missing=clone_missing))
+            context.update(index, len(sources) + 1, f"已处理 {index}/{len(sources)} 个资料源")
         context.update(len(sources), len(sources) + 1, "重建本地资料索引")
         counts = dict(self._reindexer())
         context.update(len(sources) + 1, len(sources) + 1, "资料源与索引已更新")
@@ -64,10 +70,14 @@ class SourceSyncService:
             "sources": results,
             "updated": sum(item["status"] == "updated" for item in results),
             "unchanged": sum(item["status"] == "unchanged" for item in results),
+            "cloned": sum(item["status"] == "cloned" for item in results),
             "skipped": sum(str(item["status"]).startswith("skipped") for item in results),
             "failed": sum(item["status"] == "failed" for item in results),
             "entry_counts": counts,
         }
+
+    def configured_source_ids(self) -> set[str]:
+        return {spec.source_id for spec in self._configured_sources()}
 
     def _configured_sources(self) -> list[SourceSpec]:
         return list(self._sources) if self._sources is not None else discover_sources(self.settings)
@@ -94,8 +104,49 @@ class SourceSyncService:
             dirty=dirty,
         )
 
-    def _sync_one(self, spec: SourceSpec) -> dict[str, Any]:
+    def clone(self, source_id: str) -> dict[str, Any]:
+        """Fetch one configured source that is not present on this Mac yet."""
+        spec = next(
+            (item for item in self._configured_sources() if item.source_id == source_id), None
+        )
+        if spec is None:
+            msg = "资料源不在预设清单中"
+            raise ValueError(msg)
+        return self._clone_one(spec)
+
+    def _clone_one(self, spec: SourceSpec) -> dict[str, Any]:
+        root = self.settings.git_sources_root
+        if not spec.path.is_relative_to(root):
+            return _result(spec, "failed", message="资料源路径不在本地来源目录内，已拒绝拉取")
+        if spec.path.exists() and (not spec.path.is_dir() or any(spec.path.iterdir())):
+            return _result(spec, "failed", message="本地目录已存在且不为空，未覆盖")
+        root.mkdir(parents=True, exist_ok=True)
+        try:
+            _git(
+                root,
+                "clone",
+                "--",
+                spec.url,
+                str(spec.path),
+                timeout=CLONE_TIMEOUT_SECONDS,
+            )
+        except SourceSyncError as error:
+            return _result(spec, "failed", message=str(error))
+        except subprocess.TimeoutExpired:
+            return _result(spec, "failed", message="拉取超时，请检查网络后重试")
+        cloned = self._source_status(spec)
+        if cloned["status"] in {"missing", "not_git", "failed"}:
+            return {
+                **cloned,
+                "status": "failed",
+                "message": f"拉取结束但本地仓库不可用：{cloned['message'] or cloned['status']}",
+            }
+        return {**cloned, "status": "cloned", "message": "已拉取到本地"}
+
+    def _sync_one(self, spec: SourceSpec, *, clone_missing: bool = False) -> dict[str, Any]:
         current = self._source_status(spec)
+        if current["status"] == "missing" and clone_missing:
+            return self._clone_one(spec)
         if current["status"] in {"missing", "not_git", "failed"}:
             return current
         if current["dirty"]:
@@ -121,7 +172,12 @@ class SourceSyncError(RuntimeError):
     pass
 
 
-def _git(path: Path, *arguments: str, check: bool = True) -> str:
+def _git(
+    path: Path,
+    *arguments: str,
+    check: bool = True,
+    timeout: float = GIT_TIMEOUT_SECONDS,
+) -> str:
     executable = shutil.which("git")
     if executable is None:
         raise SourceSyncError("找不到 Git 可执行文件")
@@ -131,12 +187,18 @@ def _git(path: Path, *arguments: str, check: bool = True) -> str:
         check=False,
         capture_output=True,
         text=True,
-        timeout=120,
+        timeout=timeout,
     )
     if result.returncode and check:
         detail = (result.stderr or result.stdout).strip()[:600]
         raise SourceSyncError(detail or f"Git 命令失败：{' '.join(arguments)}")
     return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def _progress_label(spec: SourceSpec, *, clone_missing: bool) -> str:
+    if clone_missing and not spec.path.is_dir():
+        return f"正在拉取 {spec.name}，首次下载可能需要几分钟"
+    return f"检查 {spec.name}"
 
 
 def _result(

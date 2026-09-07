@@ -16,7 +16,10 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
     app = create_app(source_tree)
 
     with TestClient(app) as client:
-        assert client.get("/api/health").json()["status"] == "ok"
+        assert ((health := client.get("/api/health").json())["status"], health["service"]) == (
+            "ok",
+            "soda-prompt-hub",
+        )
         assert client.get("/api/stats").json()["entries"] > 5
         assert len(client.get("/api/sources").json()) == 4
         result = client.get("/api/search", params={"query": "gothic", "kind": "style"})

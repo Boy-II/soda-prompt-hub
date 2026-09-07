@@ -11,7 +11,9 @@ from PIL import Image
 from prompt_hub.api import create_app
 from prompt_hub.local_model import LocalModelError, analyze_result_image, organize_slots
 from prompt_hub.model_connections import (
+    ENDPOINT_ID_PATTERN,
     MAX_API_KEY_CHARS,
+    MODEL_REF_PATTERN,
     ModelConnectionError,
     ModelConnectionStore,
     _parse_model_names,
@@ -22,46 +24,96 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
-def _connection_payload(**overrides) -> dict[str, object]:
+def _endpoint_payload(**overrides) -> dict[str, object]:
     return {
         "label": "绘图 API",
         "provider": "openai_compatible",
         "base_url": "https://models.example.test/v1",
         "api_key": "secret-model-key",
-        "model_name": "provider/real-model-name",
-        "supports_vision": False,
         **overrides,
     }
 
 
-def test_connection_store_is_private_and_public_values_are_redacted(settings) -> None:
+def test_endpoint_store_is_private_and_public_values_are_redacted(settings) -> None:
     store = ModelConnectionStore(settings)
-    saved = store.save(_connection_payload())
+    saved = store.save_endpoint(_endpoint_payload())
+    store.save_endpoint_models(
+        saved["id"],
+        [{"name": "provider/real-model-name", "enabled": True, "supports_vision": False}],
+    )
 
     assert store.path == settings.library_root / "private" / "model-connections.json"
     assert stat.S_IMODE(store.path.stat().st_mode) == 0o600
     assert saved["has_api_key"] is True
     assert "api_key" not in saved
-    assert "secret-model-key" not in json.dumps(store.list_public())
-    assert store.resolve(saved["id"]).api_key == "secret-model-key"
+    public_json = json.dumps(store.list_public())
+    assert "secret-model-key" not in public_json
+    assert store.resolve(f"{saved['id']}::provider/real-model-name").api_key == "secret-model-key"
 
 
-def test_connection_update_preserves_secret_when_key_is_blank(settings) -> None:
+def test_endpoint_update_preserves_secret_when_key_is_blank(settings) -> None:
     store = ModelConnectionStore(settings)
-    first = store.save(_connection_payload())
-    updated = store.save(
-        _connection_payload(
-            connection_id=first["id"],
+    first = store.save_endpoint(_endpoint_payload())
+    updated = store.save_endpoint(
+        _endpoint_payload(
+            endpoint_id=first["id"],
             label="新的显示名称",
             api_key="",
-            supports_vision=True,
         )
     )
 
     assert updated["id"] == first["id"]
     assert updated["label"] == "新的显示名称"
-    assert updated["supports_vision"] is True
-    assert store.resolve(first["id"]).api_key == "secret-model-key"
+    assert store.get_endpoint(first["id"]).api_key == "secret-model-key"
+
+
+def test_endpoint_update_requires_new_key_when_base_url_changes(settings) -> None:
+    store = ModelConnectionStore(settings)
+    first = store.save_endpoint(_endpoint_payload())
+
+    with pytest.raises(ModelConnectionError, match=r"地址.*API Key|重新输入"):
+        store.save_endpoint(
+            _endpoint_payload(
+                endpoint_id=first["id"],
+                base_url="https://other.example.test/v1",
+                api_key="",
+            )
+        )
+
+    assert store.get_endpoint(first["id"]).base_url == "https://models.example.test/v1"
+    assert store.get_endpoint(first["id"]).api_key == "secret-model-key"
+
+
+def test_endpoint_update_accepts_new_key_when_base_url_changes(settings) -> None:
+    store = ModelConnectionStore(settings)
+    first = store.save_endpoint(_endpoint_payload())
+
+    updated = store.save_endpoint(
+        _endpoint_payload(
+            endpoint_id=first["id"],
+            base_url="https://other.example.test/v1",
+            api_key="new-secret-key",
+        )
+    )
+
+    assert updated["base_url"] == "https://other.example.test/v1"
+    assert store.get_endpoint(first["id"]).api_key == "new-secret-key"
+
+
+def test_endpoint_without_saved_key_can_change_base_url_without_key(settings) -> None:
+    store = ModelConnectionStore(settings)
+    first = store.save_endpoint(_endpoint_payload(api_key=""))
+
+    updated = store.save_endpoint(
+        _endpoint_payload(
+            endpoint_id=first["id"],
+            base_url="http://127.0.0.1:11434/v1",
+            api_key="",
+        )
+    )
+
+    assert updated["base_url"] == "http://127.0.0.1:11434/v1"
+    assert store.get_endpoint(first["id"]).api_key == ""
 
 
 def test_connection_store_reports_damaged_private_config(settings) -> None:
@@ -78,6 +130,12 @@ def test_connection_store_rejects_unknown_delete(settings) -> None:
 
     with pytest.raises(ModelConnectionError, match="外部模型连接不存在"):
         store.delete("external-0123456789abcdef")
+
+
+def test_endpoint_id_pattern_does_not_accept_compound_model_refs() -> None:
+    assert ENDPOINT_ID_PATTERN.fullmatch("external-0123456789abcdef")
+    assert not ENDPOINT_ID_PATTERN.fullmatch("external-0123456789abcdef::model")
+    assert MODEL_REF_PATTERN.fullmatch("external-0123456789abcdef::model")
 
 
 @pytest.mark.parametrize(
@@ -99,6 +157,184 @@ def test_model_base_url_allows_https_and_loopback_http() -> None:
         "https://api.example.test/v1"
     )
     assert validate_model_base_url("http://127.0.0.1:1234/v1") == ("http://127.0.0.1:1234/v1")
+    assert validate_model_base_url("http://127.0.0.1:11434/v1") == ("http://127.0.0.1:11434/v1")
+
+
+def test_v1_config_migrates_to_v2_endpoint_groups(settings) -> None:
+    path = settings.library_root / "private" / "model-connections.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "format": "soda-prompt-hub-model-connections-v1",
+                "connections": [
+                    {
+                        "id": "external-1111111111111111",
+                        "label": "LM Studio",
+                        "provider": "openai_compatible",
+                        "base_url": "http://127.0.0.1:1234/v1/",
+                        "api_key": "",
+                        "model_name": "local-a",
+                        "supports_vision": False,
+                    },
+                    {
+                        "id": "external-2222222222222222",
+                        "label": "LM Studio second",
+                        "provider": "openai_compatible",
+                        "base_url": "http://127.0.0.1:1234/v1",
+                        "api_key": "saved-key",
+                        "model_name": "local-b",
+                        "supports_vision": True,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    store = ModelConnectionStore(settings)
+    endpoints = store.list_endpoints()
+
+    assert path.read_text(encoding="utf-8").count("soda-prompt-hub-model-connections-v1") == 1
+    assert len(endpoints) == 1
+    assert endpoints[0].endpoint_id == "external-1111111111111111"
+    assert endpoints[0].provider == "lm_studio"
+    assert endpoints[0].api_key == "saved-key"
+    assert [
+        (model.name, model.enabled, model.supports_vision) for model in endpoints[0].models
+    ] == [
+        ("local-a", True, False),
+        ("local-b", True, True),
+    ]
+    assert [model.label for model in endpoints[0].models] == ["LM Studio", "LM Studio second"]
+    legacy = store.resolve("external-2222222222222222")
+    assert legacy is not None
+    assert legacy.model_name == "local-b"
+
+
+def test_legacy_bare_id_does_not_fall_back_to_another_enabled_model(settings) -> None:
+    path = settings.library_root / "private" / "model-connections.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "format": "soda-prompt-hub-model-connections-v1",
+                "connections": [
+                    {
+                        "id": "external-1111111111111111",
+                        "label": "Model A",
+                        "provider": "openai_compatible",
+                        "base_url": "https://models.example.test/v1",
+                        "api_key": "shared-key",
+                        "model_name": "model-a",
+                    },
+                    {
+                        "id": "external-2222222222222222",
+                        "label": "Model B",
+                        "provider": "openai_compatible",
+                        "base_url": "https://models.example.test/v1",
+                        "api_key": "shared-key",
+                        "model_name": "model-b",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = ModelConnectionStore(settings)
+    endpoint_id = store.list_endpoints()[0].endpoint_id
+
+    store.save_endpoint_models(
+        endpoint_id,
+        [
+            {"name": "model-a", "enabled": False},
+            {"name": "model-b", "enabled": True},
+        ],
+    )
+
+    assert store.resolve("external-1111111111111111") is None
+    assert store.resolve("external-2222222222222222").model_name == "model-b"
+
+
+def test_v1_migration_keeps_different_keys_as_separate_endpoints(settings) -> None:
+    path = settings.library_root / "private" / "model-connections.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "format": "soda-prompt-hub-model-connections-v1",
+                "connections": [
+                    {
+                        "id": "external-1111111111111111",
+                        "label": "Account A",
+                        "provider": "openai_compatible",
+                        "base_url": "https://models.example.test/v1",
+                        "api_key": "key-a",
+                        "model_name": "model-a",
+                    },
+                    {
+                        "id": "external-2222222222222222",
+                        "label": "Account B",
+                        "provider": "openai_compatible",
+                        "base_url": "https://models.example.test/v1",
+                        "api_key": "key-b",
+                        "model_name": "model-b",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    endpoints = ModelConnectionStore(settings).list_endpoints()
+
+    assert len(endpoints) == 2
+    assert {endpoint.api_key for endpoint in endpoints} == {"key-a", "key-b"}
+
+
+def test_new_endpoint_with_same_base_url_does_not_overwrite_existing_endpoint(settings) -> None:
+    store = ModelConnectionStore(settings)
+    company = store.save_endpoint(_endpoint_payload(label="公司账号", api_key="key-COMPANY"))
+    store.save_endpoint_models(
+        company["id"],
+        [{"name": "gpt-4o", "enabled": True, "supports_vision": True}],
+    )
+
+    personal = store.save_endpoint(_endpoint_payload(label="个人账号", api_key="key-PERSONAL"))
+
+    endpoints = store.list_endpoints()
+    assert company["id"] != personal["id"]
+    assert len(endpoints) == 2
+    assert {endpoint.label: endpoint.api_key for endpoint in endpoints} == {
+        "公司账号": "key-COMPANY",
+        "个人账号": "key-PERSONAL",
+    }
+    assert store.resolve(f"{company['id']}::gpt-4o").api_key == "key-COMPANY"
+
+
+def test_resolve_accepts_bare_endpoint_and_compound_model_ids(settings) -> None:
+    store = ModelConnectionStore(settings)
+    endpoint = store.save_endpoint(_endpoint_payload())
+    store.save_endpoint_models(
+        endpoint["id"],
+        [
+            {"name": "disabled-model", "enabled": False, "supports_vision": False},
+            {"name": "enabled-text", "enabled": True, "supports_vision": False},
+            {"name": "enabled-vision", "enabled": True, "supports_vision": True},
+        ],
+    )
+
+    bare = store.resolve(endpoint["id"])
+    compound = store.resolve(f"{endpoint['id']}::enabled-vision")
+
+    assert bare is not None
+    assert bare.connection_id == f"{endpoint['id']}::enabled-text"
+    assert bare.model_name == "enabled-text"
+    assert compound is not None
+    assert compound.connection_id == f"{endpoint['id']}::enabled-vision"
+    assert compound.supports_vision is True
+    store.delete(endpoint["id"])
+    assert store.resolve(endpoint["id"]) is None
 
 
 def test_discovery_uses_backend_fetcher_without_storing_key(settings) -> None:
@@ -110,14 +346,52 @@ def test_discovery_uses_backend_fetcher_without_storing_key(settings) -> None:
 
     store = ModelConnectionStore(settings, fetcher=fetcher)
     assert store.discover("https://models.example.test/v1", "temporary-key") == [
-        "model-a",
-        "model-b",
+        {"id": "model-a", "name": "model-a", "supports_vision": None},
+        {"id": "model-b", "name": "model-b", "supports_vision": None},
     ]
     assert captured == {
         "base_url": "https://models.example.test/v1",
         "api_key": "temporary-key",
     }
     assert not store.path.exists()
+
+
+def test_discovery_with_saved_key_rejects_request_base_url_mismatch(settings) -> None:
+    called = False
+
+    def fetcher(_base_url: str, _api_key: str) -> list[str]:
+        nonlocal called
+        called = True
+        return []
+
+    store = ModelConnectionStore(settings, fetcher=fetcher)
+    endpoint = store.save_endpoint(_endpoint_payload())
+
+    with pytest.raises(ModelConnectionError, match="对应的模型服务地址"):
+        store.discover("https://evil.example.test/v1", "", endpoint_id=str(endpoint["id"]))
+
+    assert called is False
+
+
+def test_discovery_with_saved_key_uses_saved_endpoint_url(settings) -> None:
+    captured = {}
+
+    def fetcher(base_url: str, api_key: str) -> list[str]:
+        captured.update(base_url=base_url, api_key=api_key)
+        return ["model-a"]
+
+    store = ModelConnectionStore(settings, fetcher=fetcher)
+    endpoint = store.save_endpoint(_endpoint_payload())
+
+    assert store.discover(
+        "https://models.example.test/v1",
+        "",
+        endpoint_id=str(endpoint["id"]),
+    ) == [{"id": "model-a", "name": "model-a", "supports_vision": None}]
+    assert captured == {
+        "base_url": "https://models.example.test/v1",
+        "api_key": "secret-model-key",
+    }
 
 
 def test_discovery_rejects_overlong_api_key_before_request(settings) -> None:
@@ -166,12 +440,32 @@ def test_model_connection_api_never_returns_secret(settings, monkeypatch) -> Non
         ],
     )
     with TestClient(create_app(settings)) as client:
-        saved = client.post("/api/model-connections", json=_connection_payload())
+        saved = client.post("/api/model-endpoints", json=_endpoint_payload())
         assert saved.status_code == 201
-        connection_id = saved.json()["id"]
+        endpoint_id = saved.json()["id"]
         assert "secret-model-key" not in saved.text
+        models_update = client.post(
+            f"/api/model-endpoints/{endpoint_id}/models",
+            json={
+                "models": [
+                    {
+                        "name": "provider/real-model-name",
+                        "label": "Real Model",
+                        "enabled": True,
+                        "supports_vision": False,
+                    },
+                    {
+                        "name": "disabled-model",
+                        "label": "",
+                        "enabled": False,
+                        "supports_vision": True,
+                    },
+                ]
+            },
+        )
+        assert models_update.status_code == 200
 
-        listed = client.get("/api/model-connections")
+        listed = client.get("/api/model-endpoints")
         assert listed.status_code == 200
         assert "secret-model-key" not in listed.text
         assert listed.json()[0]["has_api_key"] is True
@@ -180,17 +474,29 @@ def test_model_connection_api_never_returns_secret(settings, monkeypatch) -> Non
         assert models["local_available"] is True
         assert [item["id"] for item in models["models"]] == [
             "local-qwen",
-            connection_id,
+            f"{endpoint_id}::provider/real-model-name",
         ]
+        assert models["external_count"] == 1
 
-        deleted = client.delete(f"/api/model-connections/{connection_id}")
+        assert client.get("/api/model-connections").status_code == 404
+        missing = client.post(
+            "/api/model-endpoints",
+            json=_endpoint_payload(endpoint_id="external-ffffffffffffffff"),
+        )
+        assert missing.status_code == 404
+        deleted = client.delete(f"/api/model-endpoints/{endpoint_id}")
         assert deleted.status_code == 200
-        assert client.get("/api/model-connections").json() == []
+        assert client.get("/api/model-endpoints").json() == []
 
 
 def test_external_text_request_uses_real_model_name_and_secret(settings, monkeypatch) -> None:
     store = ModelConnectionStore(settings)
-    saved = store.save(_connection_payload())
+    endpoint = store.save_endpoint(_endpoint_payload())
+    store.save_endpoint_models(
+        endpoint["id"],
+        [{"name": "provider/real-model-name", "enabled": True, "supports_vision": False}],
+    )
+    model_id = f"{endpoint['id']}::provider/real-model-name"
     captured = {}
 
     def fake_request(url, **kwargs):
@@ -212,7 +518,7 @@ def test_external_text_request_uses_real_model_name_and_secret(settings, monkeyp
         brief="一位成年画师",
         slots={},
         locks={},
-        model=saved["id"],
+        model=model_id,
         target_profile="anima",
         connections=store,
     )
@@ -223,7 +529,7 @@ def test_external_text_request_uses_real_model_name_and_secret(settings, monkeyp
     assert captured["allow_redirects"] is False
     assert captured["response_limit"] == 4 * 1024 * 1024
     assert captured["service_name"] == "外部模型服务"
-    assert result["model"] == saved["id"]
+    assert result["model"] == model_id
 
 
 def test_external_vision_request_uses_openai_compatible_shape(
@@ -232,7 +538,12 @@ def test_external_vision_request_uses_openai_compatible_shape(
     monkeypatch,
 ) -> None:
     store = ModelConnectionStore(settings)
-    saved = store.save(_connection_payload(supports_vision=True))
+    endpoint = store.save_endpoint(_endpoint_payload())
+    store.save_endpoint_models(
+        endpoint["id"],
+        [{"name": "provider/real-model-name", "enabled": True, "supports_vision": True}],
+    )
+    model_id = f"{endpoint['id']}::provider/real-model-name"
     image_path = tmp_path / "result.png"
     Image.new("RGB", (64, 64), "teal").save(image_path)
     captured = {}
@@ -264,7 +575,7 @@ def test_external_vision_request_uses_openai_compatible_shape(
     result = analyze_result_image(
         image_path=image_path,
         project={"brief_zh": "测试"},
-        model=saved["id"],
+        model=model_id,
         connections=store,
     )
 

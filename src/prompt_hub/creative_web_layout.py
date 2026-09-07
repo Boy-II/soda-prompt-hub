@@ -26,21 +26,8 @@ CREATIVE_HTML = r"""
           <strong>建议预览（尚未写入）</strong><pre id="assistPreview"></pre>
           <div class="assist-proposal-actions"><button class="rail-button primary" id="applyAssist">确认应用</button><button class="rail-button" id="cancelAssist">取消</button></div>
         </div>
-        <details class="external-model-settings" id="externalModelSettings">
-          <summary>连接外部模型（可选）</summary>
-          <p>本机 LM Studio 仍是默认选择。这里只接入 OpenAI-compatible API，密钥保存在个人文件夹，不会显示在网页响应里。</p>
-          <label>服务名称<input id="externalModelLabel" name="external-model-label" maxlength="160" autocomplete="off" placeholder="例如：OpenRouter"></label>
-          <label>Base URL<input id="externalModelBaseUrl" name="external-model-base-url" maxlength="2048" inputmode="url" autocomplete="url" autocapitalize="none" spellcheck="false" placeholder="https://服务地址/v1"></label>
-          <label>API Key<input id="externalModelApiKey" name="external-model-api-key" type="password" maxlength="12000" autocomplete="new-password" autocapitalize="none" spellcheck="false" data-1p-ignore data-lpignore="true" placeholder="只在保存时提交到本机"></label>
-          <button class="external-model-button" id="discoverExternalModels" type="button">读取可用模型</button>
-          <div class="external-model-candidates" id="externalModelCandidates"></div>
-          <label>模型名称<input id="externalModelName" maxlength="300" placeholder="可从上方选择，也可以手工填写"></label>
-          <label class="external-model-check"><input id="externalModelVision" type="checkbox"><span>这个模型可以看图</span></label>
-          <button class="external-model-button primary" id="saveExternalModel" type="button">保存这个模型</button>
-          <button class="external-model-button" id="cancelExternalModelEdit" type="button" hidden>取消编辑</button>
-          <p class="external-model-status" id="externalModelStatus">尚未连接外部模型</p>
-          <div class="external-model-list" id="externalModelList"></div>
-        </details>
+        <p class="lm-status">外部模型在“设备连接 › 模型接入”里配置，可保存多组端点并勾选启用模型。</p>
+        <button class="rail-button" id="openModelEndpointSettings" type="button">打开模型接入</button>
       </section>
       <section class="rail-section">
         <p class="section-label">已保存配方</p>
@@ -76,7 +63,9 @@ CREATIVE_HTML = r"""
       </section>
       <section class="creative-subsection">
         <div class="creative-subsection-head"><h2>把画面拆成七部分</h2><span>不想被模型改动的内容可以锁定</span></div>
+        <div class="tag-completion-banner" id="tagCompletionBanner" hidden></div>
         <div class="slot-grid" id="creativeSlots"></div>
+        <div class="tag-autocomplete-dropdown" id="tagAutocompleteDropdown" hidden></div>
       </section>
       <section class="creative-subsection">
         <div class="creative-subsection-head"><h2>视觉与资料参考</h2><span>从提示词库或 OC 角色卡加入</span></div>
@@ -93,11 +82,13 @@ CREATIVE_HTML = r"""
         <p class="result-review-status" id="resultModelHint">正在读取可用的视觉模型…</p>
         <div class="result-gallery" id="resultGallery"></div>
         <div class="wd14-toolbar">
-          <div><strong>WD14 · 生成 Anima 标签草稿</strong><p>只处理已经选中的图片。自动结果需要人工检查，一次最多处理 24 张。</p></div>
-          <label>普通标签最低可信度<input id="wd14GeneralThreshold" type="number" min="0" max="1" step="0.05" value="0.35"></label>
-          <label>角色标签最低可信度<input id="wd14CharacterThreshold" type="number" min="0" max="1" step="0.05" value="0.85"></label>
+          <div class="wd14-toolbar-intro"><strong>WD14 · 生成 Anima 标签草稿</strong><p>只处理已经选中的图片。自动结果需要人工检查，一次最多处理 24 张。</p></div>
+          <label>打标方式<select id="wd14TaggerMode"><option value="wd14">WD14 本地模型</option><option value="model">使用模型</option></select></label>
+          <label id="wd14TaggerModelWrap" hidden>用于打标的模型<select id="wd14TaggerModel"><option value="">正在读取视觉模型……</option></select></label>
+          <div class="wd14-thresholds" id="wd14Thresholds"><label>普通标签最低可信度<input id="wd14GeneralThreshold" type="number" min="0" max="1" step="0.05" value="0.35"></label><label>角色标签最低可信度<input id="wd14CharacterThreshold" type="number" min="0" max="1" step="0.05" value="0.85"></label></div>
           <button id="tagSelectedDataset" disabled>为已选图片生成标签草稿</button>
         </div>
+        <p class="result-review-status" id="wd14TaggerHint">默认使用 WD14；也可以改用已连接的视觉模型生成 Booru 标签草稿。</p>
         <div class="dataset-export-panel">
           <label>导出哪种说明文字<select id="datasetProfile"><option value="anima">Anima 英文标签</option><option value="krea2">Krea 2 英文自然语言</option></select></label>
           <p id="datasetExportStatus">先在上方手动精选结果图；导出不会改动原图。</p>

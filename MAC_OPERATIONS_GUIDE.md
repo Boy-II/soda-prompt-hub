@@ -19,9 +19,11 @@
 
 页面地址：<http://127.0.0.1:8765/>。
 
-关闭：双击 `$HOME/Documents/Codex/soda-person/停止-Prompt-Hub.command`。不要直接强制退出正在显示“扫描中”“打标中”或“生成草稿中”的任务；先在页面点取消，等状态停止后再关闭。
+三个脚本的原件都在本仓库 `deploy/mac/` 目录下（`启动-Prompt-Hub.command`、`停止-Prompt-Hub.command`、`诊断-Prompt-Hub.command`）。第一次使用时把它们拷贝到 `$HOME/Documents/Codex/soda-person/` 再双击；脚本会从自身位置向上找仓库，拷到仓库外时回退到环境变量 `PROMPT_HUB_REPO` 或默认路径 `/Volumes/Data/Hub/soda-prompt-hub`。仓库升级后记得把新版脚本重新拷贝过去。
 
-如果页面打不开，先双击 `$HOME/Documents/Codex/soda-person/诊断-Prompt-Hub.command`。它会检查数据库、embedding 索引、WD14、磁盘空间和 8765 服务。
+关闭：双击 `$HOME/Documents/Codex/soda-person/停止-Prompt-Hub.command`。它会先检查后台是否还有排队或运行中的任务：有任务时会列出类型和进度并要求输入 `yes` 确认；确认后才先 TERM 优雅退出，等 10 秒仍不退出的再询问是否强制结束。即便如此，仍建议先在页面取消“扫描中”“打标中”或“生成草稿中”的任务，等状态停止后再关闭。
+
+如果页面打不开，先双击 `$HOME/Documents/Codex/soda-person/诊断-Prompt-Hub.command`。它会先确认仓库路径可达、uv 可用，然后原样展示 `prompt-hub doctor` 的检查结果：数据库、embedding 索引、WD14、磁盘空间和 8765 服务。
 
 ## 一次绘图创作
 

@@ -3,12 +3,18 @@ from __future__ import annotations
 import json
 from io import BytesIO
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from prompt_hub.api import create_app
 from prompt_hub.creative import apply_result_review
-from prompt_hub.local_model import analyze_result_image, draft_krea2_caption
+from prompt_hub.local_model import (
+    LocalModelError,
+    analyze_result_image,
+    draft_anima_tags,
+    draft_krea2_caption,
+)
 from prompt_hub.result_media import resolve_result_image
 
 
@@ -259,3 +265,62 @@ def test_local_vision_krea2_caption_uses_native_chat_and_english(tmp_path, monke
     assert "previous reviewed caption" in captured["payload"]["input"][1]["content"]
     assert result["draft"] == "An adult character stands in soft teal studio light."
     assert result["observations"]["lighting"] == "soft teal studio light"
+
+
+def test_local_vision_anima_tags_parse_json_tags(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "dataset.png"
+    Image.new("RGB", (80, 120), "teal").save(image_path)
+    captured = {}
+
+    def fake_request(_url, **kwargs):
+        captured.update(kwargs)
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": json.dumps(
+                        {
+                            "tags": ["1girl", "solo", "blue_eyes"],
+                            "rating": "safe",
+                            "safety_warning": "",
+                        }
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr("prompt_hub.local_model._request_json", fake_request)
+    result = draft_anima_tags(
+        image_path=image_path,
+        model="vision-model",
+        existing_tags="solo",
+    )
+    assert captured["payload"]["reasoning"] == "off"
+    assert captured["payload"]["input"][0]["type"] == "image"
+    assert "Existing reviewed or draft Anima tags" in captured["payload"]["input"][1]["content"]
+    assert result["tagger"] == "model"
+    assert result["model"] == "vision-model"
+    assert result["tag_string"] == "1girl, solo, blue_eyes"
+    assert result["general"][0] == {"tag": "1girl"}
+    assert "score" not in result["general"][0]
+    assert result["rating"] == {"tag": "safe"}
+    assert "score" not in result["rating"]
+
+
+def test_local_vision_anima_tags_rejects_non_json(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "dataset.png"
+    Image.new("RGB", (80, 120), "teal").save(image_path)
+
+    def fake_request(_url, **_kwargs):
+        return {"output": [{"type": "message", "content": "1girl, solo"}]}
+
+    monkeypatch.setattr("prompt_hub.local_model._request_json", fake_request)
+    with pytest.raises(LocalModelError, match="Anima 标签草稿 JSON"):
+        draft_anima_tags(image_path=image_path, model="vision-model")
+
+
+def test_local_vision_anima_tags_reports_missing_external_model(tmp_path) -> None:
+    image_path = tmp_path / "dataset.png"
+    Image.new("RGB", (80, 120), "teal").save(image_path)
+    with pytest.raises(LocalModelError, match="外部模型连接不存在或已删除"):
+        draft_anima_tags(image_path=image_path, model="external-1111111111111111::vision-model")

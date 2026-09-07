@@ -4,10 +4,13 @@ import hashlib
 import json
 import os
 import shutil
+import stat
+import unicodedata
+import zipfile
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -30,6 +33,21 @@ MAX_CAPTION_CHARS = 12000
 THUMBNAIL_DIGEST_CHARS = 20
 REVIEW_STATUSES = {"pending", "approved", "excluded", "needs_review"}
 
+BROWSE_IMAGE_COUNT_LIMIT = 500
+BROWSE_MAX_SUBDIRS = 400
+BROWSE_HOME_SHORTCUTS = (("Desktop", "桌面"), ("Pictures", "图片"), ("Downloads", "下载"))
+
+ARCHIVE_JOB_TYPE = "dataset_archive_import"
+ARCHIVE_ALLOWED_SUFFIXES = IMAGE_SUFFIXES | {".txt", ".json"}
+ARCHIVE_MAX_ENTRIES = 20_000
+ARCHIVE_MAX_SINGLE_ENTRY_BYTES = 4 * 1024**3
+ARCHIVE_MAX_TOTAL_BYTES = 16 * 1024**3
+ARCHIVE_MAX_COMPRESSION_RATIO = 1000
+ARCHIVE_RATIO_MIN_BYTES = 10 * 1024 * 1024
+MAX_ARCHIVE_UPLOAD_BYTES = 1024**3
+_ARCHIVE_NAME_CONTROL_MAX = 31
+_ARCHIVE_NAME_DELETE_CODE = 127
+
 
 class DatasetWorkspaceError(ValueError):
     pass
@@ -50,6 +68,7 @@ class DatasetWorkspaceStore:
         *,
         name: str = "",
         origin: Mapping[str, Any] | None = None,
+        source_origin: str = "user_directory",
     ) -> dict[str, Any]:
         source = self._validate_source(source_path)
         existing = self.find_by_source(source)
@@ -64,6 +83,7 @@ class DatasetWorkspaceStore:
             "name": name.strip() or source.name,
             "source_path": str(source),
             "source_mode": "read-only",
+            "source_origin": source_origin,
             "status": "registered",
             "current_report": "",
             "summary": {},
@@ -274,7 +294,21 @@ class DatasetWorkspaceStore:
         directory = self._workspace_directory(workspace_id)
         with self._write_lock:
             shutil.rmtree(directory)
+        self._remove_imported_archive_copy(workspace)
         return workspace
+
+    def _remove_imported_archive_copy(self, workspace: Mapping[str, Any]) -> bool:
+        if str(workspace.get("source_origin", "")) != "zip_archive":
+            return False
+        try:
+            source = Path(str(workspace.get("source_path", ""))).expanduser().resolve()
+        except (OSError, RuntimeError):
+            return False
+        archives_root = self.settings.imported_archives_root.expanduser().resolve()
+        if not source.is_relative_to(archives_root) or not source.is_dir():
+            return False
+        shutil.rmtree(source)
+        return True
 
     def resolve_thumbnail(self, workspace_id: str, filename: str) -> Path | None:
         if Path(filename).name != filename or not filename.endswith(".webp"):
@@ -298,14 +332,197 @@ class DatasetWorkspaceStore:
             raise DatasetWorkspaceError("数据集目录不存在或无法读取") from error
         if not source.is_dir():
             raise DatasetWorkspaceError("数据集来源必须是文件夹")
+        rejection = self.source_rejection(source)
+        if rejection:
+            raise DatasetWorkspaceError(rejection)
+        return source
+
+    def source_rejection(self, source: Path) -> str | None:
         home = Path.home().resolve()
         library_root = self.settings.library_root.expanduser().resolve()
         workspaces_root = self.root.expanduser().resolve()
         if source in {Path("/").resolve(), home, library_root, workspaces_root}:
-            raise DatasetWorkspaceError("请不要把系统根目录、个人主目录或资料库根目录作为数据集")
+            return "请不要把系统根目录、个人主目录或资料库根目录作为数据集"
         if workspaces_root.is_relative_to(source):
-            raise DatasetWorkspaceError("数据集目录不能包含 Prompt Hub 工作区")
-        return source
+            return "数据集目录不能包含 Prompt Hub 工作区"
+        return None
+
+    def browse_directory(self, path: Path | str | None = None) -> dict[str, Any]:
+        roots = browse_roots()
+        if path is None or not str(path).strip():
+            return self._browse_roots_response(roots)
+        try:
+            current = Path(str(path)).expanduser().resolve(strict=True)
+        except (OSError, RuntimeError) as error:
+            raise DatasetWorkspaceError("目录不存在或无法读取") from error
+        scope = next((root for root in roots if current.is_relative_to(root)), None)
+        if scope is None:
+            raise DatasetWorkspaceError("目录浏览范围仅限于个人主目录和已挂载的外接卷")
+        if not current.is_dir():
+            raise DatasetWorkspaceError("只能浏览文件夹")
+        return self._browse_response(current, scope, roots)
+
+    def _browse_roots_response(self, roots: list[Path]) -> dict[str, Any]:
+        imported = {str(item.get("source_path", "")) for item in self.list_workspaces()}
+        entries = [self._browse_entry(root, imported) for root in roots]
+        return {
+            "path": "",
+            "parent": None,
+            "crumbs": [],
+            "quick": self._browse_quick_entries(roots),
+            "selectable": False,
+            "reason": "",
+            "imported": False,
+            "image_count": 0,
+            "image_count_capped": False,
+            "entries": entries,
+            "skipped": [],
+            "truncated": False,
+        }
+
+    def _browse_response(self, current: Path, scope: Path, roots: list[Path]) -> dict[str, Any]:
+        imported = {str(item.get("source_path", "")) for item in self.list_workspaces()}
+        entries, skipped, truncated = self._list_subdirectories(current, imported)
+        crumbs = []
+        node = current
+        while node != scope:
+            crumbs.append({"name": node.name, "path": str(node)})
+            node = node.parent
+        crumbs.append({"name": _browse_root_label(scope, roots), "path": str(scope)})
+        crumbs.reverse()
+        try:
+            count, capped = _count_directory_images(current, BROWSE_IMAGE_COUNT_LIMIT)
+        except (OSError, PermissionError):
+            count, capped = 0, False
+        rejection = self.source_rejection(current)
+        return {
+            "path": str(current),
+            "parent": None if current == scope else str(current.parent),
+            "crumbs": crumbs,
+            "quick": self._browse_quick_entries(roots),
+            "selectable": rejection is None,
+            "reason": rejection or "",
+            "imported": str(current) in imported,
+            "image_count": count,
+            "image_count_capped": capped,
+            "entries": entries,
+            "skipped": skipped,
+            "truncated": truncated,
+        }
+
+    def _browse_quick_entries(self, roots: list[Path]) -> list[dict[str, Any]]:
+        home = roots[0] if roots else Path.home().resolve()
+        quick = [{"label": "主目录", "path": str(home), "available": home.is_dir()}]
+        for name, label in BROWSE_HOME_SHORTCUTS:
+            candidate = home / name
+            if candidate.is_dir():
+                quick.append({"label": label, "path": str(candidate), "available": True})
+        quick.extend(
+            {"label": volume.name, "path": str(volume), "available": volume.is_dir()}
+            for volume in roots[1:]
+        )
+        return quick
+
+    def _browse_entry(self, directory: Path, imported: set[str]) -> dict[str, Any]:
+        try:
+            count, capped = _count_directory_images(directory, BROWSE_IMAGE_COUNT_LIMIT)
+        except (OSError, PermissionError):
+            count, capped = 0, False
+        rejection = self.source_rejection(directory)
+        return {
+            "name": directory.name,
+            "path": str(directory),
+            "selectable": rejection is None,
+            "reason": rejection or "",
+            "imported": str(directory) in imported,
+            "image_count": count,
+            "image_count_capped": capped,
+        }
+
+    def _list_subdirectories(
+        self,
+        current: Path,
+        imported: set[str],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], bool]:
+        try:
+            with os.scandir(current) as iterator:
+                children = sorted(iterator, key=lambda item: item.name.lower())
+        except OSError as error:
+            raise DatasetWorkspaceError("无法读取该目录") from error
+        entries: list[dict[str, Any]] = []
+        skipped: list[dict[str, str]] = []
+        truncated = False
+        for child in children:
+            if len(entries) >= BROWSE_MAX_SUBDIRS:
+                truncated = True
+                break
+            try:
+                if child.is_symlink():
+                    skipped.append({"name": child.name, "reason": "符号链接目录未列出"})
+                    continue
+                if not child.is_dir():
+                    continue
+            except OSError:
+                skipped.append({"name": child.name, "reason": "无权限读取"})
+                continue
+            directory = Path(child.path)
+            try:
+                count, capped = _count_directory_images(directory, BROWSE_IMAGE_COUNT_LIMIT)
+            except (OSError, PermissionError):
+                skipped.append({"name": child.name, "reason": "无权限读取"})
+                continue
+            rejection = self.source_rejection(directory)
+            entries.append(
+                {
+                    "name": child.name,
+                    "path": str(directory),
+                    "selectable": rejection is None,
+                    "reason": rejection or "",
+                    "imported": str(directory) in imported,
+                    "image_count": count,
+                    "image_count_capped": capped,
+                }
+            )
+        return entries, skipped, truncated
+
+    def import_archive_job(self, payload: Mapping[str, Any], context: JobContext) -> dict[str, Any]:
+        archive_path = Path(str(payload.get("archive_path", "")))
+        archive_id = str(payload.get("archive_id", "")).strip()
+        filename = str(payload.get("filename", "dataset.zip")).strip() or "dataset.zip"
+        name = str(payload.get("name", "")).strip()
+        if not archive_id or Path(archive_id).name != archive_id:
+            raise DatasetWorkspaceError("无效的压缩包任务参数")
+        target_root = self.settings.imported_archives_root / archive_id
+        if not archive_path.is_file():
+            existing = self.find_by_source(target_root) if target_root.is_dir() else None
+            if existing is None:
+                raise DatasetWorkspaceError("上传的压缩包已不存在，请重新上传")
+            return {
+                "workspace": existing,
+                "source_origin": "zip_archive",
+                "archive_name": filename,
+                "extracted_files": 0,
+                "total_bytes": 0,
+                "skipped": [],
+                "manifest": None,
+                "resumed": True,
+            }
+        report = extract_dataset_archive(archive_path, target_root, context)
+        archive_path.unlink(missing_ok=True)
+        workspace = self.register(
+            target_root,
+            name=name or Path(filename).stem,
+            source_origin="zip_archive",
+        )
+        return {
+            "workspace": workspace,
+            "source_origin": "zip_archive",
+            "archive_name": filename,
+            "extracted_files": len(report["files"]),
+            "total_bytes": report["total_bytes"],
+            "skipped": report["skipped"],
+            "manifest": report["manifest"],
+        }
 
     def _workspace_directory(self, workspace_id: str) -> Path:
         if not workspace_id.startswith("dataset-") or not workspace_id[8:].isalnum():
@@ -353,6 +570,200 @@ def _collect_source_files(source: Path) -> tuple[list[Path], list[Path]]:
             elif suffix == ".txt":
                 captions.append(path)
     return sorted(images), sorted(captions)
+
+
+def browse_roots() -> list[Path]:
+    roots = [Path.home().resolve()]
+    volumes = Path("/Volumes")
+    if volumes.is_dir():
+        try:
+            with os.scandir(volumes) as entries:
+                for entry in sorted(entries, key=lambda item: item.name.lower()):
+                    try:
+                        if entry.is_symlink() or not entry.is_dir():
+                            continue
+                        roots.append(Path(entry.path).resolve())
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+    return roots
+
+
+def _browse_root_label(scope: Path, roots: list[Path]) -> str:
+    if roots and scope == roots[0]:
+        return "主目录"
+    return scope.name
+
+
+def _count_directory_images(path: Path, limit: int) -> tuple[int, bool]:
+    count = 0
+    with os.scandir(path) as entries:
+        for entry in entries:
+            try:
+                if entry.is_symlink() or not entry.is_file():
+                    continue
+            except OSError:
+                continue
+            if Path(entry.name).suffix.lower() in IMAGE_SUFFIXES:
+                count += 1
+                if count >= limit:
+                    return count, True
+    return count, False
+
+
+def extract_dataset_archive(
+    archive_path: Path,
+    target_root: Path,
+    context: JobContext,
+) -> dict[str, Any]:
+    try:
+        archive = zipfile.ZipFile(archive_path)
+    except (zipfile.BadZipFile, OSError) as error:
+        raise DatasetWorkspaceError("文件不是有效的 zip 压缩包") from error
+    try:
+        infos = archive.infolist()
+    except (zipfile.BadZipFile, OSError) as error:
+        archive.close()
+        raise DatasetWorkspaceError("无法读取压缩包目录") from error
+    try:
+        return _extract_archive_entries(archive, infos, target_root, context)
+    finally:
+        archive.close()
+
+
+def _extract_archive_entries(
+    archive: zipfile.ZipFile,
+    infos: list[zipfile.ZipInfo],
+    target_root: Path,
+    context: JobContext,
+) -> dict[str, Any]:
+    if len(infos) > ARCHIVE_MAX_ENTRIES:
+        raise DatasetWorkspaceError(
+            f"压缩包条目过多（{len(infos)} 个，上限 {ARCHIVE_MAX_ENTRIES}），已拒绝导入"
+        )
+    target_root.mkdir(parents=True, exist_ok=True)
+    resolved_root = target_root.resolve()
+    files: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    seen_names: set[str] = set()
+    total_bytes = 0
+    for number, info in enumerate(infos, start=1):
+        context.raise_if_cancelled()
+        name = info.filename
+        context.update(number - 1, len(infos), f"正在解压 {name}")
+        if info.is_dir() or not PurePosixPath(name).name:
+            continue
+        if _archive_entry_is_symlink(info):
+            raise DatasetWorkspaceError(f"压缩包含符号链接条目，已拒绝导入：{name}")
+        unsafe = _archive_name_violation(name)
+        if unsafe:
+            raise DatasetWorkspaceError(f"压缩包含不安全路径（{unsafe}），已拒绝导入：{name}")
+        suffix = Path(name).suffix.lower()
+        if suffix not in ARCHIVE_ALLOWED_SUFFIXES:
+            skipped.append({"name": name, "reason": f"不支持的文件类型：{suffix or '无后缀'}"})
+            context.update(number, len(infos), f"已跳过 {name}")
+            continue
+        normalized = unicodedata.normalize("NFC", name)
+        if normalized in seen_names:
+            raise DatasetWorkspaceError(f"压缩包含 Unicode 归一化后重名的条目，已拒绝导入：{name}")
+        seen_names.add(normalized)
+        destination = (target_root / name).resolve()
+        if not destination.is_relative_to(resolved_root):
+            raise DatasetWorkspaceError(f"压缩包含越界路径，已拒绝导入：{name}")
+        if info.file_size > ARCHIVE_MAX_SINGLE_ENTRY_BYTES:
+            raise DatasetWorkspaceError(f"压缩包条目过大，已拒绝导入：{name}")
+        if (
+            info.file_size > ARCHIVE_RATIO_MIN_BYTES
+            and info.compress_size > 0
+            and info.file_size / info.compress_size > ARCHIVE_MAX_COMPRESSION_RATIO
+        ):
+            raise DatasetWorkspaceError(f"压缩比异常，疑似压缩炸弹，已拒绝导入：{name}")
+        total_bytes += info.file_size
+        if total_bytes > ARCHIVE_MAX_TOTAL_BYTES:
+            raise DatasetWorkspaceError("压缩包解压后总大小超过上限，已拒绝导入")
+        if destination.is_file() and destination.stat().st_size == info.file_size:
+            files.append({"name": name, "bytes": info.file_size})
+            context.update(number, len(infos), f"已存在，跳过 {name}")
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with archive.open(info) as source, destination.open("wb") as sink:
+                written = 0
+                while chunk := source.read(1024 * 1024):
+                    sink.write(chunk)
+                    written += len(chunk)
+                    if written > info.file_size:
+                        message = f"条目解压后大小与目录记录不一致：{name}"
+                        raise DatasetWorkspaceError(message)
+        except (OSError, zipfile.BadZipFile, RuntimeError) as error:
+            raise DatasetWorkspaceError(f"解压失败：{name}：{error}") from error
+        files.append({"name": name, "bytes": info.file_size})
+        context.update(number, len(infos), f"已解压 {number}/{len(infos)}")
+    manifest = _read_archive_manifest(target_root, files)
+    return {
+        "files": files,
+        "total_bytes": total_bytes,
+        "skipped": skipped,
+        "manifest": manifest,
+    }
+
+
+def _archive_entry_is_symlink(info: zipfile.ZipInfo) -> bool:
+    return stat.S_ISLNK(info.external_attr >> 16)
+
+
+def _archive_name_violation(name: str) -> str | None:
+    if "\x00" in name:
+        return "含 NUL 字节"
+    if any(
+        ord(character) <= _ARCHIVE_NAME_CONTROL_MAX or ord(character) == _ARCHIVE_NAME_DELETE_CODE
+        for character in name
+    ):
+        return "含控制字符"
+    parts = PurePosixPath(name).parts
+    if ".." in parts:
+        return "包含 .. 路径段"
+    if name.startswith("/") or (parts and parts[0] == "/"):
+        return "绝对路径"
+    return None
+
+
+def _read_archive_manifest(
+    target_root: Path,
+    files: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    candidates = [
+        item["name"] for item in files if Path(item["name"]).name.lower().endswith("_manifest.json")
+    ]
+    if not candidates:
+        return None
+    for relative in sorted(candidates):
+        try:
+            value = json.loads((target_root / relative).read_text(encoding="utf-8-sig"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(value, dict):
+            continue
+        source = value.get("source")
+        export_type = value.get("export_type")
+        if not isinstance(source, str) or not source.strip():
+            continue
+        if not isinstance(export_type, str) or not export_type.strip():
+            continue
+        suggested = ""
+        lowered = export_type.lower()
+        if "natural" in lowered:
+            suggested = "krea2"
+        elif "tag" in lowered or "booru" in lowered:
+            suggested = "anima"
+        return {
+            "filename": Path(relative).name,
+            "source": source.strip(),
+            "export_type": export_type.strip(),
+            "suggested_profile": suggested,
+        }
+    return None
 
 
 def _inspect_image(
