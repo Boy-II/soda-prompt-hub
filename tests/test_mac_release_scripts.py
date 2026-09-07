@@ -3,7 +3,15 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
+
+MACOS_ONLY = pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="Mac 更新器执行测试需要 macOS 和 /bin/zsh",
+)
 
 
 def test_release_metadata_stays_in_sync() -> None:
@@ -18,6 +26,7 @@ def test_release_metadata_stays_in_sync() -> None:
     assert app_release["worker_protocol"] == worker_release["protocol_version"]
 
 
+@MACOS_ONLY
 def test_mac_updater_replaces_program_and_preserves_old_snapshot(tmp_path) -> None:
     result, install_root, program_backups, data_backups = _run_updater(tmp_path)
 
@@ -30,6 +39,7 @@ def test_mac_updater_replaces_program_and_preserves_old_snapshot(tmp_path) -> No
     assert len(list(data_backups.iterdir())) == 1
 
 
+@MACOS_ONLY
 def test_mac_updater_restores_old_program_when_new_init_fails(tmp_path) -> None:
     result, install_root, program_backups, data_backups = _run_updater(
         tmp_path,
