@@ -12,6 +12,7 @@ from typing import Any
 
 RELEASE_FORMAT = "soda-windows-worker-release-v1"
 PROTOCOL_VERSION = "soda-compute-bridge-v2"
+ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 WORKER_FILES = (
     "0-首次配置.bat",
     "1-先自检.bat",
@@ -126,7 +127,12 @@ def build_release(repository_root: Path, output_root: Path) -> dict[str, Any]:
         )
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
             for path in sorted(item for item in staging.rglob("*") if item.is_file()):
-                bundle.write(path, f"{package_name}/{path.relative_to(staging).as_posix()}")
+                archive_name = f"{package_name}/{path.relative_to(staging).as_posix()}"
+                info = zipfile.ZipInfo(archive_name, date_time=ZIP_TIMESTAMP)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.create_system = 3
+                info.external_attr = 0o100644 << 16
+                bundle.writestr(info, path.read_bytes())
     finally:
         shutil.rmtree(staging, ignore_errors=True)
     return {

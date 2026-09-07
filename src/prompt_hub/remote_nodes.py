@@ -433,7 +433,7 @@ class RemoteNodeStore(RemoteCatalogMixin):
             _write_json(self._task_record_path(node_id, clean_task), updated)
         return {
             **summary,
-            "status": "completed",
+            "status": "dismissed" if receipt_kind == "ignored" else "completed",
             "received_at": received_at,
             "receipt_kind": receipt_kind,
         }

@@ -35,7 +35,7 @@ MAX_LORA_PREVIEW_BYTES = 32 * 1024 * 1024
 MAX_LORA_PREVIEW_COUNT = 1024
 MAX_LORA_PREVIEW_TOTAL_BYTES = 2 * 1024 * 1024 * 1024
 MAX_CIVITAI_URL_LENGTH = 2000
-TASK_RECEIPT_KINDS = {"comfyui_images", "lora_catalog", "model_catalog"}
+TASK_RECEIPT_KINDS = {"comfyui_images", "lora_catalog", "model_catalog", "ignored"}
 TASK_LOCATION_STATUS = {
     "outbox": "queued",
     "processing": "running",
@@ -224,8 +224,9 @@ def _task_summary(
     if location == "failed" and result_status == "canceled":
         status = "canceled"
     received_at = str(local.get("received_at", ""))
+    receipt_kind = str(local.get("receipt_kind", ""))
     if received_at and result_status == "completed":
-        status = "completed"
+        status = "dismissed" if receipt_kind == "ignored" else "completed"
     return {
         "task_id": str(merged.get("task_id", "")),
         "task_type": str(merged.get("task_type", "")),
@@ -249,7 +250,7 @@ def _task_summary(
             or merged.get("created_at", "")
         ),
         "received_at": received_at,
-        "receipt_kind": str(local.get("receipt_kind", "")),
+        "receipt_kind": receipt_kind,
         "error": str(envelope.get("error", ""))[:2000],
     }
 

@@ -43,6 +43,7 @@ uv run python scripts/build_windows_worker_release.py
 
 产物位于 `dist/Soda-Prompt-Hub-Windows-Worker-<版本>.zip`。构建器使用固定白名单，只包含 Worker
 程序、脚本、示例配置、说明、许可证和 `MANIFEST.sha256`；不包含真实配置、任务、模型、图片或凭据。
+ZIP 内文件时间和权限使用固定值；同一提交、同一工具链重复构建应得到相同 SHA-256，便于核对发布包。
 
 发布前必须解压并重新计算清单中每个文件的 SHA-256，还要扫描绝对个人路径、token 和真实配置。
 
