@@ -322,6 +322,7 @@ CREATIVE_STYLES = r"""
 CREATIVE_SCRIPT = r"""
 <script>
 (() => {
+  const deviceName = () => window.getPromptHubDeviceName?.() || 'Windows 绘图设备';
   const slotsMeta = {
     character: ['角色', '人物身份、外观、发色、瞳色与稳定特征'], outfit: ['服装', '衣物、材质、配饰与穿着方式'],
     action: ['动作', '姿态、手部动作、表情与互动'], composition: ['构图', '景别、机位、视角与主体位置'],
@@ -658,7 +659,7 @@ CREATIVE_SCRIPT = r"""
     if (!profileId) throw new Error('当前模型类型还没有可用的 ComfyUI 工作流');
     const button = $('#sendWorkflow'); button.disabled = true; button.textContent = '正在投递…';
     creativeState.workflowMessageProjectId = creativeState.project.project_id;
-    creativeState.workflowMessage = '正在把生成包保存到 Mac，并发送到 5060 Ti…'; renderWorkflowProfiles();
+    creativeState.workflowMessage = `正在把生成包保存到 Mac，并发送到 ${deviceName()}…`; renderWorkflowProfiles();
     try {
       const result = await creativeJson(`/api/workflow-profiles/${encodeURIComponent(profileId)}/tasks`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({project_id:creativeState.project.project_id, low_cost:$('#workflowLowCost').checked})});
       creativeState.workflowMessage = `已发送“${result.profile.label}”。请到“设备连接”的任务状态查看进度和回传图片。`; await refreshProjectJourney();
@@ -666,7 +667,7 @@ CREATIVE_SCRIPT = r"""
       creativeState.workflowMessage = `投递失败：${error.message}`;
       throw error;
     } finally {
-      button.textContent = '发送到 5060 Ti'; renderWorkflowProfiles();
+      button.textContent = `发送到 ${deviceName()}`; renderWorkflowProfiles();
     }
   }
 

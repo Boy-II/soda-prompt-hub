@@ -1120,7 +1120,7 @@ class DatasetCurationStore:
                     status="already_present",
                     target=target,
                 )
-            message = "5060 Ti 上已有同名版本, 但文件哈希不同; 已停止且未覆盖"
+            message = "Windows 设备上已有同名版本, 但文件哈希不同; 已停止且未覆盖"
             self._record_export_copy(
                 workspace_id,
                 version_id,

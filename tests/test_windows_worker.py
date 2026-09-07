@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 import pytest
 
 import prompt_hub.windows_worker as worker_module
+from prompt_hub import __version__
 from prompt_hub.remote_nodes import RemoteNodeStore
 from prompt_hub.windows_worker import (
     LoraRootConfig,
@@ -103,6 +104,14 @@ def test_distributable_worker_matches_source() -> None:
     assert release_path.read_bytes() == source_path.read_bytes()
 
 
+def test_worker_release_channel_recognizes_candidate_versions() -> None:
+    release_channel = worker_module._release_channel  # noqa: SLF001
+
+    assert release_channel("1.1.0.dev2") == "development"
+    assert release_channel("1.1.0rc1") == "candidate"
+    assert release_channel("1.1.0") == "stable"
+
+
 @contextmanager
 def comfy_server():
     ComfyHandler.state = {
@@ -163,7 +172,10 @@ def test_worker_comfyui_round_trip_and_mac_integrity(tmp_path) -> None:
 
     with comfy_server() as (url, state):
         worker = WindowsWorker(_config(bridge, url))
-        assert worker.self_test()["comfyui_reachable"] is True
+        self_test = worker.self_test()
+        assert self_test["comfyui_reachable"] is True
+        assert self_test["worker_version"] == __version__
+        assert self_test["release_format"] == "soda-windows-worker-release-v1"
         assert store.diagnostics("compute-5060ti")["worker_ready"] is True
         assert worker.run_once() is True
         assert state["post_count"] == 1
@@ -172,6 +184,7 @@ def test_worker_comfyui_round_trip_and_mac_integrity(tmp_path) -> None:
     task_id = submitted["task_id"]
     result = json.loads((bridge / "inbox" / f"{task_id}.json").read_text())
     assert result["status"] == "completed"
+    assert result["worker_version"] == __version__
     assert {item["kind"] for item in result["outputs"]} == {"image", "workflow", "run_log"}
     verified = store.verify_returned_task("compute-5060ti", task_id)
     assert verified["verified"] is True

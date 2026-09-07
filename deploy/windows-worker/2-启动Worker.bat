@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
-title Prompt Hub 5060 Ti Worker
+title Prompt Hub Windows Worker
 
 if not exist "worker-config.json" (
   echo [ERROR] worker-config.json not found.

@@ -8,7 +8,30 @@ from fastapi.testclient import TestClient
 
 import prompt_hub.remote_nodes as remote_nodes_module
 from prompt_hub.api import create_app
-from prompt_hub.remote_nodes import BRIDGE_DIRECTORIES, RemoteNodeError, RemoteNodeStore
+from prompt_hub.remote_nodes import (
+    BRIDGE_DIRECTORIES,
+    DEFAULT_COMPUTE_NODE_LABEL,
+    RemoteNodeError,
+    RemoteNodeStore,
+)
+
+
+def test_primary_device_label_uses_saved_name_and_generic_fallback(tmp_path) -> None:
+    store = RemoteNodeStore(tmp_path / "remote-nodes")
+    store.initialize()
+    assert store.primary_device_label() == DEFAULT_COMPUTE_NODE_LABEL
+
+    store.save_node(
+        "another-windows-node",
+        {"label": "备用绘图机", "role": "compute_5060ti"},
+    )
+    assert store.primary_device_label() == "备用绘图机"
+
+    store.save_node(
+        "compute-5060ti",
+        {"label": "主力绘图机", "role": "compute_5060ti"},
+    )
+    assert store.primary_device_label() == "主力绘图机"
 
 
 def test_remote_node_registration_diagnostics_and_bridge_prepare(settings, tmp_path) -> None:
@@ -31,6 +54,7 @@ def test_remote_node_registration_diagnostics_and_bridge_prepare(settings, tmp_p
         diagnostic = client.get("/api/remote-nodes/training-node/diagnostics").json()
         assert diagnostic["state"] == "mount_ready_bridge_unprepared"
         assert diagnostic["worker_ready"] is False
+        assert diagnostic["worker_compatibility"]["state"] == "not_checked"
         assert diagnostic["credentials_stored"] is False
 
         prepared = client.post("/api/remote-nodes/training-node/prepare")
@@ -223,6 +247,9 @@ def test_windows_lora_catalog_task_routes_verify_and_import(settings, tmp_path) 
             ),
             encoding="utf-8",
         )
+        diagnostic = client.get("/api/remote-nodes/compute-5060ti/diagnostics").json()
+        assert diagnostic["worker_ready"] is True
+        assert diagnostic["worker_compatibility"]["state"] == "update_recommended"
         submitted = client.post("/api/remote-nodes/compute-5060ti/lora-catalog/sync")
         assert submitted.status_code == 201
         task_id = submitted.json()["task_id"]

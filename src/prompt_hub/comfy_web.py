@@ -50,7 +50,7 @@ COMFY_STYLES = r"""
 COMFY_HTML = r"""
 <section class="comfy-page" id="comfyPage" hidden>
   <section class="comfy-hero">
-    <div class="comfy-hero-copy"><span class="eyebrow">从 5060 Ti 带回 Mac</span><h1>Windows<br>出图结果</h1><p>在这里导入 ComfyUI 生成的图片，并读取图片中实际保存的工作流和生成参数。没有参数的图片也能保存，但系统不会猜测或补写。</p></div>
+    <div class="comfy-hero-copy"><span class="eyebrow">从 <span data-remote-device-name>__PROMPT_HUB_DEVICE_NAME_HTML__</span> 带回 Mac</span><h1>Windows<br>出图结果</h1><p>在这里导入 ComfyUI 生成的图片，并读取图片中实际保存的工作流和生成参数。没有参数的图片也能保存，但系统不会猜测或补写。</p></div>
     <aside class="comfy-flow"><span class="section-label">处理顺序</span><ol><li>选择一张图片，或扫描已经挂载的结果目录</li><li>核对模型、LoRA、提示词和生成参数</li><li>选择这张图属于哪个创作项目</li><li>决定作为参考、数据集候选、失败记录或下一版起点</li></ol></aside>
   </section>
   <section class="comfy-controls">

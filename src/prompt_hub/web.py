@@ -1,3 +1,6 @@
+import html
+import json
+
 from prompt_hub.comfy_web import COMFY_HTML, COMFY_SCRIPT, COMFY_STYLES
 from prompt_hub.creative_web import CREATIVE_HTML, CREATIVE_SCRIPT, CREATIVE_STYLES
 from prompt_hub.lora_web import LORA_HTML, LORA_SCRIPT, LORA_STYLES
@@ -114,7 +117,7 @@ INDEX_HTML = r"""<!doctype html>
       gap: 18px;
       align-items: stretch;
     }
-    .home-lead, .home-guide, .home-footnote { background: var(--paper); box-shadow: var(--shadow); }
+    .home-lead, .home-guide, .home-first-guide, .home-source-setup, .home-footnote { background: var(--paper); box-shadow: var(--shadow); }
     .home-lead { min-height: 590px; padding: clamp(34px, 6vw, 78px); position: relative; overflow: hidden; }
     .home-lead::after {
       content: "开始 / 01";
@@ -160,7 +163,7 @@ INDEX_HTML = r"""<!doctype html>
     .target-row { display: grid; grid-template-columns: 92px 1fr; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
     .target-row strong { color: var(--signal); font: 800 10px/1.35 monospace; letter-spacing: .09em; }
     .target-row span { color: #55564f; font-size: 13px; line-height: 1.5; }
-    .home-guide { padding: 34px; background: var(--ink); color: var(--paper); display: flex; flex-direction: column; }
+    .home-guide { padding: 34px; background: var(--ink); color: var(--paper); display: flex; flex-direction: column; position: static; }
     .home-guide h2 { margin: 18px 0 30px; font: 700 36px/1 "Iowan Old Style", serif; letter-spacing: -.035em; }
     .guide-steps { display: grid; gap: 0; }
     .guide-step { display: grid; grid-template-columns: 42px 1fr; gap: 14px; padding: 18px 0; border-top: 1px solid rgba(236,232,220,.2); }
@@ -171,6 +174,32 @@ INDEX_HTML = r"""<!doctype html>
     .home-status { margin-top: auto; padding-top: 28px; }
     .home-status-line { display: flex; justify-content: space-between; gap: 18px; padding: 9px 0; color: #aaa99f; font: 700 10px/1 monospace; letter-spacing: .08em; }
     .home-status-line strong { color: var(--acid); font-size: 15px; }
+    .home-status-line.version strong { max-width: 68%; font-size: 10px; line-height: 1.45; text-align: right; overflow-wrap: anywhere; }
+    .home-source-setup { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px 30px; align-items: center; border-left: 8px solid var(--acid); padding: 24px 28px; }
+    .home-source-setup h2 { margin: 5px 0 8px; font: 700 27px/1.05 "Iowan Old Style", serif; letter-spacing: -.025em; }
+    .home-source-setup p { margin: 0; max-width: 850px; color: #55564f; font-size: 12px; line-height: 1.6; }
+    .home-source-list { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 13px; }
+    .home-source-list span { border: 1px solid var(--line); background: #e2dccd; padding: 6px 8px; color: var(--ink); font: 800 9px/1.35 monospace; }
+    .home-source-actions { display: grid; gap: 8px; width: min(100%, 250px); }
+    .home-source-actions button { border: 1px solid var(--ink); padding: 12px 14px; cursor: pointer; text-align: left; font: 800 10px/1.2 monospace; }
+    .home-source-actions .primary { background: var(--signal); border-color: var(--signal); color: #fff8eb; }
+    .home-source-actions button:disabled { cursor: wait; opacity: .55; }
+    .home-source-progress { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 220px) 1fr; gap: 14px; align-items: center; border-top: 1px solid var(--line); padding-top: 14px; }
+    .home-source-progress progress { width: 100%; accent-color: var(--signal); }
+    .home-source-progress span { color: var(--muted); font: 700 10px/1.5 monospace; }
+    .home-first-guide { grid-column: 1 / -1; border-left: 8px solid var(--signal); }
+    .home-first-guide summary { display: flex; justify-content: space-between; gap: 18px; align-items: center; cursor: pointer; padding: 20px 24px; list-style: none; }
+    .home-first-guide summary::-webkit-details-marker { display: none; }
+    .home-first-guide summary strong { font: 800 22px/1.1 "Iowan Old Style", serif; }
+    .home-first-guide summary span { color: var(--muted); font: 800 9px/1.5 monospace; }
+    .home-first-guide summary::after { content: "＋"; flex: 0 0 auto; font: 900 18px monospace; }
+    .home-first-guide[open] summary::after { content: "−"; }
+    .home-first-guide-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
+    .home-first-guide-step { min-width: 0; background: #f2ecdf; padding: 18px; }
+    .home-first-guide-step b, .home-first-guide-step span { display: block; }
+    .home-first-guide-step b { margin-bottom: 8px; color: var(--signal); font: 900 10px monospace; }
+    .home-first-guide-step strong { display: block; margin-bottom: 7px; font: 800 16px/1.2 "Iowan Old Style", serif; }
+    .home-first-guide-step span { color: var(--muted); font-size: 10px; line-height: 1.6; }
     .home-footnote { grid-column: 1 / -1; padding: 18px 24px; display: flex; justify-content: space-between; gap: 24px; align-items: center; }
     .home-footnote p { margin: 0; color: #55564f; font-size: 12px; line-height: 1.6; }
     .home-footnote strong { color: var(--ink); }
@@ -607,6 +636,12 @@ INDEX_HTML = r"""<!doctype html>
       .home-lead h1 { font-size: 58px; }
       .home-actions { display: grid; }
       .home-primary, .home-secondary { width: 100%; text-align: left; }
+      .home-source-setup { display: block; padding: 22px 18px; }
+      .home-source-actions { width: 100%; margin-top: 18px; }
+      .home-source-progress { display: grid; grid-template-columns: 1fr; margin-top: 16px; }
+      .home-first-guide summary { align-items: start; padding: 18px; }
+      .home-first-guide summary span { max-width: 170px; }
+      .home-first-guide-steps { grid-template-columns: 1fr; }
       .home-footnote { display: block; }
       .home-footnote p + p { margin-top: 8px; }
       .management-sources .source-list { grid-template-columns: 1fr; }
@@ -670,11 +705,36 @@ INDEX_HTML = r"""<!doctype html>
           <div class="home-status-line"><span>本地资料</span><strong id="homeEntryCount">—</strong></div>
           <div class="home-status-line"><span>视觉与提示来源</span><strong id="homeSourceCount">—</strong></div>
           <div class="home-status-line"><span>已导入 OC</span><strong id="homeOcCount">—</strong></div>
+          <div class="home-status-line version"><span>当前程序</span><strong id="homeProgramVersion">正在读取</strong></div>
+          <div class="home-status-line version"><span>数据结构</span><strong id="homeDataVersion">正在读取</strong></div>
         </div>
       </aside>
+      <details class="home-first-guide" id="homeFirstGuide">
+        <summary><strong>第一次使用？查看 5 步指南</strong></summary>
+        <div class="home-first-guide-steps">
+          <div class="home-first-guide-step"><b>01</b><strong>先写想法或选 OC</strong><span>在创作台新建项目，也可以先从角色库导入 OC Manager JSON。</span></div>
+          <div class="home-first-guide-step"><b>02</b><strong>找提示词和参考图</strong><span>去提示词库或智能检索，挑选服装、动作、构图、灯光和画风。</span></div>
+          <div class="home-first-guide-step"><b>03</b><strong>整理两种 Prompt</strong><span>同一份创作意图分别检查 Anima 标签和 Krea 2 自然语言版本。</span></div>
+          <div class="home-first-guide-step"><b>04</b><strong>需要时交给 Windows 出图</strong><span>Windows 开机并运行 Worker 后再发送；离线时可以继续整理本地内容。</span></div>
+          <div class="home-first-guide-step"><b>05</b><strong>精选、打标并交付数据集</strong><span>结果图回到 Mac 后人工筛选，检查 WD14 草稿，最后冻结并导出版本。</span></div>
+        </div>
+      </details>
+      <section class="home-source-setup" id="homeSourceSetup" aria-labelledby="homeSourceSetupTitle" hidden>
+        <div>
+          <p class="section-label">第一次使用 · 资料准备</p>
+          <h2 id="homeSourceSetupTitle">把推荐提示词资料装到本机</h2>
+          <p id="homeSourceSetupDescription">这些资料会从公开 Git 仓库下载到个人资料目录，并建立本地检索索引。不会上传你的创作、角色或图片。</p>
+          <div class="home-source-list" id="homeSourceSetupList"></div>
+        </div>
+        <div class="home-source-actions">
+          <button class="primary" id="homeSourceInstall" type="button">安装推荐资料库</button>
+          <button id="homeSourceSkip" type="button">暂时跳过</button>
+        </div>
+        <div class="home-source-progress" id="homeSourceProgress" hidden><progress id="homeSourceProgressBar" max="1" value="0"></progress><span id="homeSourceProgressMessage" role="status">等待开始</span></div>
+      </section>
       <div class="home-footnote">
-        <p><strong>个人版 1.0：</strong>创作、资料引用、双格式输出、远程出图、结果回流与数据集交付已经形成完整闭环。</p>
-        <p><strong>设备分工：</strong>Mac 负责整理、审核与保存记录；5060 Ti 的 ComfyUI 负责生成与测试。</p>
+        <p><strong id="homeReleaseIdentity">Soda Prompt Hub：</strong>创作、资料引用、双格式输出、远程出图、结果回流与数据集交付已经形成完整闭环。</p>
+        <p><strong>设备分工：</strong>Mac 负责整理、审核与保存记录；<span data-remote-device-name>__PROMPT_HUB_DEVICE_NAME_HTML__</span>的 ComfyUI 负责生成与测试。</p>
       </div>
     </section>
 
@@ -752,9 +812,21 @@ INDEX_HTML = r"""<!doctype html>
     let currentCharacters = [];
     let archivePage = 1;
     const archivePageSize = 12;
+    let remoteDeviceName = __PROMPT_HUB_DEVICE_NAME_JSON__;
     let tagDisplayLanguage = 'zh';
     const tagLabelCache = new Map();
+    let homeMissingSources = [];
+    const sourceSetupSkipKey = 'soda-prompt-hub-source-setup-skipped';
     const viewLabels = {home:'首页', creative:'创作台', prompts:'提示词库', discover:'智能检索', characters:'角色库', datasets:'数据集', lora:'LoRA 项目', comfy:'Windows 出图', management:'资料管理', remote:'设备连接'};
+
+    function setPromptHubDeviceName(value) {
+      remoteDeviceName = String(value || '').trim() || 'Windows 绘图设备';
+      document.querySelectorAll('[data-remote-device-name]').forEach(node => { node.textContent = remoteDeviceName; });
+      window.dispatchEvent(new CustomEvent('prompt-hub-device-name-change', {detail:{name:remoteDeviceName}}));
+      return remoteDeviceName;
+    }
+    window.getPromptHubDeviceName = () => remoteDeviceName;
+    window.setPromptHubDeviceName = setPromptHubDeviceName;
 
     function setNavMenu(open) {
       const nav = document.querySelector('.app-nav');
@@ -881,7 +953,7 @@ INDEX_HTML = r"""<!doctype html>
 
     async function loadStats() {
       const selectedSource = $('#source').value;
-      const [stats, sources] = await Promise.all([fetch('/api/stats').then(r => r.json()), fetch('/api/sources').then(r => r.json())]);
+      const [stats, sources, version] = await Promise.all([fetch('/api/stats').then(r => r.json()), fetch('/api/sources').then(r => r.json()), fetch('/api/system/version').then(r => r.json())]);
       $('#entryCount').textContent = formatNumber(stats.entries);
       $('#sourceCount').textContent = formatNumber(stats.sources);
       $('#styleCount').textContent = formatNumber(stats.kinds?.style);
@@ -891,15 +963,46 @@ INDEX_HTML = r"""<!doctype html>
       $('#homeEntryCount').textContent = formatNumber(stats.entries);
       $('#homeSourceCount').textContent = formatNumber(stats.sources);
       $('#homeOcCount').textContent = formatNumber(stats.oc_manager?.characters);
+      const product = version.product || {};
+      const dataVersion = version.data || {};
+      $('#homeProgramVersion').textContent = `${product.version || '无法识别'} · ${product.release_channel_label || '版本未知'}`;
+      $('#homeDataVersion').textContent = dataVersion.summary || '尚未初始化';
+      $('#homeDataVersion').title = dataVersion.summary || '尚未初始化';
+      $('#homeReleaseIdentity').textContent = `Soda Prompt Hub ${product.version || ''}（${product.release_channel_label || '版本未知'}）：`;
       $('#source').innerHTML = '<option value="">全部来源</option>' + sources.map(s => `<option value="${escapeHtml(s.source_id)}">${escapeHtml(s.name)}</option>`).join('');
       if ([...$('#source').options].some(option => option.value === selectedSource)) $('#source').value = selectedSource;
       $('#sourceList').innerHTML = '<p class="section-label">资料来源</p>' + sources.map(s => `<div class="source-row"><span>${escapeHtml(s.name)}</span><span>${formatNumber(s.entry_count)}</span></div>`).join('');
+    }
+
+    function sourceSetupSignature(sources) {
+      return sources.map(item => item.source_id).sort().join('|');
+    }
+
+    function sourceLicenseLabel(value) {
+      if (value === 'unknown') return '许可证待查';
+      if (value === 'MIT (code); community prompt text') return '代码 MIT；提示词按上游说明';
+      return value;
+    }
+
+    function renderHomeSourceSetup(sources) {
+      homeMissingSources = sources.filter(item => item.status === 'missing');
+      const setup = $('#homeSourceSetup');
+      if (!homeMissingSources.length) {
+        setup.hidden = true;
+        localStorage.removeItem(sourceSetupSkipKey);
+        return;
+      }
+      const signature = sourceSetupSignature(homeMissingSources);
+      setup.hidden = localStorage.getItem(sourceSetupSkipKey) === signature;
+      $('#homeSourceSetupList').innerHTML = homeMissingSources.map(item => `<span>${escapeHtml(item.name)} · ${escapeHtml(sourceLicenseLabel(item.license))}</span>`).join('');
+      $('#homeSourceSetupDescription').textContent = homeMissingSources.some(item => item.source_id === 'kisegaeningyou') ? `还缺 ${homeMissingSources.length} 个推荐资料库。其中视觉参照库图片较多，第一次下载可能需要几分钟。` : `还缺 ${homeMissingSources.length} 个推荐资料库，安装后会自动建立本地检索索引。`;
     }
 
     async function loadSourceSyncStatus() {
       const labels = {ready:'可以安全更新',dirty:'有本地改动',no_upstream:'没有上游',missing:'本地缺失',not_git:'不是 Git 仓库',cloned:'已拉取',failed:'检查失败'};
       const response = await fetch('/api/sources/sync-status');
       const sources = response.ok ? await response.json() : [];
+      renderHomeSourceSetup(sources);
       $('#sourceSyncList').innerHTML = sources.map(item => {
         const action = item.status === 'missing' ? `<button class="source-sync-fetch" data-clone-source="${escapeHtml(item.source_id)}" title="从 ${escapeHtml(item.url)} 拉取到本地">拉取</button>` : '';
         return `<div class="source-sync-row"><strong>${escapeHtml(item.name)}</strong><span class="source-sync-status"><span class="source-sync-state ${escapeHtml(item.status)}">${escapeHtml(labels[item.status] || item.status)}</span>${action}</span><code>${escapeHtml(item.branch || '—')} · ${escapeHtml((item.before || '').slice(0, 10) || '暂无版本')}</code></div>`;
@@ -1108,18 +1211,60 @@ INDEX_HTML = r"""<!doctype html>
       }
     }
 
-    async function runSourceSyncJob(body) {
+    async function runSourceSyncJob(body, onProgress = () => {}) {
       const response = await fetch('/api/sources/sync', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.detail || `启动更新失败：${response.status}`);
       let job = payload.job;
       while (['queued','running'].includes(job.status)) {
         $('#sourceSyncMessage').textContent = job.progress_message || '等待资料更新任务…';
+        onProgress(job);
         await new Promise(resolve => setTimeout(resolve, 500));
         job = await fetch(`/api/jobs/${encodeURIComponent(job.job_id)}`).then(result => result.json());
       }
+      onProgress(job);
       if (job.status !== 'completed') throw new Error(job.error || `资料更新${job.status}`);
       return job.result || {};
+    }
+
+    async function installRecommendedSources() {
+      if (!homeMissingSources.length) return;
+      const list = homeMissingSources.map(item => `• ${item.name}（${item.license === 'unknown' ? '上游未明确许可证，仅建议个人研究使用' : sourceLicenseLabel(item.license)}）`).join('\n');
+      const visualNote = homeMissingSources.some(item => item.source_id === 'kisegaeningyou') ? '\n\n视觉参照库包含较多图片，下载时间和空间占用会更高。' : '';
+      if (!confirm(`将以下公开资料下载到本机，并建立检索索引：\n\n${list}${visualNote}\n\n继续安装吗？`)) return;
+      const button = $('#homeSourceInstall'), skip = $('#homeSourceSkip'), panel = $('#homeSourceProgress'), bar = $('#homeSourceProgressBar'), message = $('#homeSourceProgressMessage');
+      button.disabled = true;
+      skip.disabled = true;
+      button.textContent = '正在安装…';
+      panel.hidden = false;
+      message.textContent = '正在建立后台任务…';
+      try {
+        const sourceIds = homeMissingSources.map(item => item.source_id);
+        const result = await runSourceSyncJob({source_ids: sourceIds, clone_missing: true}, job => {
+          bar.max = Math.max(Number(job.progress_total) || 1, 1);
+          bar.value = Math.min(Number(job.progress_current) || 0, bar.max);
+          message.textContent = job.progress_message || '正在准备资料…';
+        });
+        await Promise.all([loadStats(), loadSourceSyncStatus(), searchPrompts()]);
+        const failed = (result.sources || []).filter(item => item.status === 'failed');
+        if (failed.length) {
+          message.textContent = `${failed.length} 个资料库没有安装成功：${failed.map(item => item.name).join('、')}。可以稍后重试。`;
+        } else {
+          message.textContent = `资料准备完成：新安装 ${result.cloned || 0} 个资料库，本地索引已经更新。`;
+        }
+      } catch (error) {
+        message.textContent = `安装没有完成：${error.message}。请检查网络后重试。`;
+      } finally {
+        button.disabled = false;
+        skip.disabled = false;
+        button.textContent = '安装推荐资料库';
+      }
+    }
+
+    function skipRecommendedSources() {
+      if (!homeMissingSources.length) return;
+      localStorage.setItem(sourceSetupSkipKey, sourceSetupSignature(homeMissingSources));
+      $('#homeSourceSetup').hidden = true;
     }
 
     async function syncPublicSources() {
@@ -1233,9 +1378,11 @@ INDEX_HTML = r"""<!doctype html>
     });
     $('#importButton').addEventListener('click', rebuild);
     $('#sourceSyncButton').addEventListener('click', syncPublicSources);
+    $('#homeSourceInstall').addEventListener('click', installRecommendedSources);
+    $('#homeSourceSkip').addEventListener('click', skipRecommendedSources);
     window.loadPromptHubStats = loadStats;
     $('#tagLanguageToggle').addEventListener('click', window.toggleTagDisplayLanguage);
-    Promise.all([loadStats(), loadOcWorlds(), searchPrompts()]).catch(error => { $('#status').textContent = '读取失败，请刷新页面'; console.error(error); });
+    Promise.all([loadStats(), loadOcWorlds(), loadSourceSyncStatus(), searchPrompts()]).catch(error => { $('#status').textContent = '读取失败，请刷新页面'; console.error(error); });
   </script>
 </body>
 </html>
@@ -1246,6 +1393,8 @@ INDEX_HTML = INDEX_HTML.replace(
     f"{CREATIVE_STYLES}{WORKSPACE_STYLES}{LORA_STYLES}{COMFY_STYLES}{SEARCH_STYLES}{REMOTE_STYLES}{SOURCE_CENTER_STYLES}</head>",
     1,
 )
+
+
 INDEX_HTML = INDEX_HTML.replace(
     '<section class="management-page" id="managementPage" hidden>',
     f'{CREATIVE_HTML}{SEARCH_HTML}{WORKSPACE_HTML}{LORA_HTML}{COMFY_HTML}{REMOTE_HTML}<section class="management-page" id="managementPage" hidden>',
@@ -1261,3 +1410,20 @@ INDEX_HTML = INDEX_HTML.replace(
     f"{CREATIVE_SCRIPT}{SEARCH_SCRIPT}{WORKSPACE_SCRIPT}{LORA_SCRIPT}{COMFY_SCRIPT}{REMOTE_SCRIPT}{SOURCE_CENTER_SCRIPT}</body>",
     1,
 )
+
+
+def render_index_html(device_name: str) -> str:
+    safe_name = device_name.strip() or "Windows 绘图设备"
+    script_name = (
+        json.dumps(safe_name, ensure_ascii=False)
+        .replace("<", r"\u003c")
+        .replace(">", r"\u003e")
+        .replace("&", r"\u0026")
+    )
+    return INDEX_HTML.replace(
+        "__PROMPT_HUB_DEVICE_NAME_HTML__",
+        html.escape(safe_name),
+    ).replace(
+        "__PROMPT_HUB_DEVICE_NAME_JSON__",
+        script_name,
+    )

@@ -1,9 +1,8 @@
 #!/bin/zsh
 # Soda Prompt Hub —— 双击停止本机服务
 #
-# 放在仓库里的是原件；也可以把它拷贝或软链到
-# $HOME/Documents/Codex/soda-person/ 下双击（见 MAC_OPERATIONS_GUIDE.md）。
-# 仓库不在默认位置时，设置环境变量 PROMPT_HUB_REPO 指向仓库根目录。
+# 首次安装器会把这个脚本放到程序目录根部。
+# 程序不在默认位置时，设置环境变量 PROMPT_HUB_REPO 指向程序根目录。
 # 端口不是 8765 时，设置环境变量 PROMPT_HUB_PORT。
 
 emulate -L zsh
@@ -63,8 +62,8 @@ ps -p "${(j:,:)pids}" -o pid=,command= | while IFS= read -r line; do
   print -r -- "  $line"
 done
 
-# 2. 定位仓库：先从脚本自身位置向上找，找不到再用 PROMPT_HUB_REPO / 默认路径
-#    （查询后台任务状态需要借用仓库的 Python 环境解析接口返回）
+# 2. 定位程序：先从脚本自身位置向上找，找不到再用 PROMPT_HUB_REPO / 默认路径
+#    （查询后台任务状态需要借用程序的 Python 环境解析接口返回）
 script_path="${0:A}"
 repo=""
 dir="${script_path:h}"
@@ -76,7 +75,7 @@ while [[ "$dir" != "/" ]]; do
   dir="${dir:h}"
 done
 if [[ -z "$repo" ]]; then
-  repo="${PROMPT_HUB_REPO:-/Volumes/Data/Hub/soda-prompt-hub}"
+  repo="${PROMPT_HUB_REPO:-$HOME/Applications/Soda Prompt Hub}"
 fi
 
 # 3. 停止前确认没有「扫描中 / 打标中 / 生成草稿中」的后台任务

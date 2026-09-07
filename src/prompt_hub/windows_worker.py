@@ -17,12 +17,56 @@ from collections import Counter
 from contextlib import AbstractContextManager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
 from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO, Self
 from uuid import uuid4
 
 WORKER_BUILD_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 COMPUTE_PROTOCOL_VERSION = "soda-compute-bridge-v2"
+WORKER_RELEASE_FORMAT = "soda-windows-worker-release-v1"
+
+
+def _release_channel(version_value: str) -> str:
+    normalized = version_value.casefold()
+    if "dev" in normalized:
+        return "development"
+    if "rc" in normalized:
+        return "candidate"
+    return "stable"
+
+
+def _load_worker_release() -> dict[str, str]:
+    try:
+        fallback_version = package_version("prompt-hub")
+    except PackageNotFoundError:  # pragma: no cover - standalone release supplies RELEASE.json
+        fallback_version = "0+unknown"
+    fallback = {
+        "format": WORKER_RELEASE_FORMAT,
+        "worker_version": fallback_version,
+        "release_channel": _release_channel(fallback_version),
+        "protocol_version": COMPUTE_PROTOCOL_VERSION,
+    }
+    release_path = Path(__file__).with_name("RELEASE.json")
+    if not release_path.is_file():
+        return fallback
+    try:
+        raw = json.loads(release_path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return fallback
+    if not isinstance(raw, dict) or raw.get("format") != WORKER_RELEASE_FORMAT:
+        return fallback
+    return {
+        "format": WORKER_RELEASE_FORMAT,
+        "worker_version": str(raw.get("worker_version", fallback_version)),
+        "release_channel": str(raw.get("release_channel", fallback["release_channel"])),
+        "protocol_version": str(raw.get("protocol_version", COMPUTE_PROTOCOL_VERSION)),
+    }
+
+
+WORKER_RELEASE = _load_worker_release()
+WORKER_VERSION = WORKER_RELEASE["worker_version"]
 TASK_FORMAT = "soda-compute-task-v1"
 RESULT_FORMAT = "soda-compute-result-v1"
 PACKAGE_FORMAT = "soda-comfyui-package-v1"
@@ -286,6 +330,9 @@ class WindowsWorker:
             "format": "soda-worker-status-v1",
             "status": "ready",
             "worker_id": self.config.worker_id,
+            "worker_version": WORKER_VERSION,
+            "release_channel": WORKER_RELEASE["release_channel"],
+            "release_format": WORKER_RELEASE["format"],
             "worker_build_sha256": WORKER_BUILD_SHA256,
             "hostname": socket.gethostname(),
             "python": sys.version.split()[0],
@@ -692,6 +739,7 @@ class WindowsWorker:
             "task_id": task["task_id"],
             "task_type": task["task_type"],
             "worker_id": self.config.worker_id,
+            "worker_version": WORKER_VERSION,
             "worker_build_sha256": WORKER_BUILD_SHA256,
             "status": status,
             "started_at": started_at,
@@ -727,6 +775,7 @@ class WindowsWorker:
             "task_id": safe_task_id,
             "task_type": task_type,
             "worker_id": self.config.worker_id,
+            "worker_version": WORKER_VERSION,
             "worker_build_sha256": WORKER_BUILD_SHA256,
             "status": status,
             "started_at": started_at,
@@ -1497,7 +1546,7 @@ def worker_lock_path(config: WorkerConfig) -> Path:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Prompt Hub Windows 5060 Ti worker")
+    parser = argparse.ArgumentParser(description="Prompt Hub Windows worker")
     parser.add_argument("--config", default="worker-config.json")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--self-test", action="store_true")

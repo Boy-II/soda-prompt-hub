@@ -135,6 +135,24 @@ def test_clone_refuses_to_overwrite_an_existing_non_empty_directory(settings, tm
     assert (target / "personal.txt").read_text(encoding="utf-8") == "keep me\n"
 
 
+def test_failed_clone_removes_only_the_new_incomplete_directory(settings, monkeypatch) -> None:
+    target = settings.git_sources_root / "demo"
+
+    def interrupted_clone(_path, *_arguments, **_options) -> str:
+        target.mkdir(parents=True)
+        (target / "partial.pack").write_text("incomplete", encoding="utf-8")
+        raise subprocess.TimeoutExpired(cmd="git clone", timeout=1)
+
+    monkeypatch.setattr("prompt_hub.source_sync._git", interrupted_clone)
+    service = _service(settings, _spec("https://example.invalid/demo", target), [])
+
+    result = service.clone("demo")
+
+    assert result["status"] == "failed"
+    assert "超时" in result["message"]
+    assert not target.exists()
+
+
 def test_clone_rejects_a_target_outside_the_local_source_root(settings, tmp_path) -> None:
     remote = _publish_remote(tmp_path)
     outside = tmp_path / "outside"

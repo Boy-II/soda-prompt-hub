@@ -311,6 +311,7 @@ def build_project_journey(
     tasks = _project_tasks(remote_store, project_id)
     latest_workspace = workspaces[0] if workspaces else None
     latest_export = max(exports, key=lambda item: str(item.get("created_at", "")), default=None)
+    device_name = remote_store.primary_device_label()
     stages = _journey_stages(
         JourneyFacts(
             project=project,
@@ -323,7 +324,8 @@ def build_project_journey(
             latest_workspace=latest_workspace,
             exports=exports,
             latest_export=latest_export,
-        )
+        ),
+        device_name=device_name,
     )
     return {
         "project_id": project_id,
@@ -341,7 +343,7 @@ def build_project_journey(
     }
 
 
-def _journey_stages(facts: JourneyFacts) -> list[dict[str, Any]]:
+def _journey_stages(facts: JourneyFacts, *, device_name: str) -> list[dict[str, Any]]:
     project = facts.project
     filled_slots = facts.filled_slots
     reference_count = facts.reference_count
@@ -395,11 +397,11 @@ def _journey_stages(facts: JourneyFacts) -> list[dict[str, Any]]:
         },
         {
             "stage_id": "generation",
-            "label": "5060 Ti 出图",
+            "label": device_name,
             "count": len(tasks),
             "ready": bool(tasks),
-            "status": _task_status(latest_task),
-            "detail": f"{len(tasks)} 个关联任务",
+            "status": _task_status(latest_task, device_name=device_name),
+            "detail": f"ComfyUI 出图 · {len(tasks)} 个关联任务",
             "latest_at": str((latest_task or {}).get("updated_at", "")),
             "action": {"label": "设置并发送出图", "view": "creative", "target_id": ""},
         },
@@ -504,12 +506,12 @@ def _project_tasks(remote_store: RemoteNodeStore, project_id: str) -> list[dict[
         return []
 
 
-def _task_status(task: Mapping[str, Any] | None) -> str:
+def _task_status(task: Mapping[str, Any] | None, *, device_name: str) -> str:
     if task is None:
         return "尚未发送出图任务"
     labels = {
         "queued": "等待 Windows 领取",
-        "running": "5060 Ti 正在生成",
+        "running": f"{device_name}正在生成",
         "returned": "结果已回传, 等待导入",
         "completed": "任务已完成",
         "failed": "任务失败",

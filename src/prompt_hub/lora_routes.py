@@ -30,7 +30,7 @@ class LoraProjectInput(BaseModel):
     dataset_notes: str = Field(default="", max_length=6000)
     target_models: list[str] = Field(default_factory=list, max_length=10)
     training_resolution: int = 1024
-    training_node: str = Field(default="5060ti", max_length=120)
+    training_node: str = Field(default="Windows 训练设备", max_length=120)
     test_plan: str = Field(default="", max_length=6000)
 
 
