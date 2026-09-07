@@ -10,8 +10,10 @@ from typing import Any, ClassVar
 from urllib.parse import urlsplit
 
 import pytest
+from scripts.build_windows_worker_release import render_standalone_worker
 
 import prompt_hub.windows_worker as worker_module
+import prompt_hub.windows_worker_support as worker_support
 from prompt_hub import __version__
 from prompt_hub.remote_nodes import RemoteNodeStore
 from prompt_hub.windows_worker import (
@@ -101,7 +103,9 @@ def test_distributable_worker_matches_source() -> None:
     release_path = source_path.parents[2] / "deploy" / "windows-worker" / "prompt_hub_worker.py"
 
     assert release_path.is_file()
-    assert release_path.read_bytes() == source_path.read_bytes()
+    assert release_path.read_text(encoding="utf-8") == render_standalone_worker(
+        source_path.parents[2]
+    )
 
 
 def test_worker_release_channel_recognizes_candidate_versions() -> None:
@@ -520,7 +524,7 @@ def test_lora_preview_copy_reports_oversize_skip_reason(tmp_path, monkeypatch) -
         }
     ]
     bridge = tmp_path / "bridge"
-    monkeypatch.setattr(worker_module, "MAX_LORA_PREVIEW_BYTES", 8)
+    monkeypatch.setattr(worker_support, "MAX_LORA_PREVIEW_BYTES", 8)
 
     outputs, summary = worker_module._copy_lora_previews(  # noqa: SLF001
         items,

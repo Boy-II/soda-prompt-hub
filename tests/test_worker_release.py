@@ -10,6 +10,19 @@ from pathlib import Path
 from prompt_hub import __version__
 
 
+def _assert_windows_batch_newlines(payload: bytes) -> None:
+    assert b"\r\n" in payload
+    assert b"\n" not in payload.replace(b"\r\n", b"")
+
+
+def test_windows_batch_sources_use_crlf() -> None:
+    repository = Path(__file__).resolve().parents[1]
+    worker_root = repository / "deploy" / "windows-worker"
+
+    for path in sorted(worker_root.glob("*.bat")):
+        _assert_windows_batch_newlines(path.read_bytes())
+
+
 def test_windows_worker_release_is_versioned_verified_and_private_free(tmp_path) -> None:
     repository = Path(__file__).resolve().parents[1]
     result = subprocess.run(  # noqa: S603
@@ -41,6 +54,9 @@ def test_windows_worker_release_is_versioned_verified_and_private_free(tmp_path)
         assert f"{root}MANIFEST.sha256" in names
         assert f"{root}LICENSE.txt" in names
         assert f"{root}worker-config.json" not in names
+        for name in names:
+            if name.endswith(".bat"):
+                _assert_windows_batch_newlines(bundle.read(name))
         manifest = bundle.read(f"{root}MANIFEST.sha256").decode("utf-8")
         for line in manifest.splitlines():
             expected, relative = line.split("  ", 1)

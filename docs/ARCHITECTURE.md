@@ -59,3 +59,18 @@ Mac 从只读来源图片建立审核记录，冻结时创建独立版本副本�
 - 提示词 Git 来源：由“资料管理”独立更新。
 - Windows Worker：使用独立 ZIP 升级并保留真实 `worker-config.json`。
 - Windows 模型与训练：不随 Prompt Hub 代码升级。
+
+## 程序代码怎样分层
+
+运行时代码位于 `src/prompt_hub`，个人资料不保存在源码目录。P2 重构遵循“公开入口稳定、内部按职责拆分”：
+
+- `api.py` 负责建立应用并组合各领域路由；
+- `web.py` 只读取包内主页面资源、组装各功能页并处理设备名称转义；
+- `web_assets/index.html`、`base.css`、`base.js` 分别保存主页面结构、样式和交互；
+- `creative_web.py` 只组装 `web_assets/creative.css` 与 `creative.js`；其他功能页继续拥有各自规模可控的页面片段；
+- `dataset_curation.py` 保留数据集审核 facade，状态记录、打标/VLM 作业和冻结导出分别位于 `dataset_curation_records.py`、`dataset_curation_jobs.py` 与 `dataset_curation_export.py`；
+- `remote_nodes.py` 保留设备与任务桥 facade，LoRA/底模清单和安全校验分别位于 `remote_catalogs.py` 与 `remote_nodes_support.py`；
+- `database.py` 保留提示词与来源仓储，OC Manager 仓储和 schema/helper 分别位于 `database_oc.py` 与 `database_support.py`；
+- Windows Worker 开发源码位于 `windows_worker_support.py`、`windows_worker_core.py` 与 `windows_worker.py`，发行构建器会确定性合成单文件 `prompt_hub_worker.py`，普通用户部署方式不变。
+
+这种拆分不改变页面 URL、API、SQLite schema、SMB 目录和 Worker 协议。安装包必须包含 `web_assets`，否则应用应在启动时直接报缺失资源，而不是返回残缺页面。自动生成的 Windows Worker 单文件不作为开发源码维护，并由逐字节生成测试约束。

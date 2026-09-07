@@ -1280,3 +1280,37 @@
 - 阶段 49 最终工程门通过：132 文件 Ruff format、Ruff lint、ty、`uv lock --check`、300/300 pytest、81.95% coverage、8 段页面 JavaScript、全部 Mac `.command`、Python wheel/sdist 构建和 `git diff --check` 均正常。
 - 最终 Worker ZIP 已在本地重新构建，解压后 11 个 manifest 条目逐项 SHA-256 通过，12 个包内文件通过真实配置、模型/图片、密钥和个人路径扫描；ZIP SHA-256 为 `8617dc10f7301460b70dcf41896fd9fa415b244a095ad65e6275de4bdfd9d45b`。
 - 阶段 49 标记 `complete / local`。本轮未 commit、未 push、未创建 PR、tag 或 GitHub Release；正式发布动作继续等待用户单独确认。
+- 2026-09-07：用户纠正 P2 范围，要求继续处理过大的源码文件。重新审计确认 6 个生产模块仍超过 1200 行，阶段 43 仅完成第一轮低风险拆分。
+- 已从最新 `origin/main` 建立本地分支 `codex/p2-code-splitting`；旧功能分支此前已清理，三个 worktree 目录和个人数据均保留。
+- 阶段 50 启动。第一批只拆 `web.py` 主页面资源并保持页面输出与行为，不同时修改数据库或 Windows 协议；未获得 commit、push 或 PR 授权。
+- 规划审计中的一次只读 shell 循环使用了 zsh 特殊变量名 `path`，导致该子进程后半段找不到 `rg`；没有文件变化。已改用 `file_path` 重跑并获得完整职责清单。
+- 已冻结主页面拆分基线：`web.py` 81,625 bytes / 1,429 行；组装后的 `INDEX_HTML` 526,279 bytes，SHA-256 `025d78bf06c0e3f8872eaf186181918bbed49b83d5c090ba285454998550bc8a`，8 个 style、8 个 script、455 个唯一 id。
+- 主页面资源首次机械提取在写入前被长度保护拦截：错误地用 UTF-8 文件字节数比较 JavaScript 字符数，中文字符导致 81,625 bytes 与 77,082 characters 不相等；没有文件变化。后续改为校验赋值、style、script 和三引号边界。
+- 主页面资源已提取为 `web_assets/index.html`、`base.css` 和 `base.js`，`web.py` 从 1,429 行降到 67 行。首次组装哈希多 2 bytes，定位为 CSS 与 JavaScript 文件尾部各多一个空行；精确移除后 `INDEX_HTML` SHA-256 与拆分前完全一致。
+- 定向 format、lint、ty 和 23 项页面/API测试本身全部通过；组合测试命令仍以退出码 1 停止，因为项目全局 80% coverage 门在只运行两个测试文件时得到 25.72%。这不是行为测试失败，后续改用完整 pytest 验证覆盖率，不重复将小测试集与全局覆盖率门混用。
+- 已补 `tests/test_web_shell.py`，约束三份包内资源必须完成组装、占位符不得泄漏，并保留设备名称在 HTML 与 JavaScript 两处的转义边界。
+- 定向验证通过：Ruff format/lint、`ty check src/`、25 项无 coverage 的页面/API测试均正常。`uv build --no-sources` 成功，wheel 内确认包含 `web_assets/index.html`、`base.css` 和 `base.js`，不是仅在源码目录可用。
+- 第一批完整质量门通过：133 个文件 Ruff format、Ruff lint、ty、锁文件、303/303 pytest、81.97% coverage、wheel/sdist 构建与 `git diff --check` 全部正常。
+- 从 P2 分支在 `127.0.0.1:8766` 启动独立验收实例，没有停止正式 8765。应用内浏览器确认首页有实际内容、684px 无横向溢出；切换提示词库后显示 12 条当前页结果，导航状态正确，console 0 warning/error。
+- `creative_web.py` 首次资源提取在写入前被结构保护拦截：提取器假设两个常量之间有三个换行，实际空行数量不同；没有文件变化。下一次直接匹配闭合三引号与后续赋值名，不再依赖空行数量。
+- 已完成创作台资源拆分：`creative_web.py` 从 1257 行降到 16 行，CSS 为 310 行，JavaScript 为 932 行；新增共享 `web_resources.py`，主页面与创作台不再各自实现资源读取。
+- 创作台 style、script 与最终 `INDEX_HTML` 三项 SHA-256 均与拆分前完全一致；相关 Ruff 与 ty 检查通过。
+- 数据集状态记录与 `JobProgress` 协议已提取到 `dataset_curation_records.py`。首次定向检查在 format 阶段停止，原因是原文件截断点留下两个多余空行，pytest 尚未执行；后续用项目格式化器处理后从头重跑。
+- 格式修正后的第二轮在 lint 阶段停止：`Literal` 仍被两个主类方法使用，新记录模块的 `Mapping` 只用于类型，且搬出的 `_set_caption` 失去原文件的 `PLR0913` 精确例外；pytest 仍未执行。将修正导入并只延续该文件所需的单条例外。
+- 记录模块修正后 29 项数据集定向测试、Ruff 与 ty 全部通过。随后已把冻结、交付前检查、ZIP、导出历史和 SMB 复制提取为 `dataset_curation_export.py`。
+- 导出模块首轮 lint 报 28 项，全部属于原 `dataset_curation.py` 已有的复杂度与异常文案精确例外；测试尚未执行。为保持纯重构，将相同例外迁移到新模块，不在搬移时改错误语义或算法。
+- 迁移 lint 例外后 Ruff 与 ty 通过，29 项数据集测试中 28 项通过；唯一失败是磁盘写入故障测试仍 patch 旧所有者 `dataset_curation.shutil.copy2`，因此没有触发模拟错误。将测试目标改为新所有者，不增加兼容假模块。
+- 更新测试 patch 所有者后 29/29 数据集定向测试通过。`dataset_curation.py` 从 1695 行降到 1112 行，独立导出服务 519 行、共享记录模块 135 行；下一步继续提取 WD14/模型打标与 Krea 2 VLM 作业。
+- WD14、模型打标、Krea 2 VLM 队列与远程结果导入已提取到 `dataset_curation_jobs.py`；`dataset_curation.py` 最终降到约 544 行，29 项数据集定向测试、Ruff 和 ty 通过。
+- 远程设备按任务桥、LoRA/底模清单和安全 helper 拆成 `remote_nodes.py`、`remote_catalogs.py`、`remote_nodes_support.py`；原 1588 行入口降到约 506 行，51 项远程/Worker 关联测试通过。
+- 数据库的 OC Manager 仓储和 schema/helper 已提取到 `database_oc.py` 与 `database_support.py`；`database.py` 从 1226 行降到约 520 行，33 项数据库/API 定向测试通过。
+- 数据库定向测试首轮命令误写了不存在的 `tests/test_mcp_server.py`，pytest 在收集前停止、没有测试失败；改用真实文件 `tests/test_config_cli_mcp.py` 后 33 项通过。
+- Windows Worker 开发源码已拆为 support、core 和 90 行 CLI facade；发行构建器会从三份源码确定性生成单文件，Windows 用户仍只需复制 `prompt_hub_worker.py`。
+- Worker 单文件生成首轮保留了后续模块的 import，Ruff 报重复 import/E402；改为统一 standalone preamble 并在合成时移除模块 import 后，发行脚本 lint、ty 与 29 项 Worker/远程测试通过。
+- 阶段 50 的 6 个原始过大开发文件均已降到 917 行以内；约 1600 行的 `deploy/windows-worker/prompt_hub_worker.py` 是自动生成发行物，不是开发维护入口，并由逐字节生成测试约束。
+- 阶段 50 首次完整门中，303 项 pytest、82.00% coverage 与 8 段 JavaScript 已通过，但 Mac 脚本检查误写为不存在的 `scripts/mac/*.command`，整门未完成；改用真实目录 `deploy/mac/*.command` 后从头重跑。
+- 阶段 50 最终质量门通过：143 个文件 Ruff format、Ruff lint、ty、`uv lock --check`、303/303 pytest、82.00% coverage、8 段 JavaScript、5 个 Mac `.command`、wheel/sdist 构建与 `git diff --check` 全部正常，输出 `FINAL_GATE=PASS`。
+- 阶段 50 标记为 `complete / local`。没有 commit、push 或创建 PR；等待用户人工检查后再决定是否提交。
+- Windows 实机运行 `0-首次配置.bat` 时，CMD 将 `chcp 65001`、`if not exist` 等行拆成命令碎片。核对确认仓库与候选 ZIP 中三个 `.bat` 都是 LF-only；新增发行回归测试后稳定复现失败，根因不是 Python、ComfyUI 或用户配置。
+- CRLF 修复后的首轮完整测试与发行包检查通过，但 `git diff --check` 把保留在仓库中的 CR 当成尾随空白；为批处理增加 `whitespace=cr-at-eol` 属性后重新执行最终门，不取消全局差异检查。
+- Windows 批处理修复最终门通过：304/304 pytest、82.00% coverage、Ruff、ty、3 个源码/ZIP 批处理 CRLF 校验、必要发行文件检查和 `git diff --check` 全部正常。新候选 ZIP SHA-256 为 `189dacd633e0a89a32d57e0cc28ad514e903f5166a7219f2ab131f93db36a02a`。

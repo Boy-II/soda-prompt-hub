@@ -24,6 +24,36 @@ WORKER_FILES = (
     "RELEASE.json",
     "examples/comfyui-smoke-empty-image-v1.json",
 )
+WORKER_SOURCE_FILES = (
+    "src/prompt_hub/windows_worker_support.py",
+    "src/prompt_hub/windows_worker_core.py",
+    "src/prompt_hub/windows_worker.py",
+)
+STANDALONE_PREAMBLE = """from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import socket
+import sys
+import time
+import traceback
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import Counter
+from contextlib import AbstractContextManager, suppress
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as package_version
+from pathlib import Path, PurePosixPath
+from typing import Any, BinaryIO, Self
+from uuid import uuid4
+"""
 
 
 class ReleaseBuildError(ValueError):
@@ -87,7 +117,7 @@ def build_release(repository_root: Path, output_root: Path) -> dict[str, Any]:
                 raise MissingWorkerReleaseFileError(relative)
             target = staging / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+            _copy_worker_release_file(repository, relative, source, target)
         shutil.copy2(repository / "LICENSE", staging / "LICENSE.txt")
         manifest = _manifest(staging)
         (staging / "MANIFEST.sha256").write_text(
@@ -107,6 +137,52 @@ def build_release(repository_root: Path, output_root: Path) -> dict[str, Any]:
         "archive_sha256": _sha256(archive),
         "file_count": len(manifest) + 1,
     }
+
+
+def _copy_worker_release_file(
+    repository: Path,
+    relative: str,
+    source: Path,
+    target: Path,
+) -> None:
+    if relative == "prompt_hub_worker.py":
+        target.write_text(render_standalone_worker(repository), encoding="utf-8")
+        return
+    if source.suffix.casefold() == ".bat":
+        payload = source.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        target.write_bytes(payload.replace(b"\n", b"\r\n"))
+        return
+    shutil.copy2(source, target)
+
+
+def render_standalone_worker(repository_root: Path) -> str:
+    repository = repository_root.resolve()
+    parts = [STANDALONE_PREAMBLE]
+    for relative in WORKER_SOURCE_FILES:
+        source = repository / relative
+        if not source.is_file():
+            raise MissingWorkerReleaseFileError(relative)
+        parts.append(_standalone_source_part(source.read_text(encoding="utf-8")))
+    preamble, support, core, cli = (part.strip() for part in parts)
+    return f"{preamble}\n\n{support}\n\n\n{core}\n\n\n{cli}\n"
+
+
+def _standalone_source_part(source: str) -> str:
+    lines = []
+    omitting = False
+    for line in source.splitlines():
+        if line == "# standalone-bundle: omit-start":
+            omitting = True
+            continue
+        if line == "# standalone-bundle: omit-end":
+            omitting = False
+            continue
+        if omitting:
+            continue
+        if line == "from __future__ import annotations":
+            continue
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def main() -> None:

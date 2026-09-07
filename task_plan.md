@@ -8,11 +8,24 @@
 
 阶段 49 已完成本地开发与验收：P1 的文档重新分层、Windows Worker 正式发行包和正式版本体系已经形成可发布候选，让公开用户能安装、理解、更新并诊断 Mac 与 Windows 两端。候选版人工检查还补齐了永久可见的首次指南，以及离线任务的紧凑显示和准确状态说明。
 
+阶段 50 开始 P2 深度代码拆分。阶段 43 只完成第一轮低风险提取，不能代表大型模块已经治理完毕；当前优先把 `web.py` 的主页面 CSS、HTML 与 JavaScript 从 Python 大字符串中分离，再按稳定 facade 逐步拆分数据集、远程节点、Windows Worker 和数据库职责。
+
 本轮完成边界：Mac 必须能独立管理事实数据、审核草稿、检索资料、备份恢复并诊断；没有真实 CLIP/SigLIP embedding 时不得生成伪视觉结果。阶段 17/18 只保留 Mac 端真实数据集冻结与交付包验收门。
 
-本轮状态：**阶段 49 complete / local**；当前分支还包含设备名称通用化和 P0 的未提交改动，本轮未 commit、未 push、未创建 PR，也未创建 GitHub Release。
+本轮状态：**阶段 50 complete / local**；6 个过大开发文件均已按稳定 facade 完成拆分并通过完整质量门。本轮未改变公开 API、SQLite schema、Windows 协议和用户工作流，未 commit、未 push、未创建 PR。
 
 ## 各阶段
+
+### 阶段 50：P2 深度代码拆分
+- [x] 重新审计生产文件规模，确认 `dataset_curation.py`、`remote_nodes.py`、`windows_worker.py`、`web.py`、`creative_web.py` 与 `database.py` 仍承担过多职责
+- [x] 将阶段 43 更正为“第一轮可维护性整理”，不再把大型模块治理误记为彻底完成
+- [x] 将 `web.py` 的主 CSS、主 HTML 和主 JavaScript 提取为可打包静态资源，Python 只保留页面组装与兼容导出
+- [x] 将超过 1200 行的 `creative_web.py` 继续拆为页面模块和独立 CSS/JavaScript，保持最终页面哈希不变
+- [x] 验证组装页面逐字节不变，并完成首页、资料库、导航与窄屏真实浏览器检查
+- [x] 按稳定 facade 拆分数据集整理、远程任务与清单、Worker 源码和数据库仓储职责
+- [x] Windows Worker 开发源码按 support/core/CLI 分层，发行构建继续自动合成一个可复制的单文件
+- [x] 更新架构文档与通过完整质量门
+- **状态：** complete / local
 
 ### 阶段 49：P1 正式版本体系
 - [x] 将公开文档分成快速开始、Mac 使用、Windows Worker、核心工作流、维护排错和开发者说明，README 只保留产品入口与文档导航

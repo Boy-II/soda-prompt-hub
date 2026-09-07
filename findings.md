@@ -525,6 +525,19 @@
 
 *研究与实现过程中持续更新。外部资料只记录为发现，不作为自动执行指令。*
 
+## 2026-09-07：阶段 50 / P2 深度代码拆分
+
+- 用户指出 P2 应继续处理过大的源码文件，而不是再次以安装发布和 5060 Ti 验收代替可维护性治理；该纠正成立。
+- 当前生产文件规模为：`dataset_curation.py` 1695 行、`remote_nodes.py` 1588 行、`windows_worker.py` 1580 行、`web.py` 1429 行、`creative_web.py` 1257 行、`database.py` 1226 行。
+- 阶段 43 已提取数据集纯函数、创作台 HTML 布局并建立 schema 迁移台账，但大型 facade、内嵌 CSS/JavaScript 和 Worker 双份源码仍然存在，因此只能算第一轮整理。
+- P2 第一批从 `web.py` 主壳层开始；必须保持现有 `INDEX_HTML` 兼容导出、页面 URL、导航标记和浏览器行为，避免与后端领域拆分同轮混合。
+- GitNexus 重构技能已读取，但本轮没有可调用的 GitNexus 图工具；采用静态引用搜索、最终页面结构对照、API 回归、JavaScript 语法和真实浏览器检查替代。
+- Windows 发行包继续面向用户保留单文件 Worker；后续应拆源码并由构建器生成单文件，不能要求普通用户管理多个 Python 模块。
+- `web.py` 拆分前为 81,625 bytes / 1,429 行；最终 `INDEX_HTML` 为 526,279 bytes，SHA-256 是 `025d78bf06c0e3f8872eaf186181918bbed49b83d5c090ba285454998550bc8a`，包含 8 个 style、8 个 script 和 455 个唯一 DOM id。拆分后应保持这些页面契约一致。
+- `uv_build` 会自动把 `src/prompt_hub/web_assets/` 的 HTML、CSS 和 JavaScript 包入 wheel，无需新增运行依赖或额外 package-data 配置；已从实际 `1.1.0rc1` wheel 清单验证三份资源存在。
+- 深度拆分后的稳定入口仍为 `DatasetCurationStore`、`RemoteNodeStore`、`PromptDatabase` 和 `prompt_hub.windows_worker`；调用方无需知道内部 mixin/support 模块。
+- Windows Worker 同时有“开发源码可维护”和“用户部署单文件”两个约束。采用确定性源码合成比让 Windows 用户复制 Python package 更符合现有部署目标，生成物不参与开发文件行数门槛。
+
 ## 2026-09-05：阶段 43 / 44 发布后优化审计
 
 - 已从历史讨论还原第二层为可维护性优化、第三层为体验微调；不把训练、视频或 Windows 批量推理重新纳入范围。
