@@ -8,6 +8,13 @@
 - 本轮不直接合并 `main`，不修改个人图片、模型、数据集、任务或 Windows 文件。
 - 阶段 45–46 的 12 个文件通过 `git diff --check`、Ruff format、Ruff lint 与 `ty check src/`；敏感信息形状扫描只命中历史任务 ID 和文件哈希，没有发现凭据。
 - 35 项相关测试全部通过；因为项目对任何 pytest 运行都启用 80% 全局覆盖率门槛，定向运行最终以 36.78% 退出，属于测试子集覆盖范围不足，完整验收将改用全量测试结果。
+- 已将阶段 45–46 保存为 checkpoint `4daeffb`；从 `origin/main=48e05a3` 建立独立整合分支 `codex/post-pr6-release-polish`。
+- Windows Worker 独立包与公开教程已无冲突带入；阶段 45–46 仅在 `remote_web.py`、`workspace_web.py` 出现预期冲突。
+- 冲突按 PR 6 优先原则解决：完整保留模型端点/API Key/拉取后保存安全流、数据集文件夹浏览、ZIP 导入和模型打标；只叠加任务收纳、清单分页、延迟加载与窄屏分页。
+- 整合后的完整工程门通过：281/281 pytest、81.88% coverage、118 文件 Ruff format、Ruff lint、`ty check src/`、`uv lock --check`、8/8 JavaScript 语法与 `git diff --check` 全部正常。
+- 在 `/tmp/prompt-hub-post-pr6-qa.suaDtn` 隔离资料库和 `127.0.0.1:8767` 完成真实页面验收；没有读取或修改正式个人资料，也没有连接 Windows。
+- 桌面 1280px 与手机 390×844 均无横向溢出且 console 0 warning/error；手机主菜单、设备四个子页、LoRA/底模按需加载、模型接入禁用保存门、文件夹/ZIP 导入与 WD14/视觉模型双打标入口均实际显示和切换。
+- 手机模型接入页未出现“手动添加/填写模型”，未拉取模型时两个保存按钮保持禁用；这与 PR 6 的安全交互一致。
 
 ## 2026-09-06：阶段 46 长列表分页与工作步骤收敛
 
