@@ -15,6 +15,8 @@
 - 在 `/tmp/prompt-hub-post-pr6-qa.suaDtn` 隔离资料库和 `127.0.0.1:8767` 完成真实页面验收；没有读取或修改正式个人资料，也没有连接 Windows。
 - 桌面 1280px 与手机 390×844 均无横向溢出且 console 0 warning/error；手机主菜单、设备四个子页、LoRA/底模按需加载、模型接入禁用保存门、文件夹/ZIP 导入与 WD14/视觉模型双打标入口均实际显示和切换。
 - 手机模型接入页未出现“手动添加/填写模型”，未拉取模型时两个保存按钮保持禁用；这与 PR 6 的安全交互一致。
+- 已推送 `codex/post-pr6-release-polish` 并创建 PR #7：`https://github.com/cOkieeman/soda-prompt-hub/pull/7`；GitHub 判定为 `MERGEABLE`，未合并 `main`。
+- PR 初次 CI 已启动；本次任务书收尾提交推送后会触发最终 CI，完成状态以最终 run 为准。
 
 ## 2026-09-06：阶段 46 长列表分页与工作步骤收敛
 
