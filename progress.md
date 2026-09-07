@@ -17,6 +17,7 @@
 - 手机模型接入页未出现“手动添加/填写模型”，未拉取模型时两个保存按钮保持禁用；这与 PR 6 的安全交互一致。
 - 已推送 `codex/post-pr6-release-polish` 并创建 PR #7：`https://github.com/cOkieeman/soda-prompt-hub/pull/7`；GitHub 判定为 `MERGEABLE`，未合并 `main`。
 - PR 初次 CI 已启动；本次任务书收尾提交推送后会触发最终 CI，完成状态以最终 run 为准。
+- 最新代码提交 `ed93207` 的 GitHub Actions CI run `34076173004` 全部通过：format、lint、type check、281 项测试和 package build 均成功。唯一 annotation 是 GitHub 对第三方 Action 的 Node.js 20 弃用提醒，不影响本次构建结果。
 
 ## 2026-09-06：阶段 46 长列表分页与工作步骤收敛
 
