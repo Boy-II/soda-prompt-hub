@@ -209,6 +209,11 @@ def create_workflow_router(
                     )
                     result = attached["result"]
                 imported.append(result)
+            receipt = remote_store.mark_task_received(
+                payload.node_id,
+                task_id,
+                receipt_kind="comfyui_images",
+            )
         except (ComfyResultError, RemoteNodeError, WorkflowProfileError) as error:
             _raise_workflow_http(error)
         return {
@@ -218,6 +223,7 @@ def create_workflow_router(
             "duplicates": duplicates,
             "results": imported,
             "associated": bool(project_id),
+            "received_at": receipt["received_at"],
         }
 
     return router

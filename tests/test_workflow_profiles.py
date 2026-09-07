@@ -15,6 +15,13 @@ from prompt_hub.remote_nodes import RemoteNodeStore
 from prompt_hub.workflow_profiles import WorkflowProfileError, WorkflowProfileStore
 
 
+def _assert_latest_task_received(client: TestClient, receipt_kind: str) -> None:
+    accepted = client.get("/api/remote-nodes/compute-5060ti/tasks").json()[0]
+    assert accepted["status"] == "completed"
+    assert accepted["received_at"]
+    assert accepted["receipt_kind"] == receipt_kind
+
+
 def _node(class_type: str, **inputs: object) -> dict[str, object]:
     return {"class_type": class_type, "inputs": inputs}
 
@@ -519,6 +526,7 @@ def test_workflow_api_archives_and_submits_identical_package(settings, tmp_path)
         imported = imported_result.json()
         assert imported["image_count"] == 1
         assert imported["associated"] is True
+        _assert_latest_task_received(client, "comfyui_images")
         attached_project = client.get(f"/api/creative/projects/{project['project_id']}").json()
         assert (
             attached_project["generation"]["result_assets"][0]["comfy_import_id"]

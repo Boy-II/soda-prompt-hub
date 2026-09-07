@@ -400,6 +400,11 @@ INDEX_HTML = r"""<!doctype html>
     main { min-height: 630px; padding: 24px 28px 34px; }
     .results-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
     .results-head h2 { margin: 0; font: 700 28px/1 "Iowan Old Style", serif; letter-spacing: -.03em; }
+    .archive-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 16px; }
+    .archive-pagination[hidden] { display: none; }
+    .archive-pagination button { border: 1px solid var(--ink); background: transparent; padding: 9px 12px; color: var(--ink); font: 800 9px monospace; cursor: pointer; }
+    .archive-pagination button:disabled { cursor: default; opacity: .35; }
+    .archive-pagination span { min-width: 120px; text-align: center; color: var(--muted); font: 800 9px monospace; }
     #status { color: var(--muted); font: 600 11px monospace; }
     .results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); margin-top: 18px; border: 1px solid var(--line); }
     .results.character-results { gap: 12px; background: transparent; border: 0; }
@@ -733,6 +738,7 @@ INDEX_HTML = r"""<!doctype html>
       <main>
         <p class="archive-notice" id="archiveNotice"><strong>提示词与视觉资料库：</strong>输入服装、动作、构图、场景或画风关键词。找到合适内容后可以收藏并记录实测备注。</p>
         <div class="results-head"><h2 id="resultsTitle">提示词结果</h2><span id="status">可以开始</span></div>
+        <nav class="archive-pagination" id="archivePagination" aria-label="提示词结果分页" hidden><button id="archivePreviousPage" type="button">上一页</button><span id="archivePageStatus">第 1 / 1 页</span><button id="archiveNextPage" type="button">下一页</button></nav>
         <div class="results" id="results"></div>
       </main>
     </div>
@@ -744,6 +750,8 @@ INDEX_HTML = r"""<!doctype html>
     let currentMode = 'home';
     let currentResults = [];
     let currentCharacters = [];
+    let archivePage = 1;
+    const archivePageSize = 12;
     let tagDisplayLanguage = 'zh';
     const tagLabelCache = new Map();
     const viewLabels = {home:'首页', creative:'创作台', prompts:'提示词库', discover:'智能检索', characters:'角色库', datasets:'数据集', lora:'LoRA 项目', comfy:'Windows 出图', management:'资料管理', remote:'设备连接'};
@@ -910,20 +918,17 @@ INDEX_HTML = r"""<!doctype html>
       if ([...$('#ocWorld').options].some(option => option.value === selectedWorld)) $('#ocWorld').value = selectedWorld;
     }
 
-    async function searchPrompts() {
-      $('#status').textContent = '正在查找…';
-      $('#results').classList.remove('character-results');
-      const params = new URLSearchParams({query: $('#query').value, kind: $('#kind').value, safety: $('#safety').value, source_id: $('#source').value, favorites_only: $('#favoritesOnly').getAttribute('aria-pressed'), limit: '30'});
-      const data = await fetch('/api/search?' + params).then(r => r.json());
-      currentResults = data.results;
-      await ensureTagLabels(data.results.flatMap(tagValuesFromItem));
-      $('#status').textContent = `找到 ${data.count} 条`;
-      if (!data.results.length) {
-        $('#results').innerHTML = '<div class="empty"><strong>没有找到对应资料</strong><span>换一个词，或放宽类型与内容分级。</span></div>';
-        return;
-      }
-      $('#results').innerHTML = data.results.map((item, index) => `
-        <article class="card ${item.favorite ? 'is-favorite' : ''}" data-result-index="${index}" style="animation-delay:${Math.min(index * 25, 250)}ms">
+    function renderPromptPage() {
+      const pageCount = Math.max(1, Math.ceil(currentResults.length / archivePageSize));
+      archivePage = Math.min(Math.max(archivePage, 1), pageCount);
+      const start = (archivePage - 1) * archivePageSize;
+      const pageItems = currentResults.slice(start, start + archivePageSize);
+      $('#archivePagination').hidden = currentResults.length <= archivePageSize;
+      $('#archivePageStatus').textContent = `第 ${archivePage} / ${pageCount} 页 · 每页 ${archivePageSize} 条`;
+      $('#archivePreviousPage').disabled = archivePage <= 1;
+      $('#archiveNextPage').disabled = archivePage >= pageCount;
+      $('#results').innerHTML = pageItems.map((item, index) => `
+        <article class="card ${item.favorite ? 'is-favorite' : ''}" data-result-index="${start + index}" style="animation-delay:${Math.min(index * 25, 250)}ms">
           ${visualMarkup(item)}
           <div class="card-meta">
             <span class="badge signal">${escapeHtml(kindLabels[item.kind] || '资料')}</span>
@@ -938,12 +943,30 @@ INDEX_HTML = r"""<!doctype html>
         </article>`).join('');
     }
 
+    async function searchPrompts() {
+      $('#status').textContent = '正在查找…';
+      $('#results').classList.remove('character-results');
+      const params = new URLSearchParams({query: $('#query').value, kind: $('#kind').value, safety: $('#safety').value, source_id: $('#source').value, favorites_only: $('#favoritesOnly').getAttribute('aria-pressed'), limit: '30'});
+      const data = await fetch('/api/search?' + params).then(r => r.json());
+      currentResults = data.results;
+      archivePage = 1;
+      await ensureTagLabels(data.results.flatMap(tagValuesFromItem));
+      $('#status').textContent = `找到 ${data.count} 条`;
+      if (!data.results.length) {
+        $('#archivePagination').hidden = true;
+        $('#results').innerHTML = '<div class="empty"><strong>没有找到对应资料</strong><span>换一个词，或放宽类型与内容分级。</span></div>';
+        return;
+      }
+      renderPromptPage();
+    }
+
     async function searchCharacters() {
       $('#status').textContent = '正在查找角色…';
       $('#results').classList.add('character-results');
       const params = new URLSearchParams({query: $('#query').value, world: $('#ocWorld').value, limit: '30'});
       const data = await fetch('/api/oc-manager/characters?' + params).then(r => r.json());
       currentCharacters = data.results;
+      $('#archivePagination').hidden = true;
       $('#status').textContent = `找到 ${data.count} 个角色`;
       if (!data.results.length) {
         $('#results').innerHTML = '<div class="empty"><strong>还没有找到角色</strong><span>可以换一个关键词，或选择 OC Manager 导出的 JSON 文件进行导入。</span></div>';
@@ -1138,6 +1161,8 @@ INDEX_HTML = r"""<!doctype html>
     $('#safety').addEventListener('change', searchPrompts);
     $('#source').addEventListener('change', searchPrompts);
     $('#ocWorld').addEventListener('change', searchCharacters);
+    $('#archivePreviousPage').addEventListener('click', () => { if (archivePage <= 1) return; archivePage -= 1; renderPromptPage(); $('#archivePagination').scrollIntoView({block:'nearest'}); });
+    $('#archiveNextPage').addEventListener('click', () => { if (archivePage * archivePageSize >= currentResults.length) return; archivePage += 1; renderPromptPage(); $('#archivePagination').scrollIntoView({block:'nearest'}); });
     $('#appNavToggle').addEventListener('click', event => setNavMenu(event.currentTarget.getAttribute('aria-expanded') !== 'true'));
     document.addEventListener('keydown', event => { if (event.key === 'Escape') setNavMenu(false); });
     document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => setView(button.dataset.view)));
