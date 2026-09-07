@@ -1,5 +1,35 @@
 # 发现与决策
 
+## 2026-09-07：阶段 49 P1 正式版本体系审计
+
+- 当前版本仍分别硬编码在 `pyproject.toml` 和 `src/prompt_hub/__init__.py`，两处都是 `1.0.0`；P0 与设备名称通用化改动尚未发布，因此本轮先使用明确的开发版本，不冒充正式 `v1.1.0`。
+- 数据库已经有 `schema_migrations` 台账，可直接汇总各组件最高版本，不需要为 P1 再建立一套数据版本表。
+- Mac/Windows 协议已有 `soda-compute-bridge-v2`，Worker 状态也会写 `protocol_version`；当前缺少 Worker 程序版本、兼容判断结果和普通用户能理解的中文说明。
+- P0 首次安装器已经实现“代码目录与个人资料目录分离”，P1 更新器应复用这个边界：只替换安装目录，更新前建立程序快照，绝不复制、移动或删除个人资料库。
+- 正式版本信息应覆盖软件版本、发布通道、Worker 版本、协议版本和数据库组件版本；提示词资料库 revision、CLIP 模型版本继续由各自现有系统管理，不绑定软件升级。
+- `deploy/windows-worker` 已经是可独立运行的雏形，但缺 Worker 版本、发行 manifest、完整性校验和升级入口；现有 `README-WINDOWS.md` 可保留为断网也能看的包内说明。
+- 根目录 `WINDOWS_WORKER_GUIDE.md`、包内 `README-WINDOWS.md` 与 README 的 Worker 段落存在重复。正式分层应把根目录文档作为完整维护指南、包内说明作为首次运行短教程，README 只保留入口与链接。
+- P1 不需要增加数据库表：系统版本接口可只读 `schema_migrations` 汇总主库和 embedding 库；数据库不存在时返回未初始化，而不是为了显示版本创建空库。
+- Mac 软件版本以 `pyproject.toml` 的包元数据为唯一来源，`prompt_hub.__version__` 改为运行时读取安装元数据；P1 本地候选使用 PEP 440 开发版本，正式 GitHub Release 前再单独切换稳定版本。
+- Worker 是可单独更新的 Windows 组件，使用包内 `RELEASE.json` 作为自身版本来源；Mac 内置期望版本与当前软件版本保持一致，但协议兼容以 `soda-compute-bridge-v2` 为硬门，版本差异只提示更新，不误判为协议损坏。
+- Worker ZIP 采用明确文件白名单，构建时生成 `MANIFEST.sha256`；正式包不包含 `worker-config.json`，因此升级脚本和压缩包都不会携带本机盘符、共享路径或其他个人配置。
+- Mac 更新器测试失败的根因不是备份逻辑，而是更新器主动把 `/opt/homebrew/bin` 放到 PATH 前端，测试进程的 fake `uv` 因此未被调用。更新器现支持仅供自动化/维护使用的 `PROMPT_HUB_UV_BIN` 显式覆盖；日常双击仍自动使用已安装的 `uv`，备份和回滚门没有被绕过。
+- 桌面与 390px 浏览器验收确认：首页能读出 `1.1.0.dev1 · 开发版` 和四项主数据库结构版本；旧 Worker 协议兼容时显示“可以连接，建议更新”，协议不兼容时显示“Worker 需要更新”，并明确共享目录本身仍连接正常。
+- P1 最终 Worker ZIP 是 `Soda-Prompt-Hub-Windows-Worker-1.1.0.dev1.zip`，包含 12 个文件（11 个受 manifest 校验文件 + `MANIFEST.sha256`）；最终 ZIP SHA-256 为 `8617dc10f7301460b70dcf41896fd9fa415b244a095ad65e6275de4bdfd9d45b`。
+- 首页右侧现有三行本地状态，适合直接增加“程序版本”和“数据版本”，无需新增设置页；原“个人版 1.0”固定文案必须改为接口驱动，避免发布后仍显示旧版本。
+- 设备页诊断目前只把协议匹配折叠进 `worker_ready` 布尔值，协议不符时用户只能看到未就绪。P1 应让后端返回结构化兼容状态，前端分别显示“当前版本”“建议更新”“协议不兼容”和“尚未自检”。
+- `/api/health` 当前没有版本字段，OpenAPI 已使用 `__version__`。新增 `/api/system/version` 后，健康接口保留轻量字段，完整数据库组件版本只在系统版本接口读取。
+- P1 代码版本采用 `1.1.0.dev1`，明确表示本地开发候选而非已发布的稳定版；正式发布时再由单独发布动作切换为 `1.1.0`。
+- Windows Worker 正式包适合新增 `0-首次配置.bat` 和 `4-校验发行包.ps1`，保留现有自检/启动/LoRA Manager 检查；ZIP 根目录固定、文件白名单固定，用户解压后从 0 开始按序操作。
+- 根 `.gitignore` 已排除 `dist/` 和 ZIP，可以在本地真实生成发行包验证而不把二进制产物误加入 Git；发行构建脚本与 RELEASE 元数据继续纳入源码审查。
+
+## 2026-09-07：阶段 48 P0 实施核对
+
+- `SourceSyncService.job()` 已支持 `source_ids=[]` 与 `clone_missing=true`，会顺序拉取缺失预设源并在最后统一重建索引；首页只需增加轻量入口和任务状态闭环，不新增批量下载协议。
+- 三个 Mac 双击脚本都会先从自身目录向上定位程序，但定位失败后仍回退到作者路径 `/Volumes/Data/Hub/soda-prompt-hub`；公开安装应统一回退到 `~/Applications/Soda Prompt Hub`。
+- 当前设备页的诊断结果渲染全部塞在 `act()` 内；自动诊断应提取共享渲染函数，页面打开、保存设备、手动检查与创建目录后复用同一套中文状态，避免行为分叉。
+- 当前首页只显示资料条目数量，不会加载 `/api/sources/sync-status`；推荐资料准备卡应只在存在 `missing` 来源时出现，并保留资料管理页的逐个拉取和安全更新。
+
 ## 阶段 46 长列表收敛
 
 - 真实 72 张 LoRA 项目在桌面和 390px 窄屏均只渲染 12 张；五步流程只显示当前一步，方向键可从第 3 步切到第 4 步。
@@ -606,6 +636,14 @@
 - 真实预览样本显示同一模型常同时存在当前 `.jpeg` 与 `.civitai_bak.png/.jpg/.webp`，因此同步语义确定为“一条 LoRA 可有多张参照图”；卡片取第一张，查看器展示全部。
 - Worker 允许 `.png/.jpg/.jpeg/.webp/.gif`，安全上限为单图 32 MiB、最多 1024 张、总计 2 GiB。输出使用 `lora_id/000.ext` 安全名，不沿用 Windows 文件名作为 Mac 物理路径。
 - Mac 图片路由每次读取前再次校验缓存 SHA-256；伪装扩展名会在导入前通过文件头检查被拒绝。旧清单没有 `preview_files` 时仍返回空 `preview_urls`。
+
+## 2026-09-07：阶段 48 P0 首次使用审计
+
+- 现有 Mac 启动、停止、诊断脚本只适合已经存在代码仓库和 uv 的用户；三个脚本仍回退到作者的 `/Volumes/Data/Hub/soda-prompt-hub`，公开 README 与操作手册仍引用 `soda-person` 复制位置。
+- 推荐提示词库当前预设 Clio Style Library、Krea Open Prompts、SD Wildcards 与 Kisegaeningyou。后端 `SourceSyncService.job()` 已支持 `clone_missing=true` 批量拉取并自动重建索引，页面只缺首次空库入口与批量按钮。
+- 当前“更新公共提示词库”明确传递 `clone_missing=false`，因此新用户必须逐项点“拉取”；AnimaDex 尚未进入 `discover_sources()`，不纳入本轮现有四库的一键安装。
+- 设备页加载时只读取节点、任务、清单数量和模型端点；不会调用既有 diagnostics API。保存过的设备卡会先显示“尚未检查”，可在前端调用已有只读诊断完成自动状态刷新。
+- P0 实现不引入 DMG、后台常驻服务或自动训练；首版采用可审计 `.command` 安装器和现有首页轻量卡片，避免新增独立页面。
 # 2026-09-07：PR 6 后的收口发现
 
 - 远程 `main` 已在 `48e05a3` 合并 PR 6，GitHub Actions CI 成功。

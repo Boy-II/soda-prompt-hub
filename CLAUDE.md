@@ -6,7 +6,7 @@ Soda Prompt Hub 是一个本机优先（local-first）的 AI 绘图创作与数�
 管理提示词、OC、视觉参考、创作项目、结果图和 LoRA 数据集，通过 SMB 共享目录把生成任务投递给一台
 Windows 5060 Ti 上的 ComfyUI Worker。训练本身不在本项目范围内。
 
-仓库文档以中文为主（README、DEVELOPMENT_PLAN、MAC_OPERATIONS_GUIDE 等），代码标识符与注释用英文，
+仓库文档以中文为主（README、`docs/`、DEVELOPMENT_PLAN 等），代码标识符与注释用英文，
 面向用户的 UI 文案用中文。新增内容请沿用同一约定。
 
 ## 常用命令

@@ -118,6 +118,7 @@ class SourceSyncService:
         root = self.settings.git_sources_root
         if not spec.path.is_relative_to(root):
             return _result(spec, "failed", message="资料源路径不在本地来源目录内，已拒绝拉取")
+        target_preexisting = spec.path.exists()
         if spec.path.exists() and (not spec.path.is_dir() or any(spec.path.iterdir())):
             return _result(spec, "failed", message="本地目录已存在且不为空，未覆盖")
         root.mkdir(parents=True, exist_ok=True)
@@ -131,8 +132,12 @@ class SourceSyncService:
                 timeout=CLONE_TIMEOUT_SECONDS,
             )
         except SourceSyncError as error:
+            if not target_preexisting:
+                shutil.rmtree(spec.path, ignore_errors=True)
             return _result(spec, "failed", message=str(error))
         except subprocess.TimeoutExpired:
+            if not target_preexisting:
+                shutil.rmtree(spec.path, ignore_errors=True)
             return _result(spec, "failed", message="拉取超时，请检查网络后重试")
         cloned = self._source_status(spec)
         if cloned["status"] in {"missing", "not_git", "failed"}:

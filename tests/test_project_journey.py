@@ -73,6 +73,11 @@ def test_project_journey_sync_and_delivery_keep_lineage_without_reviewing(  # no
     tmp_path,
 ) -> None:
     with TestClient(create_app(settings)) as client:
+        configured = client.put(
+            "/api/remote-nodes/compute-5060ti",
+            json={"label": "主力绘图机", "role": "compute_5060ti"},
+        )
+        assert configured.status_code == 200
         project = client.post("/api/creative/projects", json=_project_payload()).json()
         project_id = project["project_id"]
         empty = client.post(
@@ -128,6 +133,11 @@ def test_project_journey_sync_and_delivery_keep_lineage_without_reviewing(  # no
             "dataset",
             "delivery",
         ]
+        generation_stage = next(
+            stage for stage in before["stages"] if stage["stage_id"] == "generation"
+        )
+        assert generation_stage["label"] == "主力绘图机"
+        assert generation_stage["detail"] == "ComfyUI 出图 · 0 个关联任务"
 
         synced = client.post(
             f"/api/creative/projects/{project_id}/dataset-workspace",

@@ -3,7 +3,8 @@
 这个目录是可以独立放到 Windows 上运行的 Worker 发布包。它通过 SMB 共享目录接收 Mac 发来的
 任务，只访问 Windows 本机的 ComfyUI，不需要把 ComfyUI 开放到局域网。
 
-请完整保留本目录中的 `prompt_hub_worker.py`、两个 `.bat`、示例配置和说明文件，不要只下载启动脚本。
+当前 Worker 版本和通信协议写在 `RELEASE.json`。请完整保留解压后的目录，不要只下载或复制一只
+启动脚本；正式发行包还使用 `MANIFEST.sha256` 检查文件是否完整。
 
 ## 先理解四类路径
 
@@ -25,14 +26,15 @@ Windows 可以共享 `D:\PromptHub-Bridge`；Mac 通过 Finder 挂载后可能�
 
 ## 第一次运行
 
-1. 把整个 `windows-worker` 文件夹复制到 Windows 的共享目录或其他固定位置。
-2. 复制 `worker-config.example.json` 并改名为 `worker-config.json`。
-3. 按当前电脑的盘符修改 `bridge_root`、`lora_roots` 和 `model_roots`；不使用的模型类型可以删除。
-4. 启动 ComfyUI，并确认浏览器能打开 `http://127.0.0.1:8188`。
-5. 确认已安装 Python 3.12；当前实测版本是 3.12.10。
-6. 双击 `1-先自检.bat`。
-7. 看到 `[OK] Worker and local ComfyUI are ready.` 后，双击 `2-启动Worker.bat`。
-8. 保持 Worker 黑色窗口开启。窗口显示“等待任务”时，Mac 才能投递真实任务。
+1. 从 GitHub Release 下载 `Soda-Prompt-Hub-Windows-Worker-<版本>.zip`，完整解压后再运行。
+2. 右键 `校验发行包.ps1`，选择“使用 PowerShell 运行”；看到绿色 `[OK]` 后继续。
+3. 双击 `0-首次配置.bat`。它会保留已有配置，或从示例建立新的 `worker-config.json`。
+4. 按当前电脑的盘符修改 `bridge_root`、`lora_roots` 和 `model_roots`；不使用的模型类型可以删除。
+5. 启动 ComfyUI，并确认浏览器能打开 `http://127.0.0.1:8188`。
+6. 确认已安装 Python 3.12；当前实测版本是 3.12.10。
+7. 双击 `1-先自检.bat`。
+8. 看到 `[OK] Worker and local ComfyUI are ready.` 后，双击 `2-启动Worker.bat`。
+9. 保持 Worker 黑色窗口开启。窗口显示“等待任务”时，Mac 才能投递真实任务。
 
 自检写出的 `worker-status.json` 包含 `worker_build_sha256`，代表实际启动脚本的 SHA-256。任务成功
 或失败时，结果信封也会回显同一字段。它可以确认当前接任务的是刚同步的新版 Worker，而不是仍在
@@ -43,7 +45,7 @@ Windows 可以共享 `D:\PromptHub-Bridge`；Mac 通过 Finder 挂载后可能�
 源码、metadata/预览文件清单、ComfyUI 本机公开接口和 LoRA 目录统计，结果写入共享目录
 `diagnostics/lora-manager-inspection.json`；它不会修改插件、下载模型或读取权重内容。
 
-不需要安装 pip 包，不需要 Windows 密码，也不需要 API Key。`worker-config.json` 中的
+Worker 只使用 Python 标准库，不需要安装 pip 包，也不需要 Windows 密码或 API Key。`worker-config.json` 中的
 `lora_roots` 只登记允许扫描的 LoRA 根目录；`model_roots` 分别登记 Checkpoint、Diffusion Model、
 VAE、Text Encoder、放大模型和 ControlNet 目录。Mac 任务只能使用配置中的 `root_id`，不能传入
 任意 Windows 路径。复制示例配置后，必须把示例盘符改成这台电脑的真实 ComfyUI 目录。
@@ -55,6 +57,17 @@ VAE、Text Encoder、放大模型和 ControlNet 目录。Mac 任务只能使用�
 3. 在 Mac Prompt Hub 投递任务。
 4. Worker 串行执行；图片与记录回到共享目录 `inbox`。
 5. Mac 校验源文件和回传文件的 SHA-256，之后再进入结果审核。
+
+## 升级 Worker
+
+1. 在旧 Worker 窗口按 `Ctrl+C`，不要直接覆盖仍在运行的目录。
+2. 把新版 ZIP 解压到新目录，先运行 `校验发行包.ps1`。
+3. 将旧目录中真实的 `worker-config.json` 复制到新版目录。
+4. 运行新版 `1-先自检.bat`，通过后再运行 `2-启动Worker.bat`。
+5. 在 Mac“设备连接”重新检查，确认页面显示的 Worker 版本和协议兼容。
+
+发行 ZIP 不包含真实 `worker-config.json`、任务、模型、预览图或登录信息。新版稳定运行后再归档
+旧目录，可以在配置错误时快速切回。
 
 ## 同步 LoRA 清单
 

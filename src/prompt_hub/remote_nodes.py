@@ -14,8 +14,12 @@ from typing import Any
 from uuid import uuid4
 
 from prompt_hub.compute_bridge import COMPUTE_PROTOCOL_VERSION, compute_contract
+from prompt_hub.release_info import worker_compatibility
 
-NODE_ROLES = {"compute_5060ti"}
+PRIMARY_COMPUTE_NODE_ID = "compute-5060ti"
+COMPUTE_NODE_ROLE = "compute_5060ti"
+DEFAULT_COMPUTE_NODE_LABEL = "Windows 绘图设备"
+NODE_ROLES = {COMPUTE_NODE_ROLE}
 BRIDGE_DIRECTORIES = ("outbox", "inbox", "processing", "completed", "failed")
 SAFE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,159}")
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
@@ -94,6 +98,20 @@ class RemoteNodeStore:
         nodes = payload.get("nodes", [])
         return nodes if isinstance(nodes, list) else []
 
+    def primary_device_label(self) -> str:
+        nodes = self.list_nodes()
+        primary = next(
+            (item for item in nodes if item.get("node_id") == PRIMARY_COMPUTE_NODE_ID),
+            None,
+        )
+        if primary is None:
+            primary = next(
+                (item for item in nodes if item.get("role") == COMPUTE_NODE_ROLE),
+                None,
+            )
+        label = str((primary or {}).get("label", "")).strip()
+        return label or DEFAULT_COMPUTE_NODE_LABEL
+
     def save_node(self, node_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         clean_id = _safe_id(node_id, "node_id")
         role = str(payload.get("role", ""))
@@ -157,6 +175,7 @@ class RemoteNodeStore:
             and worker_status.get("role") == node.get("role")
             and worker_status.get("comfyui_reachable") is True
         )
+        compatibility = worker_compatibility(worker_status)
         configured = bool(node.get("host") and mount_value)
         if not configured:
             state = "not_configured"
@@ -178,6 +197,7 @@ class RemoteNodeStore:
             "bridge_root": str(bridge_root) if bridge_root else "",
             "worker_ready": worker_ready,
             "worker_status": worker_status,
+            "worker_compatibility": compatibility,
             "credentials_stored": False,
         }
 

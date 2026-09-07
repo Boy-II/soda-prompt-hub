@@ -4,9 +4,28 @@ import json
 
 from fastapi.testclient import TestClient
 
+from prompt_hub import __version__
 from prompt_hub.api import create_app
 from prompt_hub.database import PromptDatabase
 from prompt_hub.importers import import_all
+
+
+def test_home_uses_configured_device_name_without_script_injection(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        default_page = client.get("/").text
+        assert "Windows 绘图设备" in default_page
+        assert "__PROMPT_HUB_DEVICE_NAME_" not in default_page
+
+        saved = client.put(
+            "/api/remote-nodes/compute-5060ti",
+            json={"label": "绘图机 </script>&", "role": "compute_5060ti"},
+        )
+        assert saved.status_code == 200
+
+        configured_page = client.get("/").text
+        assert "绘图机 &lt;/script&gt;&amp;" in configured_page
+        assert 'let remoteDeviceName = "绘图机 \\u003c/script\\u003e\\u0026";' in configured_page
+        assert "__PROMPT_HUB_DEVICE_NAME_" not in configured_page
 
 
 def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
@@ -129,7 +148,7 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
                 "datasetPreflight",
                 "datasetExportActiveProfile",
                 "datasetDeliveryHistory",
-                "复制到 5060 Ti",
+                "复制到 ${escapeHtml(target)}",
                 "打开 Finder",
                 "hashes.sha256",
                 "不修改源文件夹",
@@ -156,9 +175,17 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
                 "remoteModelPanel",
                 'aria-selected="true"',
                 "remoteNodeGrid",
+                "homeProgramVersion",
+                "homeDataVersion",
+                "homeReleaseIdentity",
+                "homeFirstGuide",
+                "/api/system/version",
+                "data-remote-worker-version",
+                "Worker 需要更新",
+                "当前 Worker 无法与本版通信",
                 "任务状态",
                 "这里会出现哪些任务",
-                "这里只记录 Mac 与 5060 Ti 之间的出图和模型清单更新",
+                "data-remote-device-name",
                 "更新 LoRA 清单",
                 "更新底模清单",
                 "ComfyUI 出图",
@@ -169,8 +196,15 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
                 "执行程序",
                 "失败原因",
                 "remoteTaskSummary",
+                "remoteTaskMore",
+                "收起较早的",
+                "remoteCancelQueued",
+                "取消全部等待中的任务",
+                "状态待确认",
+                "等待连接 Windows 后核对",
                 "条历史记录",
-                "条需要处理",
+                "条需要你处理",
+                "当前任务",
                 "旧清单任务已收起",
                 "已被较新的清单取代",
                 "正在检查文件…",
@@ -232,7 +266,7 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
                 "genHeight",
                 "workflow_controls",
                 "sendWorkflow",
-                "发送到 5060 Ti",
+                "发送到 <span data-remote-device-name>",
                 "projectJourneyGrid",
                 "creativeResultsSection",
                 "从想法到数据集",
@@ -277,7 +311,7 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
 
 def test_openapi_reports_public_release_version(settings) -> None:
     with TestClient(create_app(settings)) as client:
-        assert client.get("/openapi.json").json()["info"]["version"] == "1.0.0"
+        assert client.get("/openapi.json").json()["info"]["version"] == __version__
 
 
 def test_page_uses_scoped_headers_and_accessible_contrast(settings) -> None:
@@ -312,6 +346,38 @@ def test_page_has_mobile_menu_and_workspace_resume_entry(settings) -> None:
     assert 'id="datasetContinueButton"' in page.text
     assert "hasWorkspaces?'导入另一个文件夹':'01 · 导入素材'" in page.text
     assert "deliveryState().recommended" in page.text
+
+
+def test_home_offers_batch_setup_for_missing_recommended_sources(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        page = client.get("/").text
+
+    for marker in (
+        'id="homeSourceSetup"',
+        'id="homeSourceInstall"',
+        'id="homeSourceSkip"',
+        'id="homeSourceProgress"',
+        "sourceSetupSkipKey",
+        "renderHomeSourceSetup(sources)",
+        "source_ids: sourceIds, clone_missing: true",
+        "loadSourceSyncStatus(), searchPrompts()",
+        "许可证待查",
+        "视觉参照库图片较多",
+    ):
+        assert marker in page
+
+
+def test_remote_page_auto_diagnoses_saved_nodes_and_after_save(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        page = client.get("/").text
+
+    assert "function renderDiagnostic(card,result)" in page
+    assert "function diagnoseNode(card,nodeId)" in page
+    assert "function diagnoseSavedNodes()" in page
+    assert "await diagnoseNode(card,nodeId); return;" in page
+    assert "diagnoseSavedNodes(),loadCatalogCounts()" in page
+    assert "正在自动检查共享目录与 Worker 状态" in page
+    assert "暂时无法检查设备" in page
 
 
 def test_page_paginates_long_lists_and_loads_model_tabs_on_demand(settings) -> None:

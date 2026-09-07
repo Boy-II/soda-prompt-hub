@@ -241,7 +241,7 @@ class LoraProjectStore:
             "dataset_notes": str(values.get("dataset_notes", ""))[:6000],
             "target_models": _string_list(values.get("target_models", []), max_items=10),
             "training_resolution": _resolution(values.get("training_resolution", 1024)),
-            "training_node": str(values.get("training_node", "5060ti"))[:120],
+            "training_node": str(values.get("training_node", "Windows 训练设备"))[:120],
             "test_plan": str(values.get("test_plan", ""))[:6000],
             "status": "draft",
             "assets": [],
