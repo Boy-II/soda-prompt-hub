@@ -65,3 +65,24 @@ def test_windows_worker_release_is_versioned_verified_and_private_free(tmp_path)
         release = json.loads(bundle.read(f"{root}RELEASE.json"))
         assert release["worker_version"] == __version__
         assert release["protocol_version"] == "soda-compute-bridge-v2"
+
+
+def test_windows_worker_release_normalizes_zip_metadata(tmp_path) -> None:
+    repository = Path(__file__).resolve().parents[1]
+    subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            str(repository / "scripts" / "build_windows_worker_release.py"),
+            "--repository-root",
+            str(repository),
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    archive = tmp_path / f"Soda-Prompt-Hub-Windows-Worker-{__version__}.zip"
+
+    with zipfile.ZipFile(archive) as bundle:
+        assert {item.date_time for item in bundle.infolist()} == {(1980, 1, 1, 0, 0, 0)}

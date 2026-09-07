@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from prompt_hub import __version__
+
 MACOS_ONLY = pytest.mark.skipif(
     sys.platform != "darwin",
     reason="Mac 更新器执行测试需要 macOS 和 /bin/zsh",
@@ -48,7 +50,7 @@ def test_mac_updater_restores_old_program_when_new_init_fails(tmp_path) -> None:
 
     assert result.returncode == 1
     assert (install_root / "old-marker.txt").read_text() == "keep-old"
-    assert any(path.name.startswith("failed-1.1.0rc1") for path in program_backups.iterdir())
+    assert any(path.name.startswith(f"failed-{__version__}") for path in program_backups.iterdir())
     assert len(list(data_backups.iterdir())) == 1
 
 

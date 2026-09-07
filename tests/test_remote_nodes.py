@@ -571,3 +571,58 @@ def test_remote_task_can_cancel_before_or_after_claim(settings, tmp_path) -> Non
         assert requested.status_code == 200
         assert requested.json()["cancel_requested"] is True
         assert (processing.parent / f"{task_id}.cancel").is_file()
+
+
+def test_returned_task_can_be_dismissed_to_history(settings, tmp_path) -> None:
+    mount = tmp_path / "mounted-share"
+    mount.mkdir()
+    bridge = mount / "prompt-hub"
+    with TestClient(create_app(settings)) as client:
+        assert (
+            client.put(
+                "/api/remote-nodes/compute-5060ti",
+                json={
+                    "role": "compute_5060ti",
+                    "host": "192.168.1.50",
+                    "smb_mount": str(mount),
+                    "enabled": True,
+                    "capabilities": ["comfyui_generate"],
+                },
+            ).status_code
+            == 200
+        )
+        assert client.post("/api/remote-nodes/compute-5060ti/prepare").status_code == 201
+        submitted = client.post(
+            "/api/remote-nodes/compute-5060ti/tasks",
+            json={
+                "task_type": "comfyui_generate",
+                "payload": {
+                    "generation_package": "packages/test.json",
+                    "workflow_id": "workflow-1",
+                    "output_profile": "krea2",
+                },
+                "manifest": [],
+            },
+        ).json()
+        task_id = submitted["task_id"]
+        outbox = bridge / "outbox" / f"{task_id}.json"
+        result = {
+            **json.loads(outbox.read_text(encoding="utf-8")),
+            "format": "soda-compute-result-v1",
+            "status": "completed",
+            "worker_id": "test-worker",
+        }
+        outbox.unlink()
+        (bridge / "inbox" / f"{task_id}.json").write_text(
+            json.dumps(result),
+            encoding="utf-8",
+        )
+
+        dismissed = client.post(f"/api/remote-nodes/compute-5060ti/tasks/{task_id}/dismiss")
+
+        assert dismissed.status_code == 200
+        assert dismissed.json()["status"] == "dismissed"
+        assert dismissed.json()["receipt_kind"] == "ignored"
+        listed = client.get("/api/remote-nodes/compute-5060ti/tasks").json()
+        assert listed[0]["status"] == "dismissed"
+        assert listed[0]["received_at"]
