@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 from prompt_hub.cli import main
@@ -9,6 +10,42 @@ from prompt_hub.config import Settings
 from prompt_hub.database import PromptDatabase
 from prompt_hub.importers import import_all
 from prompt_hub.mcp_server import create_mcp_server
+
+
+def test_settings_use_public_default_for_new_install(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("PROMPT_HUB_LIBRARY_ROOT", raising=False)
+    monkeypatch.delenv("PROMPT_HUB_DATABASE", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    settings = Settings.from_environment()
+
+    assert settings.library_root == tmp_path / "Documents" / "Soda Prompt Hub" / "prompt-library"
+
+
+def test_settings_keep_existing_legacy_library(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("PROMPT_HUB_LIBRARY_ROOT", raising=False)
+    monkeypatch.delenv("PROMPT_HUB_DATABASE", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    legacy_root = tmp_path / "Documents" / "Codex" / "soda-person" / "prompt-library"
+    legacy_root.mkdir(parents=True)
+
+    settings = Settings.from_environment()
+
+    assert settings.library_root == legacy_root
+
+
+def test_settings_prefer_initialized_public_library(tmp_path, monkeypatch) -> None:
+    monkeypatch.delenv("PROMPT_HUB_LIBRARY_ROOT", raising=False)
+    monkeypatch.delenv("PROMPT_HUB_DATABASE", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    public_root = tmp_path / "Documents" / "Soda Prompt Hub" / "prompt-library"
+    legacy_root = tmp_path / "Documents" / "Codex" / "soda-person" / "prompt-library"
+    public_root.mkdir(parents=True)
+    legacy_root.mkdir(parents=True)
+
+    settings = Settings.from_environment()
+
+    assert settings.library_root == public_root
 
 
 def test_settings_from_environment(tmp_path, monkeypatch) -> None:

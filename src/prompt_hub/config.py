@@ -5,6 +5,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _default_library_root() -> Path:
+    """Choose a public default without disconnecting existing personal installs."""
+    home = Path.home()
+    public_root = home / "Documents" / "Soda Prompt Hub" / "prompt-library"
+    legacy_root = home / "Documents" / "Codex" / "soda-person" / "prompt-library"
+
+    if public_root.exists():
+        return public_root
+    if legacy_root.exists():
+        return legacy_root
+    return public_root
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     library_root: Path
@@ -13,7 +26,7 @@ class Settings:
 
     @classmethod
     def from_environment(cls) -> Settings:
-        default_root = Path.home() / "Documents" / "Codex" / "soda-person" / "prompt-library"
+        default_root = _default_library_root()
         library_root = Path(os.environ.get("PROMPT_HUB_LIBRARY_ROOT", default_root)).expanduser()
         database_path = Path(
             os.environ.get(
