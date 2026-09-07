@@ -357,6 +357,17 @@ character_threshold     0.85  →  維持
 與 WD v3 的推論程式碼相容（同 ONNX、同 `selected_tags.csv`、同閾值機制），
 `wd14.py` 的推論流程不需改，只換模型路徑與閾值。
 
+**兩個 threshold 都不可由 caller 設定。** API payload、CLI 參數、前端輸入框
+一律不提供 threshold 欄位，值只從選定模型的 `TaggerModelConfig` 取。
+
+理由：threshold 是模型的校準值，不是通用旋鈕。0.35 是 WD 社群對 WD 系列的慣例，
+套到 IdolSankaku 上等於拿別人的刻度量自己的模型。留一個可覆蓋的欄位，
+預設值就會在某個入口被寫死，然後悄悄繞過校準——這件事已經發生過三次
+（`workspace_routes.py`、`dataset_curation.py`、`cli.py`／`dataset_routes.py`）。
+
+前端不是移除輸入框就算了，原位置要顯示唯讀的「目前模型 + 校準值」——
+控制項直接消失會讓使用者以為功能壞了。
+
 **舊模型路徑要保留可切換**——換 tagger 是有風險的改動，
 留一條路能對照兩者的輸出差異。
 
