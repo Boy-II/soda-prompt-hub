@@ -5,9 +5,9 @@ Soda Prompt Hub 个人版 1.0 是一个本机优先的 AI 绘图创作与数据�
 Windows 的 AnimaLoraStudio 中独立完成。
 
 项目默认只监听 `127.0.0.1`。代码仓库不包含模型权重、个人图片、数据库、API Key 或 Windows
-登录凭据。个人资料与索引默认保存在：
+登录凭据。新安装的个人资料与索引默认保存在：
 
-`$HOME/Documents/Codex/soda-person/prompt-library`
+`$HOME/Documents/Soda Prompt Hub/prompt-library`
 
 ## 安装与启动
 
@@ -20,8 +20,9 @@ uv sync
 uv run prompt-hub serve --host 127.0.0.1 --port 8765
 ```
 
-默认路径适配作者的 `soda-person` 文件夹结构。其他用户建议在首次启动前设置
-`PROMPT_HUB_LIBRARY_ROOT`；模型目录可以用 `PROMPT_HUB_MODELS_ROOT` 指定：
+从旧版升级时，如果已经存在 `$HOME/Documents/Codex/soda-person/prompt-library`，程序会继续使用
+原目录，不会搬移或建立第二套资料。需要自定义位置时设置 `PROMPT_HUB_LIBRARY_ROOT`；模型目录可以
+用 `PROMPT_HUB_MODELS_ROOT` 指定：
 
 ```bash
 export PROMPT_HUB_LIBRARY_ROOT="$HOME/.local/share/soda-prompt-hub"
