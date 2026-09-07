@@ -109,7 +109,7 @@ Krea 2 **不是寫實模型，是風格模型**——媒材完全由提示詞決
 
 ## 進階開關
 
-13 個（原本 14 個，`加入 tag 標籤輔助` 已刪——在 tag 模式下是套套邏輯）。
+12 個（原本 14 個：`加入 tag 標籤輔助` 已刪——在 tag 模式下是套套邏輯；`指定人物稱呼` 已提升為核心設定，見下）。
 
 **依模式動態顯示**，tag 模式下隱藏這三個：
 
@@ -121,7 +121,7 @@ Krea 2 **不是寫實模型，是風格模型**——媒材完全由提示詞決
 
 擺一個按了沒反應的開關，比沒有那個開關更糟——使用者會以為設定生效了。
 
-其餘 10 個兩種模式都適用（danbooru 有對應 tag：`from above`、`depth_of_field`、
+其餘 9 個兩種模式都適用（danbooru 有對應 tag：`from above`、`depth_of_field`、
 `rating:explicit`）。
 
 原列表的 `指定人物稱呼` 已提升為核心設定（見上節），不再是普通開關——
@@ -288,7 +288,7 @@ krea2 用 danbooru tag 不標質量詞會產生二次元風格、媒材標籤要
   "mode": "general" | "portrait" | "outfit" | "style",
   "trigger": "miru",                    // mode=general 時忽略；其餘為必填
   "media_tags": true,                   // 寫入 photo/realistic，兩個 profile 預設 true
-  "options": {                          // 13 個進階開關，全部預設 false
+  "options": {                          // 12 個進階開關，全部預設 false
     "age": false,
     "lighting": false,
     "light_source": false,
