@@ -521,3 +521,25 @@ def test_choosing_a_preset_starts_a_new_endpoint() -> None:
     handler = INDEX_HTML[handler_at : handler_at + 400]
     assert "clearEndpointForm()" in handler
     assert handler.index("clearEndpointForm()") < handler.index("endpointProvider")
+
+
+def test_detail_navigation_uses_up_and_down_keys() -> None:
+    """逐张检查用上下键换图。左右键留给游标。"""
+    handler_at = INDEX_HTML.index("#datasetDetail').addEventListener('keydown'")
+    handler = INDEX_HTML[handler_at : handler_at + 700]
+    assert "ArrowUp" in handler
+    assert "ArrowDown" in handler
+    assert "ArrowLeft" not in handler
+    assert "ArrowRight" not in handler
+
+
+def test_arrow_keys_inside_editable_fields_do_not_change_image() -> None:
+    """对话框里有五个可输入栏位。
+
+    在里面按方向键是要移动游标或换行。换掉图片会让人正在打的字消失。
+    """
+    handler_at = INDEX_HTML.index("#datasetDetail').addEventListener('keydown'")
+    handler = INDEX_HTML[handler_at : handler_at + 700]
+    for tag in ("TEXTAREA", "INPUT", "SELECT"):
+        assert tag in handler
+    assert "isContentEditable" in handler

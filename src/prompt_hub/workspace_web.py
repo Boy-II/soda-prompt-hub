@@ -733,7 +733,15 @@ WORKSPACE_SCRIPT = r"""
     } finally { button.disabled=false; }
   });
   $('#datasetDetailTagChips').addEventListener('click',event=>{ const button=event.target.closest('[data-detail-tag]'); if (!button) return; const tag=button.dataset.detailTag, tags=$('#datasetDetailAnima').value.split(',').map(value=>value.trim()).filter(Boolean), selected=new Set(tags); selected.has(tag)?selected.delete(tag):selected.add(tag); $('#datasetDetailAnima').value=[...selected].join(', '); renderDetailTags(detailItem()).catch(console.error); });
-  $('#datasetDetail').addEventListener('keydown',event=>{ if (event.key==='ArrowLeft') moveDetail(-1); if (event.key==='ArrowRight') moveDetail(1); });
+  $('#datasetDetail').addEventListener('keydown',event=>{
+    if (event.key!=='ArrowUp' && event.key!=='ArrowDown') return;
+    // 对话框里有五个可输入栏位。在里面按方向键是要移动游标或换行，
+    // 不是要换图——修正意见本来就是多行的，上下键必须留给它。
+    const target=event.target;
+    if (target && (target.isContentEditable || ['TEXTAREA','INPUT','SELECT'].includes(target.tagName))) return;
+    event.preventDefault();
+    moveDetail(event.key==='ArrowUp'?-1:1);
+  });
   $('#datasetJobPanel').addEventListener('click',async event=>{ const button=event.target.closest('[data-job-action]'); if (!button) return; const action=button.dataset.jobAction; await api(`/api/jobs/${button.dataset.jobId}/${action}`,{method:'POST'}); startPolling(); });
   window.addEventListener('tag-language-change',()=>{ if (state.analytics) loadAnalytics().catch(console.error); if ($('#datasetDetail').open && detailItem()) renderDetailTags(detailItem()).catch(console.error); });
   window.ensureDatasetWorkspace=ensureWorkspace;
