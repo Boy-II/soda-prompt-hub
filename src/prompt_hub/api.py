@@ -40,6 +40,7 @@ from prompt_hub.local_model import (
     expand_sourcing_queries,
     list_local_models,
     organize_slots,
+    revise_caption_with_model,
 )
 from prompt_hub.local_visual import (
     LocalVisualEncoder,
@@ -179,6 +180,11 @@ class TagLocaleInput(BaseModel):
 
 class CaptionLocaleInput(BaseModel):
     caption: str = Field(min_length=1, max_length=12000)
+
+
+class CaptionReviseInput(BaseModel):
+    caption: str = Field(min_length=1, max_length=12000)
+    instruction: str = Field(min_length=1, max_length=4000)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -409,6 +415,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except TagLocaleError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return {"caption": payload.caption, "localized": text}
+
+    @application.post("/api/captions/revise")
+    def revise_caption(payload: CaptionReviseInput) -> dict[str, Any]:
+        """按修正意见改写英文草稿。
+
+        与翻译不同。这里失败要报错。使用者按下按钮就是要一个结果。
+        静默不做会像按钮坏了。前端也要靠这个错误决定不覆盖既有草稿。
+        """
+        try:
+            revised = revise_caption_with_model(
+                payload.caption,
+                payload.instruction,
+                connections=model_connections,
+            )
+        except LocalModelError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {"revised": revised}
 
     @application.get("/api/tags/catalog")
     def get_tag_catalog(

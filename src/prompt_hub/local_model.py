@@ -545,6 +545,82 @@ def draft_anima_tags(
     }
 
 
+CAPTION_REVISION_SYSTEM_PROMPT = (
+    "You revise English image captions used as LoRA training data. "
+    "The user gives you the current English caption and a note written in Chinese. "
+    "The note is one of two things. It may be a corrected Chinese rendering of the "
+    "whole caption, in which case apply only the differences it introduces against "
+    "the current caption. Or it may be an instruction describing what to change or add. "
+    "Decide which it is from its content. "
+    "Keep every detail the note does not touch, and keep the same descriptive register. "
+    "Reply with only the revised English caption itself. One paragraph. "
+    "No explanation, no quotes, no Chinese."
+)
+CAPTION_REVISION_MAX_TOKENS = 1200
+CAPTION_REVISION_TIMEOUT = 120
+MAX_REVISION_CAPTION_LENGTH = 12000
+MAX_REVISION_NOTE_LENGTH = 4000
+
+
+def revise_caption_with_model(
+    caption: str,
+    instruction: str,
+    *,
+    connections: ModelConnectionStore | None = None,
+) -> str:
+    """按修正意见改写英文说明。
+
+    修正意见可以是整段改写后的中文。也可以是一句指示。两种都由模型自己
+    判断。因为使用者在同一个输入框里两种都会用。
+
+    失败一律抛错而不是回空字串。翻译回空是合理的 对照是辅助信息。
+    没有就不显示 。但改写是使用者按下按钮主动要求的动作。静默不做
+    会像按钮坏了。而且前端要靠这个错误来决定不要覆盖既有草稿。
+    """
+    text = caption.strip()
+    note = instruction.strip()
+    if not text:
+        raise LocalModelError("草稿是空的，没有可改写的内容")
+    if not note:
+        raise LocalModelError("请先填写修正意见")
+    if len(text) > MAX_REVISION_CAPTION_LENGTH or len(note) > MAX_REVISION_NOTE_LENGTH:
+        raise LocalModelError("内容过长，无法改写")
+
+    rows = connections.list_connections() if connections else []
+    if not rows:
+        raise LocalModelError("没有可用的模型连接，无法改写")
+    connection = rows[0]
+
+    payload = {
+        "model": connection.model_name,
+        "messages": [
+            {"role": "system", "content": CAPTION_REVISION_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Current caption:\n{text}\n\nNote (Chinese):\n{note}",
+            },
+        ],
+        "temperature": 0.2,
+        "max_tokens": CAPTION_REVISION_MAX_TOKENS,
+        "stream": False,
+    }
+    response = _request_json(
+        f"{connection.base_url.rstrip('/')}/chat/completions",
+        method="POST",
+        payload=payload,
+        timeout=CAPTION_REVISION_TIMEOUT,
+        api_key=connection.api_key,
+        service_name="改写服务",
+    )
+    try:
+        revised = str(response["choices"][0]["message"]["content"]).strip()
+    except (KeyError, IndexError, TypeError) as error:
+        raise LocalModelError("改写服务返回了无法解析的结果") from error
+    if not revised:
+        raise LocalModelError("改写服务返回了空结果")
+    return revised
+
+
 def _request_json(
     url: str,
     *,

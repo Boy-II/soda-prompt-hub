@@ -480,3 +480,26 @@ def test_caption_presets_round_trip_through_local_storage() -> None:
         assert f'id="{element_id}"' in INDEX_HTML
     # 读不出来要当作没有预设。不能让整个规则面板跟着挂掉
     assert "function readCaptionPresets()" in INDEX_HTML
+
+
+def test_revision_box_sits_under_the_translate_button() -> None:
+    """修正意见跟着草稿走。两种用法共用一个输入框。"""
+    assert 'id="datasetDetailKrea2Revision"' in INDEX_HTML
+    assert 'id="datasetDetailKrea2Revise"' in INDEX_HTML
+    assert "/api/captions/revise" in INDEX_HTML
+
+    translate_at = INDEX_HTML.index('id="datasetDetailKrea2Translate"')
+    revision_at = INDEX_HTML.index('id="datasetDetailKrea2Revision"')
+    assert translate_at < revision_at
+
+
+def test_revision_overwrites_draft_and_drops_stale_translation() -> None:
+    """改写后旧译文对应的是改写前的草稿。留着会对不上。"""
+    revise_block = INDEX_HTML[INDEX_HTML.index("datasetDetailKrea2Revise').addEventListener") :][
+        :1400
+    ]
+    assert "$('#datasetDetailKrea2Draft').value=result.revised;" in revise_block
+    assert "$('#datasetDetailKrea2Locale').value='';" in revise_block
+    # 失败分支不可以碰草稿
+    failure = revise_block[revise_block.index("catch(error)") :]
+    assert "datasetDetailKrea2Draft').value=" not in failure
