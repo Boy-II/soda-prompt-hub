@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -37,6 +38,19 @@ if TYPE_CHECKING:
 Tagger = Callable[[Path], dict[str, object]]
 TaggerFactory = Callable[[float, float, ProviderMode], Tagger]
 Krea2Captioner = Callable[[Path, str, str, Mapping[str, Any]], dict[str, Any]]
+
+
+def _batch_failure_message(label: str, failed: int, reasons: list[str]) -> str:
+    """整批失败时把最常见的原因说出来。
+
+    只写「共 N 张失败」的话。使用者得自己去翻每一张的记录才知道为什么。
+    而整批失败几乎总是同一个原因——送错模型。服务没开。来源不见了。
+    """
+    base = f"{label} 队列全部失败, 共 {failed} 张"
+    if not reasons:
+        return base
+    top, count = Counter(reasons).most_common(1)[0]
+    return f"{base}。{count} 张的原因是 {top}"
 
 
 class DatasetCurationJobsMixin:
@@ -115,6 +129,7 @@ class DatasetCurationJobsMixin:
         completed = 0
         failed = 0
         skipped = 0
+        reasons: list[str] = []
         overwrite = bool(payload.get("overwrite", False))
         for index, relative_path in enumerate(paths, start=1):
             context.update(index - 1, len(paths), f"{label} {index}/{len(paths)} · {relative_path}")
@@ -175,6 +190,7 @@ class DatasetCurationJobsMixin:
                     tagger=tagger_mode,
                     model=model,
                 )
+                reasons.append(str(error))
                 failed += 1
             else:
                 self._store_tag_result(
@@ -189,7 +205,7 @@ class DatasetCurationJobsMixin:
                 completed += 1
             context.update(index, len(paths), f"已处理 {index}/{len(paths)}")
         if paths and completed == 0 and failed:
-            raise DatasetWorkspaceError(f"{label} 队列全部失败, 共 {failed} 张")
+            raise DatasetWorkspaceError(_batch_failure_message(label, failed, reasons))
         return {
             "workspace_id": workspace_id,
             "requested": len(paths),
@@ -228,6 +244,7 @@ class DatasetCurationJobsMixin:
         completed = 0
         failed = 0
         skipped = 0
+        reasons: list[str] = []
         for index, relative_path in enumerate(paths, start=1):
             context.update(
                 index - 1,
@@ -247,6 +264,7 @@ class DatasetCurationJobsMixin:
                     job_id=job_id,
                     source_sha256=expected_sha256,
                 )
+                reasons.append("图片不存在或扫描后已变更")
                 failed += 1
                 continue
             item = _state_item(state, relative_path)
@@ -268,6 +286,7 @@ class DatasetCurationJobsMixin:
                     job_id=job_id,
                     source_sha256=expected_sha256,
                 )
+                reasons.append("图片不存在或扫描后已变更")
                 failed += 1
             else:
                 self._store_krea2_result(
@@ -283,7 +302,7 @@ class DatasetCurationJobsMixin:
                 completed += 1
             context.update(index, len(paths), f"已处理 {index}/{len(paths)}")
         if paths and completed == 0 and failed:
-            raise DatasetWorkspaceError(f"Krea 2 VLM 队列全部失败, 共 {failed} 张")
+            raise DatasetWorkspaceError(_batch_failure_message("Krea 2 VLM", failed, reasons))
         return {
             "workspace_id": workspace_id,
             "model": model,

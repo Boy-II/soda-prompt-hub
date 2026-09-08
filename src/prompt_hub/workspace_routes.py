@@ -304,7 +304,10 @@ def create_workspace_router(
         job = job_runner.submit(
             "dataset_wd14",
             {"workspace_id": workspace_id, **payload.model_dump()},
-            max_attempts=2,
+            # 只在「一张都没成功」时才算失败。那几乎总是决定性的原因——
+            # 送错模型、服务没开、来源不见了。重跑整批只是把成本加倍。
+            # 扫描可以重试。它便宜。这两个每张都要呼叫一次模型。
+            max_attempts=1,
         )
         return {"workspace_id": workspace_id, "job": job}
 
@@ -321,7 +324,10 @@ def create_workspace_router(
         job = job_runner.submit(
             "dataset_krea2_vlm",
             {"workspace_id": workspace_id, **payload.model_dump()},
-            max_attempts=2,
+            # 只在「一张都没成功」时才算失败。那几乎总是决定性的原因——
+            # 送错模型、服务没开、来源不见了。重跑整批只是把成本加倍。
+            # 扫描可以重试。它便宜。这两个每张都要呼叫一次模型。
+            max_attempts=1,
         )
         return {"workspace_id": workspace_id, "job": job}
 

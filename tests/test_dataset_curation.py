@@ -13,6 +13,7 @@ from PIL import Image
 from prompt_hub.api import create_app
 from prompt_hub.background_jobs import BackgroundJobStore, JobContext, JobInterruptedError
 from prompt_hub.dataset_curation import DatasetCurationStore
+from prompt_hub.dataset_curation_jobs import _batch_failure_message
 from prompt_hub.dataset_curation_support import (
     _normalize_caption,
     normalize_caption_settings,
@@ -1009,3 +1010,21 @@ def test_trigger_word_is_optional_in_every_mode() -> None:
 
     filled = normalize_caption_settings("krea2", {"mode": "portrait", "trigger": "miru"})
     assert filled["trigger"] == "miru"
+
+
+def test_batch_failure_message_names_the_reason() -> None:
+    """整批失败几乎总是同一个原因。
+
+    只写「共 N 张失败」的话。使用者得自己去翻每一张的记录才知道为什么。
+    """
+    message = _batch_failure_message(
+        "Krea 2 VLM",
+        79,
+        ["视觉模型没有返回可识别的草稿 JSON"] * 79,
+    )
+    assert "79" in message
+    assert "视觉模型没有返回可识别的草稿 JSON" in message
+
+
+def test_batch_failure_message_survives_having_no_reasons() -> None:
+    assert "共 3 张" in _batch_failure_message("WD14", 3, [])

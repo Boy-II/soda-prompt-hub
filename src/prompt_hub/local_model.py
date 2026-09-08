@@ -705,6 +705,12 @@ def _external_vision_completion(
         "temperature": temperature,
         "max_tokens": max_tokens,
         "stream": False,
+        # 思考型模型会先把 max_tokens 花在内部推理上。300 个 token 全部
+        # 用完还没开始写答案。content 就是空的。finish_reason 是 length。
+        # 两种写法都送。不同后端认的键不一样。
+        # 已实测云端闸道会忽略不认得的键。本机 llama.cpp 认得其中之一。
+        "enable_thinking": False,
+        "chat_template_kwargs": {"enable_thinking": False},
     }
     response = _request_json(
         f"{connection.base_url}/chat/completions",
@@ -717,9 +723,19 @@ def _external_vision_completion(
         service_name="外部模型服务",
     )
     try:
-        return str(response["choices"][0]["message"]["content"])
+        choice = response["choices"][0]
+        content = str(choice["message"]["content"] or "")
     except (KeyError, IndexError, TypeError) as error:
         raise LocalModelError("外部视觉模型返回格式错误") from error
+    if content.strip():
+        return content
+    # 空内容配上 length。几乎总是被推理吃光了额度。
+    # 只回「没有返回可识别的 JSON」的话。人会去怀疑提示词或模型能力。
+    if str(choice.get("finish_reason", "")) == "length":
+        raise LocalModelError(
+            "模型把输出额度用在内部推理上，没有留下内容。请调高说明长度，或换一个不做长推理的模型"
+        )
+    raise LocalModelError("外部视觉模型返回了空内容")
 
 
 def _image_data_url(path: Path) -> str:

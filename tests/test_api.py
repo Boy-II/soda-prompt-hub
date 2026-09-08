@@ -600,3 +600,59 @@ class _OneConnection:
 
 
 SERVICE_DOWN = "服务不可用"
+
+
+class TestThinkingModels:
+    """思考型模型会把 max_tokens 花在内部推理上。"""
+
+    def test_thinking_is_disabled_in_the_request(self, monkeypatch) -> None:
+        """不关掉的话额度全被推理吃光。content 是空的。"""
+        captured = {}
+
+        def fake_request(_url, **kwargs):
+            captured["payload"] = kwargs["payload"]
+            return {"choices": [{"message": {"content": '{"caption":"x"}'}}]}
+
+        monkeypatch.setattr(local_model, "_request_json", fake_request)
+        local_model._external_vision_completion(  # noqa: SLF001
+            connection=_vision_connection(),
+            system_prompt="s",
+            text_prompt="t",
+            image_data_url="data:image/jpeg;base64,AA==",
+            temperature=0.1,
+            max_tokens=300,
+        )
+
+        assert captured["payload"]["enable_thinking"] is False
+        assert captured["payload"]["chat_template_kwargs"]["enable_thinking"] is False
+
+    def test_empty_content_cut_by_length_says_so(self, monkeypatch) -> None:
+        """只回「没有返回可识别的 JSON」会让人去怀疑提示词或模型能力。"""
+        monkeypatch.setattr(
+            local_model,
+            "_request_json",
+            lambda *_args, **_kwargs: {
+                "choices": [{"message": {"content": ""}, "finish_reason": "length"}]
+            },
+        )
+        with pytest.raises(local_model.LocalModelError, match="内部推理"):
+            local_model._external_vision_completion(  # noqa: SLF001  # noqa: SLF001
+                connection=_vision_connection(),
+                system_prompt="s",
+                text_prompt="t",
+                image_data_url="data:image/jpeg;base64,AA==",
+                temperature=0.1,
+                max_tokens=300,
+            )
+
+
+def _vision_connection() -> ModelConnection:
+    return ModelConnection(
+        connection_id="c1",
+        label="local",
+        provider="openai_compatible",
+        base_url="http://127.0.0.1:1234/v1",
+        api_key="",
+        model_name="qwen",
+        supports_vision=True,
+    )
