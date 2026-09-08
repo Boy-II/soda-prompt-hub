@@ -76,6 +76,32 @@ def test_comfy_png_metadata_and_store_deduplicate(settings) -> None:
     assert len(store.list_results()) == 2
 
 
+def test_comfy_impact_wildcard_uses_populated_prompt() -> None:
+    prompt = {
+        "1": {
+            "class_type": "ImpactWildcardEncode",
+            "inputs": {
+                "wildcard_text": "a __character__ in a library",
+                "populated_text": "an adult silver-haired investigator in a library",
+            },
+        },
+        "2": {
+            "class_type": "KSampler",
+            "inputs": {"positive": ["1", 0], "seed": 7, "steps": 4},
+        },
+    }
+    info = PngImagePlugin.PngInfo()
+    info.add_text("prompt", json.dumps(prompt))
+    output = BytesIO()
+    Image.new("RGB", (64, 64), "black").save(output, "PNG", pnginfo=info)
+
+    metadata = inspect_comfy_image(output.getvalue(), filename="impact-wildcard.png")["metadata"]
+
+    expected = "an adult silver-haired investigator in a library"
+    assert metadata["positive_prompts"] == [expected]
+    assert metadata["text_prompts"] == [expected]
+
+
 def test_comfy_directory_is_read_only_and_plain_jpeg_is_explicit(settings, tmp_path) -> None:
     source = tmp_path / "comfy-output"
     source.mkdir()

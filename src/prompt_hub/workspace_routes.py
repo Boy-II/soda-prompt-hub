@@ -669,7 +669,7 @@ def _reveal_in_finder(path: Path) -> None:
 def _required_delivery_root(remote_store: RemoteNodeStore, node_id: str) -> Path:
     diagnostic = remote_store.diagnostics(node_id)
     if not diagnostic.get("bridge_prepared") or not diagnostic.get("bridge_writable"):
-        message = "5060 Ti 共享目录离线或不可写, 请先在 Finder 挂载"
+        message = "Windows 设备共享目录离线或不可写, 请先在 Finder 挂载"
         raise RemoteNodeError(message)
     return Path(str(diagnostic["bridge_root"]))
 

@@ -124,7 +124,7 @@ CREATIVE_HTML = r"""
       <div class="output-block"><div class="output-block-head"><h3>不希望出现</h3><button class="output-copy" data-copy-output="negative">复制</button></div><pre class="output-text output-negative" id="creativeNegative"></pre></div>
       <ul class="warning-list" id="creativeWarnings"></ul>
       <section class="workflow-dispatch">
-        <div class="workflow-dispatch-head"><strong>5060 Ti / 生成工作流</strong><span>ComfyUI</span></div>
+        <div class="workflow-dispatch-head"><strong><span data-remote-device-name>__PROMPT_HUB_DEVICE_NAME_HTML__</span> / 生成工作流</strong><span>ComfyUI</span></div>
         <label for="workflowProfile">选择对应的 ComfyUI 工作流</label>
         <select id="workflowProfile"></select>
         <details class="workflow-controls">
@@ -143,7 +143,7 @@ CREATIVE_HTML = r"""
           <p id="workflowControlHint">正在读取 Windows 模型与 LoRA 清单…</p>
         </details>
         <label class="workflow-cost"><input id="workflowLowCost" type="checkbox" checked><span><strong>先做低成本测试</strong><small>跳过脸手精修与放大；确认构图后可关闭</small></span></label>
-        <button class="creative-action primary" id="sendWorkflow" disabled>发送到 5060 Ti</button>
+        <button class="creative-action primary" id="sendWorkflow" disabled>发送到 <span data-remote-device-name>__PROMPT_HUB_DEVICE_NAME_HTML__</span></button>
         <p id="workflowRunStatus">正在读取可用的 ComfyUI 工作流…</p>
         <button class="workflow-task-link" data-view="remote">查看任务状态</button>
       </section>

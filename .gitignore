@@ -22,6 +22,12 @@ htmlcov/
 *.log
 *.tmp
 
+# Local development planning and audit notes
+.planning/
+task_plan.md
+findings.md
+progress.md
+
 # Local environments, credentials, and private keys
 .env
 .env.*

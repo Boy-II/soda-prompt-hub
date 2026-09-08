@@ -53,6 +53,7 @@ from prompt_hub.model_connections import MODEL_REF_PATTERN, ModelConnectionStore
 from prompt_hub.model_routes import create_model_router
 from prompt_hub.oc_manager import archive_import, parse_oc_manager_json
 from prompt_hub.project_journey import ProjectJourneyServices, create_project_journey_router
+from prompt_hub.release_info import release_channel, system_version_info
 from prompt_hub.remote_nodes import RemoteNodeStore
 from prompt_hub.remote_routes import create_remote_router
 from prompt_hub.result_assets import find_result_asset
@@ -78,7 +79,7 @@ from prompt_hub.visual_model import (
     make_download_handler,
 )
 from prompt_hub.visual_routes import create_visual_router
-from prompt_hub.web import INDEX_HTML
+from prompt_hub.web import render_index_html
 from prompt_hub.web_capture import WebCaptureService
 from prompt_hub.workflow_profiles import WorkflowProfileStore
 from prompt_hub.workflow_routes import create_workflow_router
@@ -346,15 +347,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/", response_class=HTMLResponse, include_in_schema=False)
     def index() -> str:
-        return INDEX_HTML
+        return render_index_html(remote_store.primary_device_label())
 
     @application.get("/api/health")
     def health() -> dict[str, str]:
         return {
             "status": "ok",
             "service": "soda-prompt-hub",
+            "version": __version__,
+            "release_channel": release_channel(),
             "database": str(active_settings.database_path),
         }
+
+    @application.get("/api/system/version")
+    def system_version() -> dict[str, Any]:
+        return system_version_info(active_settings)
 
     @application.get("/api/compute/contract")
     def get_compute_contract() -> dict[str, Any]:

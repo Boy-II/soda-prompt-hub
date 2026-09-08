@@ -404,7 +404,7 @@ def test_dataset_export_io_failure_is_readable_and_cleans_partial_files(
             message = "No space left on device"
             raise OSError(message)
 
-        monkeypatch.setattr("prompt_hub.dataset_curation.shutil.copy2", fail_copy)
+        monkeypatch.setattr("prompt_hub.dataset_curation_export.shutil.copy2", fail_copy)
         response = client.post(
             f"/api/dataset-workspaces/{workspace_id}/export",
             json={"profile_id": "anima", "paths": ["portrait.png"]},

@@ -283,6 +283,14 @@ def _replace_krea2_subject(caption: str, trigger: str) -> str:
     return caption
 
 
+def _operation_profile(operation: Mapping[str, Any]) -> CaptionProfile:
+    profile_id = str(operation.get("profile_id", "anima"))
+    if profile_id not in {"anima", "krea2"}:
+        message = "Invalid bulk caption profile"
+        raise DatasetWorkspaceError(message)
+    return profile_id  # type: ignore[return-value]
+
+
 def _should_apply_caption_settings(operation: Mapping[str, Any]) -> bool:
     return str(operation.get("mode", "general")) != "general" or bool(
         str(operation.get("trigger", "")).strip()

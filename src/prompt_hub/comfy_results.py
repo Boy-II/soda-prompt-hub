@@ -276,8 +276,8 @@ def _extract_nodes(nodes: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         inputs = node.get("inputs", {})
         if not isinstance(inputs, Mapping):
             continue
-        if "textencode" in class_type or "cliptext" in class_type:
-            text = _first_string(inputs, "text", "prompt")
+        if "textencode" in class_type or "cliptext" in class_type or "wildcardencode" in class_type:
+            text = _first_string(inputs, "populated_text", "wildcard_text", "text", "prompt")
             node_id = str(node.get("_node_id", ""))
             if text and node_id:
                 text_by_node[node_id] = text
@@ -325,8 +325,8 @@ def _extract_nodes(nodes: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         if "emptylatent" in class_type:
             result["width"] = _first_number(inputs, "width")
             result["height"] = _first_number(inputs, "height")
-        if "textencode" in class_type or "cliptext" in class_type:
-            text = _first_string(inputs, "text", "prompt")
+        if "textencode" in class_type or "cliptext" in class_type or "wildcardencode" in class_type:
+            text = _first_string(inputs, "populated_text", "wildcard_text", "text", "prompt")
             if text:
                 result["text_prompts"].append(text)
     result["loras"] = list({item["name"]: item for item in result["loras"]}.values())

@@ -154,6 +154,14 @@ def create_remote_router(store: RemoteNodeStore) -> APIRouter:
             code = 404 if "不存在" in str(error) or "尚未" in str(error) else 422
             raise HTTPException(status_code=code, detail=str(error)) from error
 
+    @router.post("/api/remote-nodes/{node_id}/tasks/{task_id}/dismiss")
+    def dismiss_remote_task(node_id: str, task_id: str) -> dict[str, Any]:
+        try:
+            return store.mark_task_received(node_id, task_id, receipt_kind="ignored")
+        except RemoteNodeError as error:
+            code = 404 if "不存在" in str(error) or "尚未" in str(error) else 422
+            raise HTTPException(status_code=code, detail=str(error)) from error
+
     @router.post(
         "/api/remote-nodes/{node_id}/lora-catalog/sync",
         status_code=status.HTTP_201_CREATED,

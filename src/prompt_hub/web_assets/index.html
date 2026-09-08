@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Soda Prompt Hub</title>
+  <meta name="application-name" content="Soda Prompt Hub">
+  <meta name="description" content="Soda 的本地 AI 绘图提示词、视觉参考与 OC 创作中枢。">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23171815'/%3E%3Cpath d='M12 16h40v10H12zm0 22h26v10H12z' fill='%23d84b2a'/%3E%3Ccircle cx='48' cy='43' r='7' fill='%23d7e455'/%3E%3C/svg%3E">
+  <style>
+__PROMPT_HUB_BASE_STYLES__  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav class="app-nav" aria-label="主导航" data-menu-open="false">
+      <button class="app-brand" data-view="home">Soda Prompt Hub<span>本地绘图与数据集</span></button>
+      <button class="app-nav-toggle" id="appNavToggle" type="button" aria-controls="appNavItems" aria-expanded="false"><span id="appNavCurrent">当前：首页</span><small>打开菜单</small></button>
+      <div class="app-nav-items" id="appNavItems">
+        <button class="app-nav-button" data-view="creative">创作台</button>
+        <button class="app-nav-button" data-view="prompts">提示词库</button>
+        <button class="app-nav-button" data-view="discover">智能检索</button>
+        <button class="app-nav-button" data-view="characters">角色库</button>
+        <button class="app-nav-button" data-view="datasets">数据集</button>
+        <button class="app-nav-button" data-view="lora">LoRA 项目</button>
+        <button class="app-nav-button" data-view="comfy">Windows 出图</button>
+        <button class="app-nav-button" data-view="management">资料管理</button>
+        <button class="app-nav-button" data-view="remote">设备连接</button>
+        <button class="app-nav-button tag-language-button" id="tagLanguageToggle" type="button">标签：中英</button>
+      </div>
+    </nav>
+
+    <section class="home-page" id="homePage">
+      <div class="home-lead">
+        <div class="eyebrow">本地绘图工作台</div>
+        <h1>今天想画<br>什么？</h1>
+        <p class="subtitle">从一个想法、一个 OC，或者一张视觉参考开始。先把创作资料找齐，再整理成适合 Anima 与 Krea 2 的不同 Prompt。</p>
+        <div class="home-actions">
+          <button class="home-primary" data-start="creative">新建或继续绘图项目 →</button>
+          <button class="home-secondary" data-start="prompts">浏览提示词与视觉参考</button>
+          <button class="home-secondary" data-start="characters">从 OC 角色开始</button>
+          <button class="home-secondary" data-start="lora">准备 LoRA 数据集</button>
+          <button class="home-secondary" data-start="comfy">查看 Windows 出图结果</button>
+        </div>
+        <button class="home-example" id="exampleButton">试一个真实示例：维多利亚军装 × 黄昏图书馆 ↗</button>
+        <div class="home-targets">
+          <p class="section-label">首批目标模型</p>
+          <div class="target-row"><strong>ANIMA</strong><span>输出 Danbooru/Booru 标签、权重和项目对应的负面词。</span></div>
+          <div class="target-row"><strong>KREA 2</strong><span>输出连贯自然语言，保留主体关系、构图、材质、灯光与画风。</span></div>
+        </div>
+      </div>
+      <aside class="home-guide">
+        <p class="section-label">日常绘图顺序</p>
+        <h2>从想法到可用提示词</h2>
+        <div class="guide-steps">
+          <div class="guide-step"><span>01</span><div><strong>确定角色和想法</strong><small>可以从空白描述开始，也可以读取 OC Manager 的角色资料。</small></div></div>
+          <div class="guide-step"><span>02</span><div><strong>选择提示词与视觉参考</strong><small>从本地库挑选服装、动作、构图、场景、灯光和画风。</small></div></div>
+          <div class="guide-step"><span>03</span><div><strong>按模型整理并保存</strong><small>同一份创作意图分别生成 Anima 与 Krea 2 版本，保存为个人配方。</small></div></div>
+        </div>
+        <div class="home-status">
+          <div class="home-status-line"><span>本地资料</span><strong id="homeEntryCount">—</strong></div>
+          <div class="home-status-line"><span>视觉与提示来源</span><strong id="homeSourceCount">—</strong></div>
+          <div class="home-status-line"><span>已导入 OC</span><strong id="homeOcCount">—</strong></div>
+          <div class="home-status-line version"><span>当前程序</span><strong id="homeProgramVersion">正在读取</strong></div>
+          <div class="home-status-line version"><span>数据结构</span><strong id="homeDataVersion">正在读取</strong></div>
+        </div>
+      </aside>
+      <details class="home-first-guide" id="homeFirstGuide">
+        <summary><strong>第一次使用？查看 5 步指南</strong></summary>
+        <div class="home-first-guide-steps">
+          <div class="home-first-guide-step"><b>01</b><strong>先写想法或选 OC</strong><span>在创作台新建项目，也可以先从角色库导入 OC Manager JSON。</span></div>
+          <div class="home-first-guide-step"><b>02</b><strong>找提示词和参考图</strong><span>去提示词库或智能检索，挑选服装、动作、构图、灯光和画风。</span></div>
+          <div class="home-first-guide-step"><b>03</b><strong>整理两种 Prompt</strong><span>同一份创作意图分别检查 Anima 标签和 Krea 2 自然语言版本。</span></div>
+          <div class="home-first-guide-step"><b>04</b><strong>需要时交给 Windows 出图</strong><span>Windows 开机并运行 Worker 后再发送；离线时可以继续整理本地内容。</span></div>
+          <div class="home-first-guide-step"><b>05</b><strong>精选、打标并交付数据集</strong><span>结果图回到 Mac 后人工筛选，检查 WD14 草稿，最后冻结并导出版本。</span></div>
+        </div>
+      </details>
+      <section class="home-source-setup" id="homeSourceSetup" aria-labelledby="homeSourceSetupTitle" hidden>
+        <div>
+          <p class="section-label">第一次使用 · 资料准备</p>
+          <h2 id="homeSourceSetupTitle">把推荐提示词资料装到本机</h2>
+          <p id="homeSourceSetupDescription">这些资料会从公开 Git 仓库下载到个人资料目录，并建立本地检索索引。不会上传你的创作、角色或图片。</p>
+          <div class="home-source-list" id="homeSourceSetupList"></div>
+        </div>
+        <div class="home-source-actions">
+          <button class="primary" id="homeSourceInstall" type="button">安装推荐资料库</button>
+          <button id="homeSourceSkip" type="button">暂时跳过</button>
+        </div>
+        <div class="home-source-progress" id="homeSourceProgress" hidden><progress id="homeSourceProgressBar" max="1" value="0"></progress><span id="homeSourceProgressMessage" role="status">等待开始</span></div>
+      </section>
+      <div class="home-footnote">
+        <p><strong id="homeReleaseIdentity">Soda Prompt Hub：</strong>创作、资料引用、双格式输出、远程出图、结果回流与数据集交付已经形成完整闭环。</p>
+        <p><strong>设备分工：</strong>Mac 负责整理、审核与保存记录；<span data-remote-device-name>__PROMPT_HUB_DEVICE_NAME_HTML__</span>的 ComfyUI 负责生成与测试。</p>
+      </div>
+    </section>
+
+    <section class="management-page" id="managementPage" hidden>
+      <header class="archive-header">
+        <section class="masthead">
+          <div class="eyebrow">本地资料管理</div>
+          <h1>资料与<br>索引</h1>
+          <p class="subtitle">在这里更新公共资料、查看来源与本地索引状态。创作和日常检索不需要操作这些设置。</p>
+          <div class="stamp">只保存在本机</div>
+        </section>
+        <section class="stats-panel">
+          <div>
+            <p class="section-label">资料库状态</p>
+            <div class="stats-grid">
+              <div class="stat"><strong id="entryCount">—</strong><span>资料条目</span></div>
+              <div class="stat"><strong id="sourceCount">—</strong><span>资料来源</span></div>
+              <div class="stat"><strong id="styleCount">—</strong><span>画风资料</span></div>
+              <div class="stat"><strong id="tagCount">—</strong><span>标签</span></div>
+            </div>
+            <div class="personal-summary">我的收藏 <strong id="favoriteCount">0</strong> 条 <span class="divider">·</span> 已导入角色 <strong id="ocCount">0</strong> 个</div>
+          </div>
+          <div class="sync-actions"><button class="sync-button" id="sourceSyncButton">↻ 更新公共提示词库</button><button class="sync-button" id="importButton">仅重建本地索引</button></div>
+        </section>
+      </header>
+      <section class="management-sources">
+        <p class="section-label">已经可以检索的来源</p>
+        <div class="source-list" id="sourceList"></div>
+        <div class="source-sync-message" id="sourceSyncMessage">正在读取本地资料源状态…</div>
+        <div class="source-sync-list" id="sourceSyncList"></div>
+      </section>
+    </section>
+
+    <div class="workspace" id="archiveWorkspace" hidden>
+      <aside>
+        <p class="section-label" id="searchLabel">查找提示词和视觉参考</p>
+        <div class="search-box"><input id="query" type="search" aria-label="输入提示词关键词" placeholder="例如：哥特连衣裙、兔耳、逆光" autofocus></div>
+        <details class="advanced-filters">
+          <summary>展开高级筛选</summary>
+          <div class="filters" id="promptFilters">
+            <label>资料类型<select id="kind"><option value="">全部类型</option><option value="style">画风</option><option value="prompt">完整提示词</option><option value="modifier">修饰词</option><option value="wildcard">通配词</option><option value="caption">图片说明</option><option value="tag">标签</option></select></label>
+            <label>内容分级<select id="safety"><option value="">全部分级</option><option value="sfw">普通</option><option value="suggestive">轻度成人向</option><option value="adult">成人向</option><option value="explicit-adult">明确成人向</option></select></label>
+            <label>资料来源<select id="source"><option value="">全部来源</option></select></label>
+          </div>
+          <div class="filters" id="ocFilters" hidden>
+            <label>所属世界<select id="ocWorld"><option value="">全部世界</option></select></label>
+          </div>
+        </details>
+        <button class="search-button" id="searchButton">查找提示词</button>
+        <button class="shelf-filter" id="favoritesOnly" aria-pressed="false">☆ 只看我的收藏</button>
+        <section class="oc-import-panel" id="ocImportPanel" hidden>
+          <p class="section-label">从 OC Manager 导入</p>
+          <input id="ocFile" type="file" accept="application/json,.json" hidden>
+          <label class="file-picker" for="ocFile">＋ 选择角色 JSON 文件</label>
+          <p class="file-name" id="ocFileName">尚未选择文件</p>
+          <button class="oc-import-button" id="ocImportButton" disabled>导入到本地角色库</button>
+          <p class="import-message" id="ocImportMessage"></p>
+        </section>
+      </aside>
+
+      <main>
+        <p class="archive-notice" id="archiveNotice"><strong>提示词与视觉资料库：</strong>输入服装、动作、构图、场景或画风关键词。找到合适内容后可以收藏并记录实测备注。</p>
+        <div class="results-head"><h2 id="resultsTitle">提示词结果</h2><span id="status">可以开始</span></div>
+        <nav class="archive-pagination" id="archivePagination" aria-label="提示词结果分页" hidden><button id="archivePreviousPage" type="button">上一页</button><span id="archivePageStatus">第 1 / 1 页</span><button id="archiveNextPage" type="button">下一页</button></nav>
+        <div class="results" id="results"></div>
+      </main>
+    </div>
+  </div>
+  <script>
+__PROMPT_HUB_BASE_SCRIPT__  </script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+# Keep CMD batch files byte-for-byte CRLF so GitHub source downloads also run correctly.
+deploy/windows-worker/*.bat -text whitespace=cr-at-eol

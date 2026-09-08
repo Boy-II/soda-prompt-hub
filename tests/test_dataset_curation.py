@@ -788,7 +788,7 @@ def test_workspace_wd14_job_can_use_vision_model_tagger(settings, tmp_path, monk
         return _fake_anima_tagger(calls)(image_path, model, existing_tags)
 
     monkeypatch.setattr(
-        "prompt_hub.dataset_curation.draft_anima_tags",
+        "prompt_hub.dataset_curation_jobs.draft_anima_tags",
         fake_draft_anima_tags,
     )
     curation = DatasetCurationStore(settings, workspace_store)
