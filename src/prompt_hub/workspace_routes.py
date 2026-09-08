@@ -27,6 +27,11 @@ if TYPE_CHECKING:
 class DatasetWorkspaceImport(BaseModel):
     source_path: str = Field(min_length=1, max_length=4096)
     name: str = Field(default="", max_length=160)
+    # 来源出处。交接进来的工作区若不记这个。
+    # 事后无从分辨它是从哪个筛选项目、哪一版分析交出来的。
+    # 跟手动挑的文件夹长得一模一样。
+    origin: dict[str, Any] | None = Field(default=None)
+    source_origin: str = Field(default="user_directory", max_length=64)
 
 
 class DatasetReviewItem(BaseModel):
@@ -175,7 +180,12 @@ def create_workspace_router(
     )
     def import_dataset_workspace(payload: DatasetWorkspaceImport) -> dict[str, Any]:
         try:
-            workspace = workspace_store.register(payload.source_path, name=payload.name)
+            workspace = workspace_store.register(
+                payload.source_path,
+                name=payload.name,
+                origin=payload.origin,
+                source_origin=payload.source_origin,
+            )
         except DatasetWorkspaceError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         job = job_runner.submit(

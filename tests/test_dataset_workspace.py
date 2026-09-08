@@ -419,3 +419,32 @@ def test_dataset_export_io_failure_is_readable_and_cleans_partial_files(
 
     assert image_path.read_bytes() == original_image
     assert caption_path.read_bytes() == original_caption
+
+
+def test_import_records_origin_for_handoff(tmp_path, settings) -> None:
+    """交接进来的工作区要能追溯来源。否则跟手动挑的文件夹无从分辨。"""
+    source = tmp_path / "handoff-source"
+    source.mkdir()
+    (source / "001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+
+    origin = {
+        "tool": "pic_dataset_tool",
+        "character": "demo-character",
+        "prompt_version": "v7",
+        "cropped": 3,
+    }
+    with TestClient(create_app(settings)) as client:
+        response = client.post(
+            "/api/dataset-workspaces/import",
+            json={
+                "source_path": str(source),
+                "name": "demo-character",
+                "origin": origin,
+                "source_origin": "pic_dataset_tool",
+            },
+        )
+
+    assert response.status_code == 202
+    workspace = response.json()["workspace"]
+    assert workspace["origin"] == origin
+    assert workspace["source_origin"] == "pic_dataset_tool"
