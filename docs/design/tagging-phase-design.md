@@ -195,22 +195,11 @@ CSV，最壞情況自行 fork。
 
 ## 輸出
 
-**kohya 標準的同名 sidecar**：
-
-```
-dataset/
-  角色名_krea2_v1/
-    001.jpg
-    001.txt            ← 自然語言
-    manifest.json
-  角色名_anima_v1/
-    001.jpg            ← 同一批圖，重複一份
-    001.txt            ← danbooru tag
-    manifest.json
-```
+**kohya 標準的同名 sidecar**：每張圖片旁邊放一個同名的 `.txt`，
+兩個目標各自輸出到獨立的資料夾，各含一份 `manifest.json`。
 
 **各自完整一份，圖片重複。**磁碟便宜，而「一個資料夾丟進去就能跑」的價值遠高於
-省那 300MB。而且兩個目標的長邊上限可能不同，圖片本來就未必一樣。
+省下重複的那份圖片。而且兩個目標的長邊上限可能不同，圖片本來就未必一樣。
 
 `manifest.json` 記錄完整脈絡：原始檔名、`content_hash`、兩種標註、打標模式、
 進階開關狀態、目標模型、trigger word。`.txt` 只有最終結果，出問題無從追溯是
