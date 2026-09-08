@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -15,7 +15,7 @@ from prompt_hub.background_jobs import BackgroundJobRunner, BackgroundJobStore
 from prompt_hub.comfy_results import ComfyResultStore
 from prompt_hub.comfy_routes import create_comfy_router
 from prompt_hub.compute_bridge import compute_contract
-from prompt_hub.config import Settings
+from prompt_hub.config import DEFAULT_TAGGER_MODEL_ID, TAGGER_MODELS, Settings
 from prompt_hub.creative import (
     CreativeStore,
     apply_iteration_suggestions,
@@ -40,6 +40,7 @@ from prompt_hub.local_model import (
     expand_sourcing_queries,
     list_local_models,
     organize_slots,
+    revise_caption_with_model,
 )
 from prompt_hub.local_visual import (
     LocalVisualEncoder,
@@ -64,7 +65,14 @@ from prompt_hub.source_sync import SourceSyncService
 from prompt_hub.sourcing import allowed_safety_levels, source_candidates
 from prompt_hub.tag_completion_routes import create_tag_completion_router
 from prompt_hub.tag_completions import TAG_DOWNLOAD_JOB_TYPE, TagCompletionStore
-from prompt_hub.tag_locale import TagLocaleError, localize_tags, tag_catalog
+from prompt_hub.tag_locale import (
+    TagLocaleCache,
+    TagLocaleError,
+    localize_tags,
+    make_model_translator,
+    tag_catalog,
+    translate_caption_with_model,
+)
 from prompt_hub.visual_assets import VisualAssetCatalog
 from prompt_hub.visual_model import (
     DOWNLOAD_JOB_TYPE,
@@ -170,6 +178,15 @@ class TagLocaleInput(BaseModel):
     language: Literal["zh", "en"] = "zh"
 
 
+class CaptionLocaleInput(BaseModel):
+    caption: str = Field(min_length=1, max_length=12000)
+
+
+class CaptionReviseInput(BaseModel):
+    caption: str = Field(min_length=1, max_length=12000)
+    instruction: str = Field(min_length=1, max_length=4000)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     model_connections = ModelConnectionStore(active_settings)
@@ -178,17 +195,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         image_path: Path,
         model: str,
         existing_caption: str,
+        caption_settings: Mapping[str, Any],
     ) -> dict[str, Any]:
         if not MODEL_REF_PATTERN.fullmatch(model):
             return DatasetCurationStore._default_krea2_captioner(  # noqa: SLF001
                 image_path,
                 model,
                 existing_caption,
+                caption_settings,
             )
         return draft_krea2_caption(
             image_path=image_path,
             model=model,
             existing_caption=existing_caption,
+            mode=caption_settings["mode"],
+            trigger=str(caption_settings["trigger"]),
+            media_tags=bool(caption_settings["media_tags"]),
+            options=dict(caption_settings["options"]),
+            max_tokens=int(caption_settings["max_tokens"]),
             connections=model_connections,
         )
 
@@ -227,9 +251,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         descriptor = bundled_visual_model_descriptor(bundled_model_root)
     visual_encoder = LocalVisualEncoder(descriptor)
     local_visual = LocalVisualIndexService(embedding_store, visual_catalog, visual_encoder)
+    tag_locale_cache = TagLocaleCache(active_settings.database_path)
+    tag_translator = make_model_translator(model_connections)
     tag_store = TagCompletionStore(
         active_settings.database_path,
         active_settings.tag_completions_root,
+        locale_cache=tag_locale_cache,
     )
     job_runner = BackgroundJobRunner(
         job_store,
@@ -351,13 +378,76 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def get_compute_contract() -> dict[str, Any]:
         return compute_contract()
 
+    @application.get("/api/tagger-config")
+    def get_tagger_config() -> dict[str, Any]:
+        models = [
+            {
+                "id": config.id,
+                "label": config.label,
+                "model": config.model_name,
+                "general_threshold": config.general_threshold,
+                "character_threshold": config.character_threshold,
+                "available": all(
+                    (active_settings.tagger_model_root(config.id) / filename).is_file()
+                    for filename in ("model.onnx", "selected_tags.csv")
+                ),
+            }
+            for config in TAGGER_MODELS.values()
+        ]
+        return {
+            "default_id": DEFAULT_TAGGER_MODEL_ID,
+            "id": active_settings.wd14_model_config.id,
+            "model": active_settings.wd14_model_name,
+            "general_threshold": active_settings.wd14_general_threshold,
+            "character_threshold": active_settings.wd14_character_threshold,
+            "models": models,
+        }
+
     @application.post("/api/tags/localize")
     def get_localized_tags(payload: TagLocaleInput) -> dict[str, Any]:
         try:
-            items = localize_tags(payload.tags, language=payload.language)
+            items = localize_tags(
+                payload.tags,
+                language=payload.language,
+                cache=tag_locale_cache,
+                translator=tag_translator,
+            )
         except TagLocaleError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return {"language": payload.language, "items": items}
+
+    @application.post("/api/captions/localize")
+    def get_localized_caption(payload: CaptionLocaleInput) -> dict[str, Any]:
+        """把一段英文说明翻成中文供人工对照。
+
+        翻不出来时回空字串而不是报错——对照是辅助信息。
+        翻译服务出问题不该让逐张审核停下来。
+        """
+        try:
+            text = translate_caption_with_model(
+                payload.caption,
+                connections=model_connections,
+            )
+        except TagLocaleError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {"caption": payload.caption, "localized": text}
+
+    @application.post("/api/captions/revise")
+    def revise_caption(payload: CaptionReviseInput) -> dict[str, Any]:
+        """按修正意见改写英文草稿。
+
+        与翻译不同。这里失败要报错。使用者按下按钮就是要一个结果。
+        静默不做会像按钮坏了。前端也要靠这个错误决定不覆盖既有草稿。
+        """
+        try:
+            revised = revise_caption_with_model(
+                payload.caption,
+                payload.instruction,
+                connections=model_connections,
+            )
+        except LocalModelError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {"revised": revised}
 
     @application.get("/api/tags/catalog")
     def get_tag_catalog(

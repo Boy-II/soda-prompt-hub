@@ -19,6 +19,31 @@ class ModelEndpointInput(BaseModel):
     api_key: str = Field(default="", max_length=12000)
 
 
+def _caption_assist_state(store: ModelConnectionStore) -> dict[str, object]:
+    """翻译与改写用哪个模型。
+
+    没有设定时回传自动挑选的那个并标注 configured=False。
+    让使用者看得出「现在用的是哪个」跟「有没有指定过」是两件事。
+    """
+    try:
+        chosen = store.get_caption_assist()
+        options = [connection.model_option() for connection in store.list_connections()]
+    except ModelConnectionError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    first = options[0] if options else {}
+    return {
+        "configured": chosen is not None,
+        "connection_id": chosen.connection_id if chosen else first.get("id", ""),
+        "label": chosen.label if chosen else first.get("name", ""),
+        "options": options,
+    }
+
+
+class CaptionAssistInput(BaseModel):
+    # 空字串代表清除选择。回到自动挑第一个启用的连线。
+    connection_id: str = Field(default="", max_length=400)
+
+
 class ModelDiscoveryInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -71,6 +96,18 @@ def create_model_router(store: ModelConnectionStore) -> APIRouter:
             "local_count": len(local_models),
             "external_count": len(external_models),
         }
+
+    @router.get("/api/caption-assist")
+    def get_caption_assist() -> dict[str, object]:
+        return _caption_assist_state(store)
+
+    @router.put("/api/caption-assist")
+    def set_caption_assist(payload: CaptionAssistInput) -> dict[str, object]:
+        try:
+            store.set_caption_assist(payload.connection_id)
+        except ModelConnectionError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return _caption_assist_state(store)
 
     @router.get("/api/model-endpoints")
     def list_model_endpoints() -> list[dict[str, object]]:

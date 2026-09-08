@@ -27,8 +27,9 @@ class WD14Tagger:
         self,
         *,
         model_root: Path | str,
-        general_threshold: float = 0.35,
-        character_threshold: float = 0.85,
+        general_threshold: float,
+        character_threshold: float,
+        model_name: str = "deepghs/idolsankaku-swinv2-tagger-v1",
         limit: int = 80,
         provider: ProviderMode = "auto",
     ) -> None:
@@ -42,6 +43,7 @@ class WD14Tagger:
         if not model_path.is_file() or not labels_path.is_file():
             raise WD14Error(f"WD14 模型文件不完整: {root}")
 
+        self.model_name = model_name
         self.general_threshold = general_threshold
         self.character_threshold = character_threshold
         self.limit = limit
@@ -81,7 +83,7 @@ class WD14Tagger:
             threshold=self.character_threshold,
         )[: self.limit]
         return {
-            "model": "SmilingWolf/wd-swinv2-tagger-v3",
+            "model": self.model_name,
             "provider": self.session.get_providers()[0],
             "image": str(image.resolve()),
             "input_size": self.target_size,
@@ -99,13 +101,15 @@ def tag_image(
     image_path: Path | str,
     *,
     model_root: Path | str,
-    general_threshold: float = 0.35,
-    character_threshold: float = 0.85,
+    general_threshold: float,
+    character_threshold: float,
+    model_name: str = "deepghs/idolsankaku-swinv2-tagger-v1",
     limit: int = 80,
     provider: ProviderMode = "auto",
 ) -> dict[str, object]:
     return WD14Tagger(
         model_root=model_root,
+        model_name=model_name,
         general_threshold=general_threshold,
         character_threshold=character_threshold,
         limit=limit,

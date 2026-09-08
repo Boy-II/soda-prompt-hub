@@ -16,6 +16,7 @@ from prompt_hub.tag_completions import (
     WhitelistedRedirectHandler,
     download_danbooru_tags,
 )
+from prompt_hub.tag_locale import TagLocaleCache
 
 
 class _FakeResponse:
@@ -421,3 +422,26 @@ def test_candidates_expose_space_separated_insert_text(settings, tmp_path) -> No
         item = store.query(query, limit=5)["items"][0]
         assert item["tag"] == "large_breasts"
         assert item["display_tag"] == "large breasts"
+
+
+def test_completions_use_locale_cache_for_translation(settings, tmp_path) -> None:
+    """Cached translations surface in candidates without calling any model."""
+    cache = TagLocaleCache(settings.database_path)
+    cache.initialize()
+    cache.set("antler_girl", "鹿角少女")
+    csv_path = tmp_path / "tags.csv"
+    csv_path.write_text(
+        "tag,category,count,alias\nantler_girl,0,900,\n",
+        encoding="utf-8",
+    )
+    store = TagCompletionStore(
+        settings.database_path,
+        settings.tag_completions_root,
+        locale_cache=cache,
+    )
+    store.initialize()
+    store.import_csv(csv_path)
+
+    item = store.query("antler_girl", limit=5)["items"][0]
+    assert item["tag"] == "antler_girl"
+    assert item["translation_zh"] == "鹿角少女"

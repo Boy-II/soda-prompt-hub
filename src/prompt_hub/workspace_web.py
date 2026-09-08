@@ -68,6 +68,27 @@ WORKSPACE_HTML = r"""
         <div class="dataset-stats" id="datasetStats"></div>
         <section class="dataset-curation-panel" data-dataset-stage-panel="3">
           <div class="dataset-curation-head"><div><span class="section-label">03 · 准备标签</span><h3 id="datasetCurationTitle">选择一种方式准备图片说明</h3></div><p id="datasetCurationHint">优先使用已有 `.txt`；缺少 Anima 标签时再运行 WD14。所有结果先保存在 Prompt Hub，不写回原文件夹。</p></div>
+          <div class="dataset-curation-block dataset-caption-rules" id="datasetCaptionRules">
+            <strong>说明文字设置</strong>
+            <p class="dataset-hint">下面两种自动生成方式共用这些设置。读取已有 `.txt` 不受影响。</p>
+            <div class="dataset-thresholds">
+              <label>训练内容<select id="datasetCaptionMode"></select></label>
+              <label id="datasetCaptionTriggerWrap" hidden><span id="datasetCaptionTriggerLabel">触发词</span><input id="datasetCaptionTrigger" maxlength="80" placeholder="例如 miru"></label>
+              <label>说明长度<input id="datasetCaptionMaxTokens" type="number" min="40" max="2000" step="10"></label>
+            </div>
+            <p id="datasetCaptionModeHint" class="dataset-hint"></p>
+            <label class="dataset-inline-check"><input id="datasetCaptionMediaTags" type="checkbox"> 保留图片真实媒材（摄影、插画、3D 等）</label>
+            <details id="datasetCaptionOptions">
+              <summary>可选内容</summary>
+              <div class="dataset-caption-options" id="datasetCaptionOptionList"></div>
+            </details>
+            <div class="dataset-caption-presets">
+              <label>已保存的设置<select id="datasetCaptionPreset"><option value="">不套用</option></select></label>
+              <label>另存为<input id="datasetCaptionPresetName" maxlength="40" placeholder="例如 肖像-miru"></label>
+              <div class="dataset-action-row"><button id="datasetCaptionPresetSave" type="button">保存当前设置</button><button id="datasetCaptionPresetDelete" type="button">删除所选</button></div>
+              <p id="datasetCaptionPresetHint" class="dataset-hint">设置只存在这台机器的浏览器里，不会写进工作区。</p>
+            </div>
+          </div>
           <div class="dataset-curation-grid">
             <div class="dataset-curation-block">
               <strong>方案 A · 接续已有 .txt</strong>
@@ -82,7 +103,7 @@ WORKSPACE_HTML = r"""
               <p class="dataset-hint">只在缺少 Anima 标签时使用。结果是待人工检查的草稿，不会直接进入交付版本。</p>
               <div class="dataset-thresholds"><label>打标方式<select id="datasetTaggerMode"><option value="wd14">WD14 本地模型</option><option value="model">使用模型</option></select></label><label id="datasetTaggerModelWrap" hidden>用于打标的模型<select id="datasetTaggerModel"><option value="">正在读取视觉模型……</option></select></label></div>
               <p id="datasetTaggerHint" class="dataset-hint">默认使用 WD14；也可以改用已连接的视觉模型生成 Booru 标签草稿。</p>
-              <div class="dataset-thresholds" id="datasetWd14Thresholds"><label>普通标签最低可信度<input id="datasetGeneralThreshold" type="number" min="0" max="1" step="0.05" value="0.35"></label><label>角色标签最低可信度<input id="datasetCharacterThreshold" type="number" min="0" max="1" step="0.05" value="0.85"></label></div>
+              <div class="dataset-thresholds" id="datasetWd14Thresholds"><label>图片类型<select id="datasetLocalTaggerModel"><option value="">正在读取本地打标模型……</option></select></label><p class="dataset-hint" id="datasetWd14Calibration">正在读取打标模型设置……</p></div>
               <div class="dataset-action-row"><button data-wd14-scope="selected">为已选生成草稿</button><button data-wd14-scope="untagged">补齐未打标草稿</button><button data-wd14-scope="failed">重试失败项</button><button class="dataset-advanced-only" data-wd14-scope="all">高级：全部重跑</button></div>
             </div>
             <div class="dataset-curation-block" data-caption-profile="anima">
@@ -156,12 +177,16 @@ WORKSPACE_HTML = r"""
       <textarea id="datasetDetailKrea2" maxlength="12000" aria-label="Krea 2 英文自然语言说明"></textarea>
       <div class="dataset-caption-profile"><strong>视觉模型草稿 · 待确认</strong><span id="datasetDetailKrea2VLM">尚无草稿</span></div>
       <textarea id="datasetDetailKrea2Draft" maxlength="12000" aria-label="Krea 2 视觉模型英文草稿" placeholder="先在工作台运行 Krea 2 视觉草稿队列"></textarea>
+      <div class="dataset-caption-profile"><strong>中文对照（只读）</strong><span id="datasetDetailKrea2LocaleStatus">保存或确认前可先对照</span></div>
+      <textarea id="datasetDetailKrea2Locale" readonly aria-label="Krea 2 草稿中文对照" placeholder="点“翻译成中文对照”查看这段草稿的中文意思"></textarea>
+      <div class="dataset-action-row"><button id="datasetDetailKrea2Translate">翻译成中文对照</button></div>
+      <label>修正意见<textarea id="datasetDetailKrea2Revision" maxlength="4000" placeholder="可以直接贴改写后的整段中文。也可以只写一句要求。例如：加入对肤色的描述"></textarea></label>
+      <div class="dataset-action-row"><button id="datasetDetailKrea2Revise">按修正意见改写草稿</button><span id="datasetDetailKrea2ReviseStatus" class="dataset-hint">改写结果会放回英文草稿框，保存前仍可继续修改。</span></div>
       <p id="datasetDetailKrea2Warning" class="dataset-vlm-warning" hidden></p>
       <div class="dataset-action-row"><button id="datasetDetailDraftSave">只保存草稿</button><button class="dataset-primary" id="datasetDetailDraftConfirm">确认写入 Krea 2</button></div>
       <p class="dataset-hint">确认时系统会保存一份可回退的修改记录；Anima 与 WD14 不会改变。</p>
       <div class="dataset-similar-panel"><button id="datasetFindSimilar" disabled>以此图查相似</button><span id="datasetFindSimilarStatus">正在检查真实视觉索引……</span></div>
-      <label>审核备注<textarea id="datasetDetailNote" maxlength="2000" placeholder="记录质量、特征、需要修正的标签……"></textarea></label>
-      <button class="dataset-primary" id="datasetDetailSave">保存审核和两种说明</button>
+      <div class="dataset-action-row"><button class="dataset-primary" id="datasetDetailApprove">审核通过并看下一张</button><button id="datasetDetailSave">只保存不改状态</button></div>
       <details><summary>文件指纹与来源</summary><pre id="datasetDetailHashes"></pre></details>
     </div>
   </dialog>
@@ -323,10 +348,35 @@ WORKSPACE_STYLES = r"""
   .dataset-curation-block label { display: grid; gap: 4px; margin-top: 7px; color: var(--muted); font: 8px monospace; text-transform: uppercase; }
   .dataset-curation-block input, .dataset-curation-block select, .dataset-snapshot-row select { width: 100%; border: 1px solid var(--line); background: #f8f2e7; padding: 7px; font: 10px monospace; }
   .dataset-thresholds { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  #datasetWd14Thresholds { grid-template-columns: minmax(0,1fr); }
   .dataset-action-row, .dataset-snapshot-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
   .dataset-action-row button, .dataset-snapshot-row button { border: 1px solid var(--ink); padding: 7px; font: 800 7px monospace; }
   .dataset-action-row button:disabled { opacity: .35; }
   .dataset-inline-check { display: flex !important; align-items: center; grid-template-columns: auto 1fr; }
+  .dataset-caption-rules { border-right: 0; border-bottom: 1px solid var(--line); }
+  .dataset-caption-rules .dataset-thresholds { grid-template-columns: repeat(3, 1fr); }
+  .dataset-caption-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 14px; padding-top: 8px; }
+  .dataset-caption-rules .dataset-inline-check { gap: 9px; cursor: pointer; }
+  .dataset-caption-rules input[type="checkbox"] {
+    appearance: none; -webkit-appearance: none; margin: 0;
+    width: 34px !important; height: 19px; flex: 0 0 34px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--paper-deep); position: relative; cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .dataset-caption-rules input[type="checkbox"]::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 13px; height: 13px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 24, 21, .3);
+    transition: transform .15s ease;
+  }
+  .dataset-caption-rules input[type="checkbox"]:checked { background: var(--signal); border-color: var(--signal); }
+  .dataset-caption-rules input[type="checkbox"]:checked::after { transform: translateX(15px); }
+  .dataset-caption-rules input[type="checkbox"]:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .dataset-source-gone { color: var(--signal); font-weight: 600; }
+  .dataset-caption-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 10px; }
+  .dataset-caption-presets .dataset-action-row, .dataset-caption-presets .dataset-hint { grid-column: 1 / -1; }
+  #datasetDetailKrea2Locale { min-height: 68px; }
   .dataset-inline-check input { width: auto; }
   .dataset-analytics { min-height: 44px; color: var(--muted); font: 8px/1.5 monospace; }
   .dataset-analytics-tags, .dataset-tag-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
@@ -405,7 +455,7 @@ WORKSPACE_SCRIPT = r"""
 <script>
 (() => {
   const deviceName = () => window.getPromptHubDeviceName?.() || 'Windows 绘图设备';
-  const state = {workspaces: [], active: null, report: null, analytics: null, models: [], exports: [], preflight: null, visible: [], pageItems: [], page: 1, pageSize: 24, selected: new Set(), detailIndex: -1, poll: null, bulkPreview: null, sourceCaptionPreview: null, mode: 'simple', step: 0, browse: null, zipFile: null, importJob: null};
+  const state = {captionContract: null, captionOptions: {}, captionLocales: {}, taggerConfig: null, workspaces: [], active: null, report: null, analytics: null, models: [], exports: [], preflight: null, visible: [], pageItems: [], page: 1, pageSize: 24, selected: new Set(), detailIndex: -1, poll: null, bulkPreview: null, sourceCaptionPreview: null, mode: 'simple', step: 0, browse: null, zipFile: null, importJob: null};
   const compactDatasetView = window.matchMedia('(max-width: 700px)');
   const labels = {pending:'未审核', approved:'保留', needs_review:'待复查', excluded:'排除'};
   const workspaceStatusLabels = {registered:'等待扫描', scanning:'正在扫描', ready:'可使用', failed:'扫描失败', queued:'等待扫描', canceled:'已取消'};
@@ -413,7 +463,7 @@ WORKSPACE_SCRIPT = r"""
   async function api(url, options={}) { const response = await fetch(url, options); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.detail || `请求失败：${response.status}`); return data; }
   const jsonOptions = body => ({method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   function duplicateSets() { const exact = new Set(), near = new Set(); (state.report?.exact_duplicates || []).forEach(group => group.files.forEach(path => exact.add(path))); (state.report?.near_duplicates || []).forEach(group => group.files.forEach(path => near.add(path))); return {exact, near}; }
-  function renderWorkspaces() { const latest=state.active || state.workspaces[0] || null, hasWorkspaces=Boolean(latest), status=latest?`${workspaceStatusLabels[latest.status] || '状态待确认'} · ${formatNumber(latest.summary?.image_count || 0)} 张图片`:''; $('#datasetWorkspaceCount').textContent = state.workspaces.length; $('#datasetWorkspaceList').innerHTML = state.workspaces.length ? state.workspaces.map(item => `<button class="dataset-workspace-item ${state.active?.workspace_id === item.workspace_id ? 'active' : ''}" data-workspace-id="${escapeHtml(item.workspace_id)}"><strong>${escapeHtml(item.name)}${item.source_origin==='zip_archive'?' · zip 导入':''}</strong><span>${escapeHtml(workspaceStatusLabels[item.status] || '状态待确认')} · ${formatNumber(item.summary?.image_count || 0)} 张</span><span>${escapeHtml(item.source_path)}</span></button>`).join('') : '<p class="dataset-hint">还没有读取过数据集。</p>'; $('#datasetContinue').hidden=!hasWorkspaces; $('#datasetContinueName').textContent=latest?.name || '—'; $('#datasetContinueStatus').textContent=status; $('#datasetImportKicker').textContent=hasWorkspaces?'导入另一个文件夹':'01 · 导入素材'; $('#datasetImportSubmit').textContent=hasWorkspaces?'读取新的文件夹':'读取文件夹并开始检查'; }
+  function renderWorkspaces() { const latest=state.active || state.workspaces[0] || null, hasWorkspaces=Boolean(latest), status=latest?`${workspaceStatusLabels[latest.status] || '状态待确认'} · ${formatNumber(latest.summary?.image_count || 0)} 张图片`:''; $('#datasetWorkspaceCount').textContent = state.workspaces.length; $('#datasetWorkspaceList').innerHTML = state.workspaces.length ? state.workspaces.map(item => `<button class="dataset-workspace-item ${state.active?.workspace_id === item.workspace_id ? 'active' : ''}" data-workspace-id="${escapeHtml(item.workspace_id)}"><strong>${escapeHtml(item.name)}${item.source_origin==='zip_archive'?' · zip 导入':''}</strong><span>${escapeHtml(workspaceStatusLabels[item.status] || '状态待确认')} · ${formatNumber(item.summary?.image_count || 0)} 张</span><span>${escapeHtml(item.source_path)}</span>${item.source_available===false?'<span class="dataset-source-gone">来源目录已经不在</span>':''}</button>`).join('') : '<p class="dataset-hint">还没有读取过数据集。</p>'; $('#datasetContinue').hidden=!hasWorkspaces; $('#datasetContinueName').textContent=latest?.name || '—'; $('#datasetContinueStatus').textContent=status; $('#datasetImportKicker').textContent=hasWorkspaces?'导入另一个文件夹':'01 · 导入素材'; $('#datasetImportSubmit').textContent=hasWorkspaces?'读取新的文件夹':'读取文件夹并开始检查'; }
   function renderDatasetOrigin() { const origin=state.active?.origin||{}, container=$('#datasetOrigin'); if(origin.kind!=='creative_project'||!origin.project_id) { container.innerHTML='<span class="independent">外部独立数据集 · 不要求绑定创作项目</span>'; return; } const assets=Array.isArray(origin.result_asset_ids)?origin.result_asset_ids:[]; container.innerHTML=`<span>来源：${escapeHtml(origin.project_title||'创作项目')} · V${Number(origin.project_iteration)||1} · ${assets.length} 张结果图</span><button type="button" data-origin-project="${escapeHtml(origin.project_id)}">返回来源项目</button>${assets.slice(0,3).map((id,index)=>`<a href="/result-media/${encodeURIComponent(origin.project_id)}/original/${encodeURIComponent(id)}" target="_blank" rel="noreferrer">来源图 ${index+1}</a>`).join('')}`; }
   function stat(value, label) { return `<div class="dataset-stat"><strong>${formatNumber(value)}</strong><span>${label}</span></div>`; }
   function formatDatasetBytes(value) { const bytes=Number(value)||0; if(bytes>=1073741824) return `${(bytes/1073741824).toFixed(1)} GiB`; if(bytes>=1048576) return `${(bytes/1048576).toFixed(1)} MiB`; if(bytes>=1024) return `${(bytes/1024).toFixed(1)} KiB`; return `${bytes} B`; }
@@ -426,14 +476,17 @@ WORKSPACE_SCRIPT = r"""
   function renderJourney() { const d=deliveryState(), step=state.step || d.recommended, profileName=d.profile==='anima'?'Anima':'Krea 2', scanClear=Boolean(state.report)&&!d.invalidOpen.length&&!d.exactBlockingGroups.length, captionsReady=Boolean(state.report)&&d.active.length>0&&!d.missing.length, reviewReady=captionsReady&&!d.captionDraft.length&&!d.pending.length&&!d.needsReview.length&&d.approved.length>0&&d.deliverable.length>0, statuses={1:Boolean(state.report),2:scanClear,3:captionsReady,4:reviewReady,5:state.exports.some(item=>item.profile_id===d.profile)}; document.querySelectorAll('[data-dataset-step]').forEach(button=>{ const value=Number(button.dataset.datasetStep); button.classList.toggle('current',value===step); button.classList.toggle('complete',Boolean(statuses[value])); button.classList.toggle('blocked',value===d.recommended&&value>1&&!statuses[value]); button.setAttribute('aria-current',value===step?'step':'false'); }); const copy={1:{title:'先读取一个本地图片文件夹',message:'Prompt Hub 会建立只读工作区，并自动扫描图片、同名 .txt、坏图与重复。',action:'回到左侧填写文件夹路径'},2:{title:scanClear?'文件检查已经通过':'先处理会阻止交付的问题',message:scanClear?'没有发现未处理的坏图或完全重复，可以继续准备标签。':`还有 ${d.invalidOpen.length} 张坏图、${d.exactBlockingGroups.length} 组完全重复需要明确排除。`,action:scanClear?'继续准备标签':'查看问题图片'},3:{title:captionsReady?`${profileName} 图片说明已经齐全`:`还缺 ${d.missing.length} 份 ${profileName} 图片说明`,message:captionsReady?(d.captionDraft.length?`图片说明已齐，但其中 ${d.captionDraft.length} 份仍是草稿，请在人工审核时确认。`:'不需要重复生成标签，可以直接进入人工审核。'):'可以使用已有 .txt，或用对应工具生成缺少的草稿。',action:captionsReady?'进入人工审核':'打开标签准备工具'},4:{title:reviewReady?'图片和说明文字已满足交付要求':'需要人工决定哪些图片保留',message:reviewReady?`已选择 ${d.deliverable.length} 张可交付图片。生成版本前仍可逐张复查。`:`${d.pending.length} 张未审核，${d.needsReview.length} 张待复查，${d.captionDraft.length} 份图片说明尚未确认；当前选择 ${d.selected.length} 张。`,action:reviewReady?'检查交付内容':'查看待审核图片'},5:{title:d.deliverable.length?'可以生成当前数据集版本':'还没有可交付的图片',message:d.deliverable.length?`${d.deliverable.length} 张图片将按 ${profileName} 格式建立独立副本。`:'返回人工审核：选择图片、标记保留，并确认当前格式的图片说明。',action:d.deliverable.length?'生成并保存副本':'返回人工审核'}}[step]; $('#datasetCurrentStepLabel').textContent=`第 ${step} 步 · ${stepNames[step]}`; $('#datasetReadinessTitle').textContent=copy.title; $('#datasetReadinessMessage').textContent=copy.message; $('#datasetNextAction').textContent=copy.action; const blockers=[]; if(d.invalidOpen.length) blockers.push(`${d.invalidOpen.length} 张坏图尚未排除`); if(d.exactBlockingGroups.length) blockers.push(`${d.exactBlockingGroups.length} 组完全重复尚未处理`); if(d.missing.length) blockers.push(`${d.missing.length} 份 ${profileName} 图片说明缺失`); if(d.captionDraft.length) blockers.push(`${d.captionDraft.length} 份 ${profileName} 图片说明仍是草稿`); if(d.pending.length) blockers.push(`${d.pending.length} 张图片尚未审核`); if(d.needsReview.length) blockers.push(`${d.needsReview.length} 张图片标记为待复查`); if(d.selectedBlocked.length) blockers.push(`已选图片中有 ${d.selectedBlocked.length} 张暂时不能交付`); $('#datasetBlockingList').innerHTML=blockers.slice(0,4).map(item=>`<li>${escapeHtml(item)}</li>`).join(''); $('#datasetDeliverySummary').textContent=d.deliverable.length?`当前选择中有 ${d.deliverable.length} 张通过审核，并且已经确认 ${profileName} 图片说明。`:`当前选择中没有可交付图片。请返回第 4 步完成选择、图片审核和 ${profileName} 图片说明确认。`; $('#datasetExportActiveProfile').textContent=`生成并保存 ${profileName} 到 Mac`; $('#datasetExportActiveProfile').disabled=!d.deliverable.length||Boolean(d.selectedBlocked.length); renderStagePanels(step); renderPreflight(); renderExports(); }
   function taggerRecordLabel(record, completed=false) { const tagger=record?.tagger==='model'?'model':'wd14', model=record?.model || ''; if(tagger==='model') return completed?`模型已完成 · ${model || '视觉模型'}`:`模型失败 · ${model || '视觉模型'}`; return completed?'WD14 已完成':'WD14 失败'; }
   function taggerDetailLabel(record) { const tagger=record?.tagger==='model'?'model':'wd14', model=record?.model || ''; if(record?.status==='completed') return tagger==='model'?`模型已完成 · ${model || '视觉模型'} · 草稿待人工检查`:`${model || 'WD14'} · ${record.provider || 'CPU'} · 草稿待人工检查`; if(record?.status==='failed') return tagger==='model'?`模型失败 · ${model || '视觉模型'}：${record.error || '未知错误'}`:`WD14 失败：${record.error || '未知错误'}`; return '尚未运行打标'; }
-  function updateDatasetTaggerMode() { const mode=$('#datasetTaggerMode').value, hasVision=state.models.length>0, option=[...$('#datasetTaggerMode').options].find(item=>item.value==='model'); if(option) option.disabled=!hasVision; if(mode==='model'&&!hasVision) $('#datasetTaggerMode').value='wd14'; const usingModel=$('#datasetTaggerMode').value==='model'; $('#datasetWd14Thresholds').hidden=usingModel; $('#datasetTaggerModelWrap').hidden=!usingModel; $('#datasetTaggerHint').textContent=usingModel?'模型会生成 Anima Booru 标签草稿；图片会发送到所选模型服务。':hasVision?'默认使用 WD14；也可以改用已连接的视觉模型生成 Booru 标签草稿。':'没有可用视觉模型；“使用模型”已禁用，请先在 LM Studio 加载视觉模型或在模型接入中启用支持看图的模型。'; }
+  function updateDatasetTaggerMode() { const mode=$('#datasetTaggerMode').value, hasVision=state.models.length>0, option=[...$('#datasetTaggerMode').options].find(item=>item.value==='model'); if(option) option.disabled=!hasVision; if(mode==='model'&&!hasVision) $('#datasetTaggerMode').value='wd14'; const usingModel=$('#datasetTaggerMode').value==='model'; $('#datasetWd14Thresholds').hidden=usingModel; $('#datasetTaggerModelWrap').hidden=!usingModel; $('#datasetTaggerHint').textContent=usingModel?'模型会生成 Anima Booru 标签草稿；图片会发送到所选模型服务。':hasVision?'先按图片类型选择本地 Tagger；也可以改用已连接的视觉模型。':'先按图片类型选择本地 Tagger。没有可用视觉模型，因此“使用模型”已禁用。'; }
+  function selectedLocalTagger() { return (state.taggerConfig?.models || []).find(item=>item.id===$('#datasetLocalTaggerModel').value); }
+  function updateLocalTaggerCalibration() { const selected=selectedLocalTagger(); if(!selected) return; $('#datasetWd14Calibration').textContent=`${selected.label} · 普通标签阈值 ${selected.general_threshold} · 角色标签阈值 ${selected.character_threshold}${selected.available?' · 已安装':' · 本机未安装'}`; }
+  function syncDatasetTaggerSelection() { const select=$('#datasetLocalTaggerModel'), models=state.taggerConfig?.models || []; if(!models.length) return; const preferred=state.report?.tagger_model_id || state.taggerConfig.default_id; if(models.some(item=>item.id===preferred)) select.value=preferred; updateLocalTaggerCalibration(); }
   function filteredImages() { const {exact, near} = duplicateSets(); const validity=$('#datasetValidity').value, caption=$('#datasetCaptionFilter').value, review=$('#datasetReviewFilter').value, duplicate=$('#datasetDuplicateFilter').value, format=$('#datasetFormatFilter').value, minSize=Number($('#datasetSizeFilter').value); return (state.report?.images || []).filter(item => { const status=item.review?.status || 'pending', inExact=exact.has(item.relative_path), inNear=near.has(item.relative_path); if (validity==='valid' && !item.valid) return false; if (validity==='invalid' && item.valid) return false; if (caption!=='all' && item.caption_status!==caption) return false; if (review!=='all' && status!==review) return false; if (format!=='all' && item.format!==format) return false; if (minSize && Math.min(item.width,item.height)<minSize) return false; if (duplicate==='exact' && !inExact) return false; if (duplicate==='near' && !inNear) return false; if (duplicate==='unique' && (inExact || inNear)) return false; return true; }); }
   function workspacePageSize() { return compactDatasetView.matches ? 12 : state.pageSize; }
   function renderGrid(resetPage=false) { const {exact, near}=duplicateSets(), pageSize=workspacePageSize(); state.visible=filteredImages(); const pageCount=Math.max(1,Math.ceil(state.visible.length/pageSize)); if (resetPage) state.page=1; state.page=Math.min(Math.max(state.page,1),pageCount); const start=(state.page-1)*pageSize; state.pageItems=state.visible.slice(start,start+pageSize); $('#datasetResultCount').textContent=`${formatNumber(state.visible.length)} 张`; $('#datasetSelectionCount').textContent=`已选 ${formatNumber(state.selected.size)} 张`; $('#datasetSelectVisible').checked=state.visible.length>0 && state.visible.every(item => state.selected.has(item.relative_path)); $('#datasetPagination').hidden=state.visible.length<=pageSize; $('#datasetPageStatus').textContent=`第 ${formatNumber(state.page)} / ${formatNumber(pageCount)} 页 · 每页最多 ${formatNumber(pageSize)} 张`; $('#datasetPreviousPage').disabled=state.page<=1; $('#datasetNextPage').disabled=state.page>=pageCount; $('#datasetGrid').innerHTML=state.pageItems.length ? state.pageItems.map((item,index) => { const status=item.review?.status || 'pending', wd14=item.curation?.wd14 || {}, tagStatus=wd14.status || 'untagged', vlmStatus=item.curation?.krea2_vlm?.status || 'empty', profile=$('#datasetDeliveryProfile').value, profileCaption=item.curation?.captions?.[profile] || {}; const flags=[item.caption_status==='missing'?'<span class="alert">缺少原说明</span>':'<span class="ok">已有原说明</span>', String(profileCaption.current || '').trim()?(profileCaption.status==='reviewed'?`<span class="ok">${profile==='anima'?'Anima':'Krea 2'} 已确认</span>`:`<span>${profile==='anima'?'Anima':'Krea 2'} 草稿</span>`):`<span class="alert">缺 ${profile==='anima'?'Anima':'Krea 2'}</span>`, tagStatus==='completed'?`<span class="ok">${escapeHtml(taggerRecordLabel(wd14,true))}</span>`:tagStatus==='failed'?`<span class="alert">${escapeHtml(taggerRecordLabel(wd14,false))}</span>`:'', ['completed','confirmed'].includes(vlmStatus)?'<span class="ok">Krea 草稿</span>':vlmStatus==='failed'?'<span class="alert">Krea 草稿失败</span>':'', !item.valid?'<span class="alert">坏图</span>':'', exact.has(item.relative_path)?'<span class="alert">完全重复</span>':'', near.has(item.relative_path)?'<span>近似重复</span>':'', `<span>${labels[status]}</span>`].join(''); return `<article class="dataset-card ${state.selected.has(item.relative_path)?'selected':''} ${item.valid?'':'invalid'}" data-dataset-index="${index}"><input class="dataset-card-select" type="checkbox" ${state.selected.has(item.relative_path)?'checked':''} aria-label="选择 ${escapeHtml(item.filename)}"><button class="dataset-card-preview" ${item.valid?'':'disabled'}>${item.thumbnail_url?`<img src="${escapeHtml(item.thumbnail_url)}" loading="lazy" alt="${escapeHtml(item.filename)}">`:'<span class="dataset-card-placeholder">无法预览</span>'}</button><div class="dataset-card-body"><strong>${escapeHtml(item.filename)}</strong><div class="dataset-card-meta"><span>${item.width}×${item.height}</span><span>${escapeHtml(item.format || '未知')}</span><span>${(item.bytes/1024).toFixed(0)} KiB</span></div><div class="dataset-card-flags">${flags}</div></div></article>`; }).join('') : '<div class="dataset-empty"><h2>当前筛选没有图片</h2><p>调整上方条件即可恢复显示。</p></div>'; renderStats(); renderJourney(); }
   function configureFormats() { const selected=$('#datasetFormatFilter').value; const formats=[...new Set((state.report?.images || []).map(item=>item.format).filter(Boolean))].sort(); $('#datasetFormatFilter').innerHTML='<option value="all">全部格式</option>'+formats.map(value=>`<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join(''); if (formats.includes(selected)) $('#datasetFormatFilter').value=selected; }
   async function loadModels() { const selects=[$('#datasetKrea2Model'),$('#datasetTaggerModel')], previous=selects.map(select=>select.value); try { const result=await api('/api/models'); state.models=(result.models || []).filter(item=>item.vision); const preferred=state.models.find(item=>item.loaded && /qwen.*3\.5.*9b/i.test(item.id)) || state.models.find(item=>item.loaded) || state.models.find(item=>/qwen.*3\.5.*9b/i.test(item.id)) || state.models[0]; selects.forEach((select,index)=>{ select.innerHTML=state.models.length?state.models.map(item=>`<option value="${escapeHtml(item.id)}" data-source="${escapeHtml(item.source || 'local')}">${escapeHtml(item.name || item.id)}${item.loaded?' · 已加载':''}</option>`).join(''):'<option value="">没有可用视觉模型</option>'; if (state.models.some(item=>item.id===previous[index])) select.value=previous[index]; else if (preferred) select.value=preferred.id; select.disabled=!state.models.length; }); updateDatasetTaggerMode(); } catch(error) { state.models=[]; selects.forEach(select=>{ select.innerHTML='<option value="">视觉模型当前不可连接</option>'; select.disabled=true; }); $('#datasetKrea2QueueHint').textContent=`视觉草稿暂不可用：${error.message}`; updateDatasetTaggerMode(); } }
-  async function loadReport() { if (!state.active) return; state.report=await api(`/api/dataset-workspaces/${encodeURIComponent(state.active.workspace_id)}/report`); state.selected=new Set((state.report.images || []).filter(item=>item.review?.selected).map(item=>item.relative_path)); state.preflight=null; configureFormats(); renderGrid(); $('#datasetScanTime').textContent=`扫描于 ${(state.report.scanned_at || '').slice(0,16).replace('T',' ')}`; await Promise.all([loadAnalytics(),loadSnapshots(),loadExports()]); renderJourney(); }
-  async function selectWorkspace(id) { state.page=1; state.step=0; state.exports=[]; state.preflight=null; state.active=state.workspaces.find(item=>item.workspace_id===id) || null; renderWorkspaces(); $('#datasetEmpty').hidden=Boolean(state.active); $('#datasetDesk').hidden=!state.active; if (!state.active) { state.report=null; return; } $('#datasetActiveName').textContent=state.active.name; $('#datasetActivePath').textContent=state.active.source_path; renderDatasetOrigin(); if (state.active.current_report) await loadReport(); else { state.report=null; renderGrid(); } await refreshJobs(); }
+  async function loadReport() { if (!state.active) return; state.report=await api(`/api/dataset-workspaces/${encodeURIComponent(state.active.workspace_id)}/report`); state.selected=new Set((state.report.images || []).filter(item=>item.review?.selected).map(item=>item.relative_path)); state.preflight=null; syncDatasetTaggerSelection(); configureFormats(); renderGrid(); $('#datasetScanTime').textContent=`扫描于 ${(state.report.scanned_at || '').slice(0,16).replace('T',' ')}`; await Promise.all([loadAnalytics(),loadSnapshots(),loadExports()]); renderJourney(); }
+  async function selectWorkspace(id) { state.page=1; state.step=0; state.exports=[]; state.preflight=null; state.active=state.workspaces.find(item=>item.workspace_id===id) || null; renderWorkspaces(); $('#datasetEmpty').hidden=Boolean(state.active); $('#datasetDesk').hidden=!state.active; if (!state.active) { state.report=null; return; } $('#datasetActiveName').textContent=state.active.name; $('#datasetActivePath').textContent=state.active.source_path+(state.active.source_available===false?'（来源目录已经不在。请重新导入，或把目录放回原处）':''); $('#datasetActivePath').classList.toggle('dataset-source-gone',state.active.source_available===false); renderDatasetOrigin(); if (state.active.current_report) await loadReport(); else { state.report=null; renderGrid(); } await refreshJobs(); }
   async function loadWorkspaces(preferred='') { state.workspaces=await api('/api/dataset-workspaces'); renderWorkspaces(); const id=preferred || state.active?.workspace_id || state.workspaces[0]?.workspace_id; if (id) await selectWorkspace(id); }
   function countLabel(entry) { const text=`${formatNumber(entry.image_count)} 张图片`; return entry.image_count_capped?`500+ 张图片`:text; }
   function renderBrowse() { const payload=state.browse; if(!payload) return; const crumbs=payload.crumbs||[]; $('#datasetBrowseCrumbs').innerHTML=(payload.parent?`<button class="dataset-browse-up" data-browse-path="${escapeHtml(payload.parent)}">← 上一级</button>`:'')+crumbs.map((crumb,index)=>index===crumbs.length-1?`<span class="dataset-browse-crumb current">${escapeHtml(crumb.name)}</span>`:`<button class="dataset-browse-crumb" data-browse-path="${escapeHtml(crumb.path)}">${escapeHtml(crumb.name)}</button>`).join(' / '); $('#datasetBrowseQuick').innerHTML=(payload.quick||[]).map(item=>`<button type="button" data-browse-path="${escapeHtml(item.path)}" ${item.available?'':'disabled'}>${escapeHtml(item.label)}</button>`).join(''); const entries=payload.entries||[]; $('#datasetBrowseRows').innerHTML=entries.length?entries.map(entry=>{ const meta=[countLabel(entry)]; if(entry.imported) meta.push('已导入'); const reason=entry.reason?`<em>${escapeHtml(entry.reason)}</em>`:''; return `<div class="dataset-browse-row ${entry.selectable?'':'blocked'}"><button class="dataset-browse-nav" type="button" data-browse-path="${escapeHtml(entry.path)}"><strong>${escapeHtml(entry.name)}</strong><span>${meta.join(' · ')}</span>${reason}</button><button class="dataset-browse-pick" type="button" data-browse-pick="${escapeHtml(entry.path)}" ${entry.selectable?'':'disabled'}>选择</button></div>`; }).join(''):'<p class="dataset-hint">此文件夹没有子文件夹。</p>'; const skipped=(payload.skipped||[]).map(item=>`<div class="dataset-browse-row blocked"><span class="dataset-browse-nav static"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.reason)}</span></span></div>`).join(''); $('#datasetBrowseNote').innerHTML=skipped?`<strong>已跳过 ${payload.skipped.length} 项：</strong>${skipped}`:(payload.truncated?'文件夹太多，列表已截断。':''); $('#datasetBrowsePickCurrent').hidden=!payload.path; $('#datasetBrowsePickCurrent').disabled=!payload.selectable; $('#datasetBrowsePickCurrent').dataset.browsePick=payload.path||''; $('#datasetBrowsePickCurrent').textContent=payload.selectable?`选择当前文件夹：${payload.path}`:(payload.reason?`当前文件夹不可选：${payload.reason}`:'当前文件夹不可选'); }
@@ -453,8 +506,8 @@ WORKSPACE_SCRIPT = r"""
   function startPolling() { clearInterval(state.poll); state.poll=setInterval(async()=>{ try { const running=await refreshJobs(); if (!running) clearInterval(state.poll); } catch(error) { console.error(error); clearInterval(state.poll); } },900); }
   async function updateReviews(items) { if (!state.active || !items.length) return; await api(`/api/dataset-workspaces/${state.active.workspace_id}/review`,jsonOptions({items})); await loadReport(); }
   function selectedPaths(scope='selected') { if (scope==='filtered') return state.visible.map(item=>item.relative_path); return [...state.selected]; }
-  async function queueWd14(scope) { if (!state.active) return; const paths=scope==='selected'?selectedPaths():[], tagger=$('#datasetTaggerMode').value, model=$('#datasetTaggerModel').value; if (scope==='selected' && !paths.length) return alert('请先选择要打标的图片。'); if (tagger==='model' && !model) return alert('请先选择用于打标的视觉模型。'); if (scope==='all' && !confirm('重新打标整个工作区会替换尚未人工确认的 Anima 草稿。继续吗？')) return; const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/wd14`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,tagger,model,general_threshold:Number($('#datasetGeneralThreshold').value),character_threshold:Number($('#datasetCharacterThreshold').value),provider:'cpu',overwrite:scope==='all'})}); renderJob(result.job); startPolling(); }
-  async function queueKrea2VLM(scope) { if (!state.active) return; const model=$('#datasetKrea2Model').value, paths=scope==='selected'?selectedPaths():[]; if (!model) return alert('请先在 LM Studio 中准备并加载一个视觉模型。'); if (scope==='selected' && !paths.length) return alert('请先选择要生成草稿的图片。'); const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/krea2-vlm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,model})}); renderJob(result.job); $('#datasetKrea2QueueHint').textContent='队列已开始。模型结果只会进入待确认草稿。'; startPolling(); }
+  async function queueWd14(scope) { if (!state.active) return; const paths=scope==='selected'?selectedPaths():[], tagger=$('#datasetTaggerMode').value, model=$('#datasetTaggerModel').value, localTagger=selectedLocalTagger(); if (scope==='selected' && !paths.length) return alert('请先选择要打标的图片。'); if (tagger==='model' && !model) return alert('请先选择用于打标的视觉模型。'); if(tagger==='wd14'&&!localTagger) return alert('请先选择与素材匹配的本地 Tagger。'); if(tagger==='wd14'&&!localTagger.available) return alert(`本机还没有安装 ${localTagger.label} Tagger（${localTagger.model}）。请先安装该模型，或选择已经安装的 Tagger。`); if (scope==='all' && !confirm('重新打标整个工作区会替换尚未人工确认的 Anima 草稿。继续吗？')) return; const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/wd14`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,tagger,model,tagger_model_id:$('#datasetLocalTaggerModel').value,provider:'cpu',overwrite:scope==='all',...captionSettings()})}); renderJob(result.job); startPolling(); }
+  async function queueKrea2VLM(scope) { if (!state.active) return; const model=$('#datasetKrea2Model').value, paths=scope==='selected'?selectedPaths():[]; if (!model) return alert('请先在 LM Studio 中准备并加载一个视觉模型。'); if (scope==='selected' && !paths.length) return alert('请先选择要生成草稿的图片。'); const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/krea2-vlm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,model,...captionSettings()})}); renderJob(result.job); $('#datasetKrea2QueueHint').textContent='队列已开始。模型结果只会进入待确认草稿。'; startPolling(); }
   async function loadTagCatalog() { const payload=await api('/api/tags/catalog?language=zh'); $('#datasetTagSuggestions').innerHTML=(payload.items||[]).map(item=>`<option value="${escapeHtml(item.zh || item.en)}">${escapeHtml(item.en)}</option>`).join(''); }
   function appendBulkTag(tag) { const input=$('#datasetBulkAdd'), values=input.value.split(',').map(value=>value.trim()).filter(Boolean); if (!values.some(value=>value.toLowerCase()===tag.toLowerCase())) values.push(tag); input.value=values.join(', '); state.bulkPreview=null; $('#datasetBulkApply').disabled=true; $('#datasetBulkResult').textContent=`已选择 ${window.displayCanonicalTag?.(tag)||tag}；请先预览修改。`; }
   async function loadAnalytics() { if (!state.active) return; state.analytics=await api(`/api/dataset-workspaces/${state.active.workspace_id}/analytics`); const top=(state.analytics.frequencies || []).slice(0,18); await window.ensureTagLabels?.(top.map(item=>item.tag)); const chips=top.map(item=>`<button type="button" data-bulk-tag="${escapeHtml(item.tag)}" title="加入批量添加">${escapeHtml(window.displayCanonicalTag?.(item.tag) || item.tag)} · ${item.count}</button>`).join(''); $('#datasetAnalytics').innerHTML=`<strong>${formatNumber(state.analytics.captioned_images)} 张有 Anima 标签 · ${formatNumber(state.analytics.unique_tags)} 个标签 · ${formatNumber((state.analytics.conflicts||[]).length)} 个冲突提示</strong><div class="dataset-analytics-tags">${chips || '<span>暂无标签</span>'}</div>`; }
@@ -473,11 +526,45 @@ WORKSPACE_SCRIPT = r"""
   async function rollbackSnapshot() { const id=$('#datasetSnapshot').value; if (!id || !confirm(`恢复说明文字修改记录 ${id}？当前内容也会先保存，之后仍可找回。`)) return; const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/snapshots/${encodeURIComponent(id)}/rollback`,{method:'POST'}); $('#datasetBulkResult').textContent=`已恢复 ${result.changed} 张；同时保存了当前内容，记录编号 ${result.snapshot}。`; await loadReport(); }
   function detailItem() { return state.pageItems[state.detailIndex]; }
   async function renderDetailTags(item) { const caption=$('#datasetDetailAnima').value, tags=caption.split(',').map(value=>value.trim()).filter(Boolean), candidates=[...new Set([...(item.curation?.wd14?.general || []).map(value=>value.tag).filter(Boolean),...tags])], selected=new Set(tags); await window.ensureTagLabels?.(candidates); $('#datasetDetailTagChips').innerHTML=candidates.map(tag=>`<button class="${selected.has(tag)?'selected':''}" data-detail-tag="${escapeHtml(tag)}" aria-pressed="${selected.has(tag)}">${escapeHtml(window.displayCanonicalTag?.(tag) || tag)}</button>`).join(''); }
-  function renderDetail() { const item=detailItem(); if (!item) return; const wd14=item.curation?.wd14 || {status:'untagged'}, vlm=item.curation?.krea2_vlm || {status:'empty'}, anima=item.curation?.captions?.anima || {}, krea=item.curation?.captions?.krea2 || {}, vlmTime=vlm.created_at?` · ${vlm.created_at.slice(0,16).replace('T',' ')}`:''; $('#datasetDetailImage').src=item.original_url; $('#datasetDetailName').textContent=item.relative_path; $('#datasetDetailMeta').textContent=`${item.width}×${item.height} · ${item.format} · ${(item.bytes/1024).toFixed(1)} KiB`; $('#datasetDetailStatus').value=item.review?.status || 'pending'; $('#datasetDetailCaption').value=item.caption || ''; $('#datasetDetailAnima').value=anima.current || ''; $('#datasetDetailKrea2').value=krea.current || ''; $('#datasetDetailKrea2Draft').value=vlm.draft || ''; $('#datasetDetailWD14').textContent=taggerDetailLabel(wd14); $('#datasetDetailKrea2VLM').textContent=vlm.status==='failed'?`失败：${vlm.error || '未知错误'}`:['completed','confirmed'].includes(vlm.status)?`${vlm.model || '人工保存草稿'}${vlmTime}${vlm.status==='confirmed'?' · 已确认':''}`:'尚无草稿'; $('#datasetDetailKrea2Warning').hidden=!vlm.safety_warning; $('#datasetDetailKrea2Warning').textContent=vlm.safety_warning || ''; $('#datasetDetailDraftConfirm').disabled=!vlm.draft; $('#datasetDetailNote').value=item.review?.note || ''; $('#datasetDetailHashes').textContent=`SHA-256：${item.sha256}\npHash：${item.phash || '—'}\n原始说明：${item.caption_path || '缺失'}\n来源文件：${item.relative_path}\nAnima 状态：${anima.status || 'empty'}\nKrea 2 状态：${krea.status || 'empty'}\n视觉草稿哈希：${vlm.source_sha256 || '—'}`; $('#datasetPrevious').disabled=state.detailIndex<=0; $('#datasetNext').disabled=state.detailIndex>=state.pageItems.length-1; $('#datasetFindSimilar').disabled=true; $('#datasetFindSimilarStatus').textContent='正在检查真实视觉索引……'; refreshSimilarStatus(item).catch(error=>$('#datasetFindSimilarStatus').textContent=error.message); renderDetailTags(item).catch(console.error); }
+  function renderDetail() { const item=detailItem(); if (!item) return; const wd14=item.curation?.wd14 || {status:'untagged'}, vlm=item.curation?.krea2_vlm || {status:'empty'}, anima=item.curation?.captions?.anima || {}, krea=item.curation?.captions?.krea2 || {}, vlmTime=vlm.created_at?` · ${vlm.created_at.slice(0,16).replace('T',' ')}`:''; $('#datasetDetailImage').src=item.original_url; $('#datasetDetailName').textContent=item.relative_path; $('#datasetDetailMeta').textContent=`${item.width}×${item.height} · ${item.format} · ${(item.bytes/1024).toFixed(1)} KiB`; $('#datasetDetailStatus').value=item.review?.status || 'pending'; $('#datasetDetailCaption').value=item.caption || ''; $('#datasetDetailAnima').value=anima.current || ''; $('#datasetDetailKrea2').value=krea.current || ''; $('#datasetDetailKrea2Draft').value=vlm.draft || ''; restoreKrea2Locale(item); $('#datasetDetailKrea2Revision').value=''; $('#datasetDetailKrea2ReviseStatus').textContent='改写结果会放回英文草稿框，保存前仍可继续修改。'; $('#datasetDetailWD14').textContent=taggerDetailLabel(wd14); $('#datasetDetailKrea2VLM').textContent=vlm.status==='failed'?`失败：${vlm.error || '未知错误'}`:['completed','confirmed'].includes(vlm.status)?`${vlm.model || '人工保存草稿'}${vlmTime}${vlm.status==='confirmed'?' · 已确认':''}`:'尚无草稿'; $('#datasetDetailKrea2Warning').hidden=!vlm.safety_warning; $('#datasetDetailKrea2Warning').textContent=vlm.safety_warning || ''; $('#datasetDetailDraftConfirm').disabled=!vlm.draft; $('#datasetDetailHashes').textContent=`SHA-256：${item.sha256}\npHash：${item.phash || '—'}\n原始说明：${item.caption_path || '缺失'}\n来源文件：${item.relative_path}\nAnima 状态：${anima.status || 'empty'}\nKrea 2 状态：${krea.status || 'empty'}\n视觉草稿哈希：${vlm.source_sha256 || '—'}`; $('#datasetPrevious').disabled=state.detailIndex<=0; $('#datasetNext').disabled=state.detailIndex>=state.pageItems.length-1; $('#datasetFindSimilar').disabled=true; $('#datasetFindSimilarStatus').textContent='正在检查真实视觉索引……'; refreshSimilarStatus(item).catch(error=>$('#datasetFindSimilarStatus').textContent=error.message); renderDetailTags(item).catch(console.error); }
   async function refreshSimilarStatus(item) { const digest=item.sha256, result=await api(`/api/hybrid-search/source-status?source_sha256=${encodeURIComponent(digest)}`); if(detailItem()?.sha256!==digest) return; $('#datasetFindSimilar').disabled=!result.available; $('#datasetFindSimilarStatus').textContent=result.available?`已进入 ${result.indexes.length} 个真实索引，可以查相似图。`:'等待 Windows 设备生成真实 CLIP / SigLIP 索引；当前不生成伪结果。'; }
   function openDetail(index) { state.detailIndex=index; renderDetail(); $('#datasetDetail').showModal(); }
+  function restoreKrea2Locale(item) {
+    // 译文按图记住。翻过的那张切回来还在。不必重翻。
+    // 但也不能就这样留着上一张的。挂在另一张草稿旁边会被当成这张的意思。
+    const cached=state.captionLocales[item.relative_path];
+    const draft=String(item.curation?.krea2_vlm?.draft || '');
+    // 草稿变了 重新生成或改写过 之后。旧译文对应的已经不是眼前这段。
+    const usable=cached && cached.caption===draft ? cached.localized : '';
+    $('#datasetDetailKrea2Locale').value=usable;
+    $('#datasetDetailKrea2LocaleStatus').textContent=usable
+      ? '仅供对照。导出的始终是英文草稿'
+      : (cached?'草稿已变动。需要对照请重新翻译':'按需翻译。逐张确认时才发送请求');
+  }
+
   function moveDetail(offset) { const next=state.detailIndex+offset; if (next<0 || next>=state.pageItems.length) return; state.detailIndex=next; renderDetail(); }
-  async function saveDetail() { const item=detailItem(); if (!item) return; const requests=[api(`/api/dataset-workspaces/${state.active.workspace_id}/review`,jsonOptions({items:[{relative_path:item.relative_path,status:$('#datasetDetailStatus').value,selected:state.selected.has(item.relative_path),note:$('#datasetDetailNote').value}]}))], anima=$('#datasetDetailAnima').value.trim(), krea=$('#datasetDetailKrea2').value.trim(); if (anima!==String(item.curation?.captions?.anima?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'anima',caption:anima,caption_status:'reviewed'}))); if (krea!==String(item.curation?.captions?.krea2?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'krea2',caption:krea,caption_status:'reviewed'}))); await Promise.all(requests); await loadReport(); state.detailIndex=state.pageItems.findIndex(candidate=>candidate.relative_path===item.relative_path); renderDetail(); }
+  async function approveDetail() {
+    // 说明文字是即时改的。审核通过就是「这张我看完了」。
+    // 顺手带到下一张——逐张确认时最常做的就是这个动作。
+    const button=$('#datasetDetailApprove');
+    const item=detailItem();
+    if (!item) return;
+    const previousIndex=state.detailIndex;
+    button.disabled=true;
+    try {
+      $('#datasetDetailStatus').value='approved';
+      await saveDetail();
+      // 带着筛选审核时，通过的这张会离开清单。此时同一个位置就是下一张，
+      // 不能再 +1（会跳过一张），也不能停在 -1（对话框会留着上一张的内容）。
+      const stillListed=state.pageItems.some(candidate=>candidate.relative_path===item.relative_path);
+      if (stillListed) { moveDetail(1); return; }
+      if (!state.pageItems.length) { $('#datasetDetail').close(); return; }
+      state.detailIndex=Math.min(previousIndex, state.pageItems.length-1);
+      renderDetail();
+    } finally { button.disabled=false; }
+  }
+
+  async function saveDetail() { const item=detailItem(); if (!item) return; const requests=[api(`/api/dataset-workspaces/${state.active.workspace_id}/review`,jsonOptions({items:[{relative_path:item.relative_path,status:$('#datasetDetailStatus').value,selected:state.selected.has(item.relative_path),}]}))], anima=$('#datasetDetailAnima').value.trim(), krea=$('#datasetDetailKrea2').value.trim(); if (anima!==String(item.curation?.captions?.anima?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'anima',caption:anima,caption_status:'reviewed'}))); if (krea!==String(item.curation?.captions?.krea2?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'krea2',caption:krea,caption_status:'reviewed'}))); await Promise.all(requests); await loadReport(); state.detailIndex=state.pageItems.findIndex(candidate=>candidate.relative_path===item.relative_path); renderDetail(); }
   async function saveKrea2Draft(confirmDraft) { const item=detailItem(), draft=$('#datasetDetailKrea2Draft').value.trim(); if (!item) return; if (confirmDraft && !draft) return alert('确认前需要一份英文 Krea 2 草稿。'); if (confirmDraft && !confirm('确认把这份视觉模型草稿写入正式 Krea 2 图片说明？系统会先保存可回退的修改记录。')) return; const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/krea2-draft`,jsonOptions({relative_path:item.relative_path,draft,confirm:confirmDraft})); await loadReport(); state.detailIndex=state.pageItems.findIndex(candidate=>candidate.relative_path===item.relative_path); renderDetail(); if (confirmDraft) $('#datasetDetailKrea2VLM').textContent=`已确认写入 Krea 2 · ${result.snapshot}`; }
   async function rescan() { if (!state.active) return; await api(`/api/dataset-workspaces/${state.active.workspace_id}/rescan`,{method:'POST'}); await loadWorkspaces(state.active.workspace_id); startPolling(); }
   async function removeWorkspace() { if (!state.active) return; const zipArchive=state.active.source_origin==='zip_archive'; const message=zipArchive?'只移除 Prompt Hub 中的记录和解压副本；你上传的原始 zip 文件不会被删除。继续吗？':'只移除 Prompt Hub 中的记录和派生缩略图。原文件夹不会删除。继续吗？'; if (!confirm(message)) return; const source=state.active.source_path; await api(`/api/dataset-workspaces/${state.active.workspace_id}`,{method:'DELETE'}); state.active=null; state.report=null; await loadWorkspaces(); alert(zipArchive?`工作区记录和解压副本已移除。原始 zip 保持不变：\n${source}`:`工作区记录已移除。源目录保持不变：\n${source}`); }
@@ -485,7 +572,119 @@ WORKSPACE_SCRIPT = r"""
   function setDatasetStep(step,{preset=false,scroll=true}={}) { state.step=Math.min(5,Math.max(1,Number(step)||1)); const d=deliveryState(); if(preset&&state.step===2) { $('#datasetValidity').value=d.invalidOpen.length?'invalid':'all'; $('#datasetDuplicateFilter').value=!d.invalidOpen.length&&d.exactBlockingGroups.length?'exact':'all'; $('#datasetReviewFilter').value='all'; renderGrid(true); } else if(preset&&state.step===4) { $('#datasetValidity').value='valid'; $('#datasetDuplicateFilter').value='all'; $('#datasetReviewFilter').value=d.pending.length?'pending':d.needsReview.length?'needs_review':'all'; renderGrid(true); } else renderJourney(); if(state.step===5) runPreflight().catch(error=>{$('#datasetPreflightSummary').textContent=error.message;});     if(scroll) { const target=state.step===1?$('#datasetImportForm'):state.step===3?document.querySelector('[data-dataset-stage-panel="3"]'):state.step===5?$('#datasetDeliveryPanel'):document.querySelector('[data-dataset-stage-panel="2,4"]'); target?.scrollIntoView({behavior:'smooth',block:'start'}); if(state.step===1) $('#datasetPickFolder').focus(); } }
   function runDatasetNextAction() { const d=deliveryState(), step=state.step || d.recommended; if(step===1) return setDatasetStep(1,{scroll:true}); if(step===2&&d.invalidOpen.length+d.exactBlockingGroups.length===0) return setDatasetStep(3); if(step===3&&!d.missing.length) return setDatasetStep(4,{preset:true}); if(step===4&&!d.captionDraft.length&&!d.pending.length&&!d.needsReview.length&&d.deliverable.length) return setDatasetStep(5); if(step===5&&!d.deliverable.length) return setDatasetStep(4,{preset:true}); setDatasetStep(step,{preset:true}); }
   async function continueWorkspace() { const id=state.active?.workspace_id || state.workspaces[0]?.workspace_id; if(!id) return; if(state.active?.workspace_id!==id) await selectWorkspace(id); const step=deliveryState().recommended; setDatasetStep(step,{preset:true,scroll:true}); }
-  async function ensureWorkspace() { try { state.mode=localStorage.getItem('soda-dataset-mode')==='advanced'?'advanced':'simple'; } catch(error) { console.debug(error); } await Promise.all([loadModels(),loadTagCatalog(),loadWorkspaces()]); if (state.active) { const running=await refreshJobs(); if (running) startPolling(); } renderJourney(); }
+  async function loadCaptionModes() {
+    // 模式与开关一律从后端契约来。前端硬编 enum 就会跟后端各走各的——
+    // 上一轮就是这样让 WD14 分支漏掉整组设置的。
+    try { state.captionContract = await api('/api/dataset-workspaces/caption-modes'); }
+    catch (error) { $('#datasetCaptionModeHint').textContent=`读取打标规则失败：${error.message}`; return; }
+    const contract=state.captionContract;
+    $('#datasetCaptionMode').innerHTML=contract.modes.map(mode=>`<option value="${escapeHtml(mode.id)}">${escapeHtml(mode.label)}</option>`).join('');
+    $('#datasetCaptionMaxTokens').value=contract.max_tokens_default;
+    $('#datasetCaptionMediaTags').checked=Boolean(contract.media_tags_default);
+    renderCaptionOptions();
+    updateCaptionMode();
+    renderCaptionPresets();
+  }
+
+  function renderCaptionOptions() {
+    const contract=state.captionContract; if(!contract) return;
+    const profile=$('#datasetDeliveryProfile').value || 'anima';
+    // 对当前格式无效的开关直接不显示。摆一个按了没反应的开关，
+    // 比没有那个开关更糟——使用者会以为设定生效了。
+    const usable=contract.options.filter(option=>option.profiles.includes(profile));
+    $('#datasetCaptionOptionList').innerHTML=usable.map(option=>{
+      const previous=state.captionOptions[option.id];
+      const checked=(previous===undefined?option.default:previous)?' checked':'';
+      return `<label class="dataset-inline-check"><input type="checkbox" data-caption-option="${escapeHtml(option.id)}"${checked}> ${escapeHtml(option.label)}</label>`;
+    }).join('');
+    $('#datasetCaptionOptions').hidden=!usable.length;
+  }
+
+  function updateCaptionMode(applyMediaDefault=false) {
+    const contract=state.captionContract; if(!contract) return;
+    const mode=contract.modes.find(item=>item.id===$('#datasetCaptionMode').value) || contract.modes[0];
+    const needsTrigger=Boolean(mode.trigger_label);
+    $('#datasetCaptionTriggerWrap').hidden=!needsTrigger;
+    if(needsTrigger) $('#datasetCaptionTriggerLabel').textContent=mode.trigger_label;
+    const filled=$('#datasetCaptionTrigger').value.trim();
+    if(applyMediaDefault) $('#datasetCaptionMediaTags').checked=Boolean(contract.media_tags_by_mode?.[mode.id] ?? contract.media_tags_default);
+    // 触发词非必填。留空不挡下队列，但要说清楚后果。
+    if (!needsTrigger) $('#datasetCaptionModeHint').textContent='通用模式会描述画面中的主要内容。';
+    else $('#datasetCaptionModeHint').textContent=`本模式不会描述：${mode.omits}。${filled?'触发词会放在说明开头，训练后可用它调用对应特征。':'触发词可以留空，但训练后无法用单个词调用这项特征。'}`;
+  }
+
+  function captionSettings() {
+    const contract=state.captionContract;
+    if(!contract) return {};
+    const options={};
+    document.querySelectorAll('[data-caption-option]').forEach(input=>{ options[input.dataset.captionOption]=input.checked; });
+    return {
+      mode: $('#datasetCaptionMode').value || 'general',
+      trigger: $('#datasetCaptionTrigger').value.trim(),
+      media_tags: $('#datasetCaptionMediaTags').checked,
+      options,
+      max_tokens: Number($('#datasetCaptionMaxTokens').value) || contract.max_tokens_default,
+    };
+  }
+
+  const CAPTION_PRESET_KEY='soda-caption-presets';
+
+  function readCaptionPresets() {
+    // 浏览器可能禁用存储，或是留下上个版本写坏的内容。
+    // 读不出来就当作没有预设，不能让整个规则面板跟着挂掉。
+    try { const raw=localStorage.getItem(CAPTION_PRESET_KEY); const parsed=raw?JSON.parse(raw):{}; return (parsed && typeof parsed==='object' && !Array.isArray(parsed))?parsed:{}; }
+    catch(error) { console.debug(error); return {}; }
+  }
+
+  function renderCaptionPresets(selected='') {
+    const presets=readCaptionPresets(), names=Object.keys(presets).sort();
+    $('#datasetCaptionPreset').innerHTML='<option value="">不套用</option>'+names.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    $('#datasetCaptionPreset').value=selected;
+    $('#datasetCaptionPresetDelete').disabled=!selected;
+  }
+
+  function applyCaptionPreset(name) {
+    const preset=readCaptionPresets()[name];
+    if(!preset) return;
+    $('#datasetCaptionMode').value=preset.mode || 'general';
+    $('#datasetCaptionTrigger').value=preset.trigger || '';
+    $('#datasetCaptionMediaTags').checked=Boolean(preset.media_tags);
+    $('#datasetCaptionMaxTokens').value=preset.max_tokens || state.captionContract?.max_tokens_default || 300;
+    // 先写进 state 再重画，否则 renderCaptionOptions 会拿旧的勾选状态覆盖回去。
+    state.captionOptions={...(preset.options || {})};
+    renderCaptionOptions();
+    updateCaptionMode();
+    $('#datasetCaptionPresetHint').textContent=`已套用「${name}」。`;
+  }
+
+  function saveCaptionPreset() {
+    const name=$('#datasetCaptionPresetName').value.trim();
+    if(!name) return alert('请先填写设置名称。');
+    const presets=readCaptionPresets();
+    const existed=Object.prototype.hasOwnProperty.call(presets, name);
+    if(existed && !confirm(`已经有一份叫「${name}」的设置。覆盖它吗？`)) return;
+    presets[name]=captionSettings();
+    try { localStorage.setItem(CAPTION_PRESET_KEY, JSON.stringify(presets)); }
+    catch(error) { return alert(`保存失败：${error.message}`); }
+    $('#datasetCaptionPresetName').value='';
+    renderCaptionPresets(name);
+    $('#datasetCaptionPresetHint').textContent=existed?`已覆盖「${name}」。`:`已保存「${name}」。`;
+  }
+
+  function deleteCaptionPreset() {
+    const name=$('#datasetCaptionPreset').value;
+    if(!name) return;
+    if(!confirm(`删除设置「${name}」？`)) return;
+    const presets=readCaptionPresets();
+    delete presets[name];
+    try { localStorage.setItem(CAPTION_PRESET_KEY, JSON.stringify(presets)); }
+    catch(error) { return alert(`删除失败：${error.message}`); }
+    renderCaptionPresets();
+    $('#datasetCaptionPresetHint').textContent=`已删除「${name}」。`;
+  }
+
+  async function loadTaggerConfig() { try { const config=await api('/api/tagger-config'); state.taggerConfig=config; $('#datasetLocalTaggerModel').innerHTML=(config.models || []).map(item=>`<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)} · ${escapeHtml(item.available?'已安装':'未安装')}</option>`).join(''); syncDatasetTaggerSelection(); } catch(error) { $('#datasetLocalTaggerModel').innerHTML='<option value="">本地打标模型设置读取失败</option>'; $('#datasetWd14Calibration').textContent=`打标模型设置读取失败：${error.message}`; } }
+  async function ensureWorkspace() { try { state.mode=localStorage.getItem('soda-dataset-mode')==='advanced'?'advanced':'simple'; } catch(error) { console.debug(error); } await Promise.all([loadModels(),loadTagCatalog(),loadWorkspaces(),loadTaggerConfig(),loadCaptionModes()]); if (state.active) { const running=await refreshJobs(); if (running) startPolling(); } renderJourney(); }
   async function openDatasetWorkspace(workspaceId,step=0) { await loadWorkspaces(workspaceId); if(step) setDatasetStep(step,{preset:true,scroll:true}); const running=await refreshJobs(); if(running) startPolling(); }
   window.openDatasetWorkspace=openDatasetWorkspace;
   $('#datasetImportForm').addEventListener('submit',importWorkspace);
@@ -504,8 +703,9 @@ WORKSPACE_SCRIPT = r"""
   $('#datasetModeSimple').addEventListener('click',()=>setDatasetMode('simple'));
   $('#datasetModeAdvanced').addEventListener('click',()=>setDatasetMode('advanced'));
   $('#datasetJourney').addEventListener('click',event=>{ const button=event.target.closest('[data-dataset-step]'); if(button) setDatasetStep(button.dataset.datasetStep,{preset:true}); });
-  $('#datasetDeliveryProfile').addEventListener('change',event=>{ $('#datasetSourceCaptionProfile').value=event.target.value; state.step=0; state.preflight=null; renderGrid(true); });
+  $('#datasetDeliveryProfile').addEventListener('change',event=>{ $('#datasetSourceCaptionProfile').value=event.target.value; renderCaptionOptions(); state.step=0; state.preflight=null; renderGrid(true); });
   $('#datasetTaggerMode').addEventListener('change',updateDatasetTaggerMode);
+  $('#datasetLocalTaggerModel').addEventListener('change',updateLocalTaggerCalibration);
   $('#datasetNextAction').addEventListener('click',runDatasetNextAction);
   $('#datasetRunPreflight').addEventListener('click',()=>runPreflight().catch(error=>alert(error.message)));
   $('#datasetExportActiveProfile').addEventListener('click',()=>exportVersion($('#datasetDeliveryProfile').value).catch(error=>alert(error.message)));
@@ -529,11 +729,63 @@ WORKSPACE_SCRIPT = r"""
   $('#datasetAnalytics').addEventListener('click',event=>{ const button=event.target.closest('[data-bulk-tag]'); if (button) appendBulkTag(button.dataset.bulkTag); });
   document.querySelectorAll('[data-export-profile]').forEach(button=>button.addEventListener('click',()=>exportVersion(button.dataset.exportProfile).catch(error=>alert(error.message)))); $('#datasetRollbackSnapshot').addEventListener('click',()=>rollbackSnapshot().catch(error=>alert(error.message)));
   $('#datasetRescan').addEventListener('click',()=>rescan().catch(error=>alert(error.message))); $('#datasetRemove').addEventListener('click',()=>removeWorkspace().catch(error=>alert(error.message)));
+  $('#datasetDetailApprove').addEventListener('click',()=>approveDetail().catch(error=>alert(error.message)));
   $('#datasetDetailClose').addEventListener('click',()=>$('#datasetDetail').close()); $('#datasetPrevious').addEventListener('click',()=>moveDetail(-1)); $('#datasetNext').addEventListener('click',()=>moveDetail(1)); $('#datasetDetailSave').addEventListener('click',()=>saveDetail().catch(error=>alert(error.message)));
   $('#datasetDetailDraftSave').addEventListener('click',()=>saveKrea2Draft(false).catch(error=>alert(error.message))); $('#datasetDetailDraftConfirm').addEventListener('click',()=>saveKrea2Draft(true).catch(error=>alert(error.message)));
   $('#datasetFindSimilar').addEventListener('click',()=>{ const item=detailItem(); if(!item) return; $('#datasetDetail').close(); window.openSimilarImage?.(item.sha256,item.filename||item.relative_path); });
+  $('#datasetCaptionMode').addEventListener('change',()=>updateCaptionMode(true));
+  $('#datasetCaptionTrigger').addEventListener('input',updateCaptionMode);
+  $('#datasetCaptionPreset').addEventListener('change',event=>{ $('#datasetCaptionPresetDelete').disabled=!event.target.value; if(event.target.value) applyCaptionPreset(event.target.value); });
+  $('#datasetCaptionPresetSave').addEventListener('click',saveCaptionPreset);
+  $('#datasetCaptionPresetDelete').addEventListener('click',deleteCaptionPreset);
+  // 记住使用者的开关选择。切换交付格式会重画这份清单，
+  // 不记的话每切一次就把人调好的设定清空。
+  $('#datasetCaptionOptionList').addEventListener('change',event=>{ const input=event.target.closest('[data-caption-option]'); if(input) state.captionOptions[input.dataset.captionOption]=input.checked; });
+  $('#datasetDetailKrea2Translate').addEventListener('click',async()=>{
+    const caption=$('#datasetDetailKrea2Draft').value.trim();
+    const status=$('#datasetDetailKrea2LocaleStatus');
+    if(!caption){ status.textContent='草稿是空的，没有可对照的内容'; $('#datasetDetailKrea2Locale').value=''; return; }
+    status.textContent='正在翻译……';
+    try {
+      const result=await api('/api/captions/localize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caption})});
+      $('#datasetDetailKrea2Locale').value=result.localized || '';
+      const current=detailItem();
+      if (current && result.localized) state.captionLocales[current.relative_path]={caption,localized:result.localized};
+      status.textContent=result.localized?'仅供对照。导出的始终是英文草稿':'翻译服务没有返回结果。草稿本身不受影响';
+    } catch(error) { $('#datasetDetailKrea2Locale').value=''; status.textContent=`翻译失败：${error.message}`; }
+  });
+  $('#datasetDetailKrea2Revise').addEventListener('click',async()=>{
+    const caption=$('#datasetDetailKrea2Draft').value.trim();
+    const instruction=$('#datasetDetailKrea2Revision').value.trim();
+    const status=$('#datasetDetailKrea2ReviseStatus');
+    if(!caption) return alert('草稿是空的。没有可改写的内容。');
+    if(!instruction) return alert('请先填写修正意见。');
+    const button=$('#datasetDetailKrea2Revise');
+    button.disabled=true; status.textContent='正在改写……';
+    try {
+      const result=await api('/api/captions/revise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caption,instruction})});
+      $('#datasetDetailKrea2Draft').value=result.revised;
+      // 旧译文对应的是改写前的草稿。留着会对不上。比没有更容易误导。
+      $('#datasetDetailKrea2Locale').value='';
+      const revised=detailItem();
+      if (revised) delete state.captionLocales[revised.relative_path];
+      $('#datasetDetailKrea2LocaleStatus').textContent='草稿已改写。需要对照请重新翻译';
+      status.textContent='已改写。草稿只在这里改动。按下方按钮才会保存。';
+    } catch(error) {
+      // 改写失败绝不能动既有草稿。那是使用者手上唯一的一份。
+      status.textContent=`改写失败：${error.message}`;
+    } finally { button.disabled=false; }
+  });
   $('#datasetDetailTagChips').addEventListener('click',event=>{ const button=event.target.closest('[data-detail-tag]'); if (!button) return; const tag=button.dataset.detailTag, tags=$('#datasetDetailAnima').value.split(',').map(value=>value.trim()).filter(Boolean), selected=new Set(tags); selected.has(tag)?selected.delete(tag):selected.add(tag); $('#datasetDetailAnima').value=[...selected].join(', '); renderDetailTags(detailItem()).catch(console.error); });
-  $('#datasetDetail').addEventListener('keydown',event=>{ if (event.key==='ArrowLeft') moveDetail(-1); if (event.key==='ArrowRight') moveDetail(1); });
+  $('#datasetDetail').addEventListener('keydown',event=>{
+    if (event.key!=='ArrowUp' && event.key!=='ArrowDown') return;
+    // 对话框里有五个可输入栏位。在里面按方向键是要移动游标或换行，
+    // 不是要换图——修正意见本来就是多行的，上下键必须留给它。
+    const target=event.target;
+    if (target && (target.isContentEditable || ['TEXTAREA','INPUT','SELECT'].includes(target.tagName))) return;
+    event.preventDefault();
+    moveDetail(event.key==='ArrowUp'?-1:1);
+  });
   $('#datasetJobPanel').addEventListener('click',async event=>{ const button=event.target.closest('[data-job-action]'); if (!button) return; const action=button.dataset.jobAction; await api(`/api/jobs/${button.dataset.jobId}/${action}`,{method:'POST'}); startPolling(); });
   window.addEventListener('tag-language-change',()=>{ if (state.analytics) loadAnalytics().catch(console.error); if ($('#datasetDetail').open && detailItem()) renderDetailTags(detailItem()).catch(console.error); });
   window.ensureDatasetWorkspace=ensureWorkspace;

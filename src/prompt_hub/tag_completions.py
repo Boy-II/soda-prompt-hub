@@ -13,7 +13,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, OpenerDirector, Request, build_opener
 
 from prompt_hub.schema_migrations import record_schema_migration
-from prompt_hub.tag_locale import localize_tag
+from prompt_hub.tag_locale import TagLocaleCache, localize_tag
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -112,14 +112,16 @@ def _sha256_file(path: Path) -> str:
 def _attach_tag_details(
     connection: sqlite3.Connection,
     candidates: list[dict[str, Any]],
+    *,
+    cache: TagLocaleCache | None = None,
 ) -> None:
     """Give every candidate the same tag-derived details, whatever matched it.
 
     A tag must look identical whether the user typed its name or one of its
     aliases, so display data is derived from the tag itself and never from the
-    query. Chinese wording comes only from the curated tag_locale table; raw
-    aliases stay labelled as aliases because they mix Japanese and Korean and
-    are not translations.
+    query. Chinese wording comes from the curated tag_locale table plus any
+    SQLite-cached translations; raw aliases stay labelled as aliases because
+    they mix Japanese and Korean and are not translations.
     """
     if not candidates:
         return
@@ -136,7 +138,7 @@ def _attach_tag_details(
             grouped.setdefault(str(row["tag"]), []).append(alias)
     for item in candidates:
         tag_name = str(item["tag"])
-        localized = localize_tag(tag_name)
+        localized = localize_tag(tag_name, cache=cache)
         item["display_tag"] = tag_name.replace("_", " ")
         item["translation_zh"] = str(localized["zh"]) if localized["known"] else ""
         ordered = sorted(grouped.get(tag_name, []), key=_alias_sort_key)
@@ -165,11 +167,13 @@ class TagCompletionStore:
         tag_root: Path,
         *,
         opener: OpenerDirector | None = None,
+        locale_cache: TagLocaleCache | None = None,
     ) -> None:
         self.database_path = database_path
         self.tag_root = tag_root
         self.opener = opener
         self._lock = Lock()
+        self._locale_cache = locale_cache or TagLocaleCache(database_path)
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
@@ -187,6 +191,7 @@ class TagCompletionStore:
                 "Initialize Danbooru tags schema",
             )
             connection.commit()
+        self._locale_cache.initialize()
 
     def status(self) -> dict[str, Any]:
         self.initialize()
@@ -325,7 +330,7 @@ class TagCompletionStore:
                         if len(candidates) >= max_limit:
                             break
 
-            _attach_tag_details(connection, candidates)
+            _attach_tag_details(connection, candidates, cache=self._locale_cache)
 
         return {
             "installed": True,

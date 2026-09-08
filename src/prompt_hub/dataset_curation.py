@@ -6,6 +6,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
+from prompt_hub.config import DEFAULT_TAGGER_MODEL_ID
 from prompt_hub.dataset_curation_export import DatasetExportMixin
 from prompt_hub.dataset_curation_jobs import (
     DatasetCurationJobsMixin,
@@ -22,6 +23,7 @@ from prompt_hub.dataset_curation_records import (
     _vlm_record,
 )
 from prompt_hub.dataset_curation_support import (
+    _apply_krea2_operation,
     _apply_tag_operation,
     _atomic_json_write,
     _change_summary,
@@ -29,9 +31,12 @@ from prompt_hub.dataset_curation_support import (
     _normalize_caption,
     _normalize_tag_list,
     _now,
+    _operation_profile,
     _split_tags,
     _suspicious_tag,
     _timestamp_token,
+    normalize_caption_settings,
+    normalize_caption_with_settings,
 )
 from prompt_hub.dataset_workspace import DatasetWorkspaceError, DatasetWorkspaceStore
 
@@ -115,6 +120,7 @@ class DatasetCurationStore(DatasetCurationJobsMixin, DatasetExportMixin):
             image["curation"] = curation
         report["curation_revision"] = int(state.get("revision", 0))
         report["curation_updated_at"] = str(state.get("updated_at", ""))
+        report["tagger_model_id"] = str(state.get("tagger_model_id", DEFAULT_TAGGER_MODEL_ID))
         return report
 
     def analytics(self, workspace_id: str) -> dict[str, Any]:
@@ -199,9 +205,18 @@ class DatasetCurationStore(DatasetCurationJobsMixin, DatasetExportMixin):
         profile_id: CaptionProfile,
         caption: str,
         status: Literal["draft", "reviewed"] = "reviewed",
+        caption_settings: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         self._known_record(workspace_id, relative_path)
-        clean = _normalize_caption(profile_id, caption)
+        clean = (
+            normalize_caption_with_settings(
+                profile_id,
+                caption,
+                normalize_caption_settings(profile_id, caption_settings),
+            )
+            if caption_settings is not None
+            else _normalize_caption(profile_id, caption)
+        )
         with self._lock:
             state = self.read_state(workspace_id)
             item = _state_item(state, relative_path)
@@ -344,16 +359,22 @@ class DatasetCurationStore(DatasetCurationJobsMixin, DatasetExportMixin):
         operation: Mapping[str, Any],
     ) -> dict[str, Any]:
         state = self.read_state(workspace_id)
+        profile_id = _operation_profile(operation)
         changes = []
         for relative_path in dict.fromkeys(str(path) for path in paths):
             self._known_record(workspace_id, relative_path)
             item = _state_item(state, relative_path)
-            before = _current_caption(item, "anima")
-            after = _apply_tag_operation(before, operation)
+            before = _current_caption(item, profile_id)
+            after = (
+                _apply_tag_operation(before, operation)
+                if profile_id == "anima"
+                else _apply_krea2_operation(before, operation)
+            )
             if before != after:
                 changes.append({"relative_path": relative_path, "before": before, "after": after})
         return {
             "workspace_id": workspace_id,
+            "profile_id": profile_id,
             "changed": len(changes),
             "changes": changes,
             "summary": _change_summary(changes),
@@ -373,8 +394,8 @@ class DatasetCurationStore(DatasetCurationJobsMixin, DatasetExportMixin):
                 return {**preview, "snapshot": None}
             snapshot = self._write_snapshot(
                 workspace_id,
-                operation="bulk-anima-tags",
-                profile_id="anima",
+                operation=f"bulk-{preview['profile_id']}-caption",
+                profile_id=preview["profile_id"],
                 changes=changes,
             )
             state = self.read_state(workspace_id)
@@ -382,7 +403,7 @@ class DatasetCurationStore(DatasetCurationJobsMixin, DatasetExportMixin):
                 item = _state_item(state, str(change["relative_path"]))
                 _set_caption(
                     item,
-                    "anima",
+                    preview["profile_id"],
                     str(change["after"]),
                     status="draft",
                     source="bulk-edit",

@@ -35,7 +35,7 @@ def test_wd14_rejects_thresholds_outside_probability_range(
 
 def test_wd14_reports_missing_model_files(tmp_path) -> None:
     with pytest.raises(WD14Error, match="WD14 模型文件不完整"):
-        WD14Tagger(model_root=tmp_path)
+        WD14Tagger(model_root=tmp_path, general_threshold=0.3094, character_threshold=0.85)
 
 
 @pytest.mark.parametrize(
@@ -102,3 +102,51 @@ def test_wd14_loads_and_ranks_categories(tmp_path) -> None:
     assert labels == [("general", 9), ("solo", 0), ("alice", 4)]
     assert ranked == [{"tag": "solo", "score": 0.7}]
     assert _providers("auto") == ["CPUExecutionProvider"]
+
+
+def test_wd14_reports_configured_model_name_and_default_threshold(tmp_path, monkeypatch) -> None:
+    model_root = tmp_path / "model"
+    model_root.mkdir()
+    (model_root / "model.onnx").write_bytes(b"fake")
+    labels_path = model_root / "selected_tags.csv"
+    with labels_path.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(("tag_id", "name", "category", "count"))
+        writer.writerows(
+            (
+                (1, "general", 9, 1),
+                (2, "solo", 0, 1),
+                (3, "idol_name", 4, 1),
+            )
+        )
+    image_path = tmp_path / "sample.png"
+    Image.new("RGB", (4, 4), "white").save(image_path)
+
+    class FakeSession:
+        def __init__(self, *_args, **_kwargs) -> None:
+            self.providers = ["CPUExecutionProvider"]
+
+        def get_inputs(self):
+            return [type("Input", (), {"name": "input", "shape": [None, 4, 4, 3]})()]
+
+        def get_outputs(self):
+            return [type("Output", (), {"name": "output"})()]
+
+        def get_providers(self):
+            return self.providers
+
+        def run(self, *_args, **_kwargs):
+            return [np.array([[0.99, 0.31, 0.9]], dtype=np.float32)]
+
+    monkeypatch.setattr("prompt_hub.wd14.ort.InferenceSession", FakeSession)
+
+    result = WD14Tagger(
+        model_root=model_root,
+        general_threshold=0.3094,
+        character_threshold=0.85,
+        model_name="deepghs/idolsankaku-swinv2-tagger-v1",
+    ).tag(image_path)
+
+    assert result["model"] == "deepghs/idolsankaku-swinv2-tagger-v1"
+    assert result["general_threshold"] == 0.3094
+    assert result["general"] == [{"tag": "solo", "score": 0.31}]

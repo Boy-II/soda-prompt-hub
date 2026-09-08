@@ -359,6 +359,7 @@ def test_external_model_ui_keeps_existing_creative_actions() -> None:
         "function exportDataset",
         "function analyzeResultAsset",
         'id="datasetTaggerMode"',
+        'id="datasetLocalTaggerModel"',
         'id="datasetTaggerModel"',
         'id="datasetTaggerHint"',
         'id="datasetWd14Thresholds"',
@@ -367,12 +368,32 @@ def test_external_model_ui_keeps_existing_creative_actions() -> None:
         'id="wd14TaggerHint"',
         'id="wd14Thresholds"',
         "function updateDatasetTaggerMode",
+        "tagger_model_id:$('#datasetLocalTaggerModel').value",
         "function updateWd14TaggerMode",
         "tagger==='model'",
         "$('#newCreativeProject').addEventListener",
         "$('#sendWorkflow').addEventListener",
     ):
         assert marker in INDEX_HTML
+
+    for removed_marker in (
+        'id="datasetGeneralThreshold"',
+        'id="datasetCharacterThreshold"',
+        'id="wd14GeneralThreshold"',
+        'id="wd14CharacterThreshold"',
+        "general_threshold:Number(",
+        "character_threshold:Number(",
+        "WD14 阈值必须在 0 到 1 之间",
+    ):
+        assert removed_marker not in INDEX_HTML
+
+    # 校准值要显示。但不可写死在 HTML 里。
+    # 切换 PROMPT_HUB_TAGGER_MODEL 后写死的字串会说谎。
+    # 两个页面都必须有显示位并向 /api/tagger-config 取值。
+    assert 'id="wd14Calibration"' in INDEX_HTML
+    assert 'id="datasetWd14Calibration"' in INDEX_HTML
+    assert INDEX_HTML.count("/api/tagger-config") >= 2
+    assert "deepghs/idolsankaku-swinv2-tagger-v1" not in INDEX_HTML
 
     assert "可手工填写模型名称" not in INDEX_HTML
 
@@ -403,3 +424,155 @@ def test_named_event_handlers_are_defined() -> None:
         )
         declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", block))
         assert not referenced - declared - shared
+
+
+def test_caption_rules_ui_renders_from_contract_not_hardcoded_enums() -> None:
+    """模式与开关必须从后端契约来。前端硬编 enum 就会跟后端各走各的。"""
+    assert "/api/dataset-workspaces/caption-modes" in INDEX_HTML
+    assert 'id="datasetCaptionOptionList"' in INDEX_HTML
+
+    # 两个容器在源码里必须是空的。内容由 JS 从契约填。
+    # 一旦有人把选项写死进 HTML。这里就会失败。
+    assert '<select id="datasetCaptionMode"></select>' in INDEX_HTML
+    assert '<div class="dataset-caption-options" id="datasetCaptionOptionList"></div>' in INDEX_HTML
+
+    # 开关 id 是契约的词汇。不该出现在页面源码里
+    for option_id in ("avoid_meta_phrases", "depth_of_field", "content_rating", "plain_words"):
+        assert option_id not in INDEX_HTML
+
+
+def test_caption_settings_reach_both_queues() -> None:
+    """WD14 与 Krea 2 两个队列都要带上打标规则。
+
+    上一轮的缺陷正是只有模型分支套用了设置。WD14 分支整组漏掉。
+    """
+    assert INDEX_HTML.count("...captionSettings()") == 2
+
+
+def test_krea2_draft_has_on_demand_chinese_reference() -> None:
+    """逐张确认时按需翻译。不是打开就自动发请求。"""
+    assert 'id="datasetDetailKrea2Locale"' in INDEX_HTML
+    assert 'id="datasetDetailKrea2Translate"' in INDEX_HTML
+    assert "/api/captions/localize" in INDEX_HTML
+    # 换图要清掉上一张的译文。否则会被当成这张的意思
+    assert "$('#datasetDetailKrea2Locale').value='';" in INDEX_HTML
+
+
+def test_caption_switches_are_toggles_not_checkboxes() -> None:
+    """进阶开关用滑动开关呈现。原生勾选框在这里一次要看 12 个。"""
+    assert '.dataset-caption-rules input[type="checkbox"]' in INDEX_HTML
+    assert "appearance: none" in INDEX_HTML
+    assert "translateX(15px)" in INDEX_HTML
+
+
+def test_trigger_word_is_optional() -> None:
+    """触发词非必填。留空只提示后果。不挡下队列。"""
+    assert "captionSettingsError" not in INDEX_HTML
+
+
+def test_caption_presets_round_trip_through_local_storage() -> None:
+    """设置要能存下来重复套用。存在浏览器本机。不写进工作区。"""
+    assert "soda-caption-presets" in INDEX_HTML
+    for element_id in (
+        "datasetCaptionPreset",
+        "datasetCaptionPresetName",
+        "datasetCaptionPresetSave",
+        "datasetCaptionPresetDelete",
+    ):
+        assert f'id="{element_id}"' in INDEX_HTML
+    # 读不出来要当作没有预设。不能让整个规则面板跟着挂掉
+    assert "function readCaptionPresets()" in INDEX_HTML
+
+
+def test_revision_box_sits_under_the_translate_button() -> None:
+    """修正意见跟着草稿走。两种用法共用一个输入框。"""
+    assert 'id="datasetDetailKrea2Revision"' in INDEX_HTML
+    assert 'id="datasetDetailKrea2Revise"' in INDEX_HTML
+    assert "/api/captions/revise" in INDEX_HTML
+
+    translate_at = INDEX_HTML.index('id="datasetDetailKrea2Translate"')
+    revision_at = INDEX_HTML.index('id="datasetDetailKrea2Revision"')
+    assert translate_at < revision_at
+
+
+def test_revision_overwrites_draft_and_drops_stale_translation() -> None:
+    """改写后旧译文对应的是改写前的草稿。留着会对不上。"""
+    revise_block = INDEX_HTML[INDEX_HTML.index("datasetDetailKrea2Revise').addEventListener") :][
+        :1400
+    ]
+    assert "$('#datasetDetailKrea2Draft').value=result.revised;" in revise_block
+    assert "$('#datasetDetailKrea2Locale').value='';" in revise_block
+    # 失败分支不可以碰草稿
+    failure = revise_block[revise_block.index("catch(error)") :]
+    assert "datasetDetailKrea2Draft').value=" not in failure
+
+
+def test_endpoint_editor_says_whether_it_will_add_or_overwrite() -> None:
+    """表单存过一次之后会停在编辑状态。
+
+    只写「保存」的话。改成另一个服务的位址再存就会盖掉前一个而毫无提示。
+    """
+    assert "更新「${editing}」" in INDEX_HTML
+    assert "'新增服务'" in INDEX_HTML
+    assert 'id="newEndpoint"' in INDEX_HTML
+
+
+def test_choosing_a_preset_starts_a_new_endpoint() -> None:
+    """选预设代表要配置另一个服务。不该沿用上一次的编辑目标。"""
+    handler_at = INDEX_HTML.index("#remoteEndpointPresets').addEventListener")
+    handler = INDEX_HTML[handler_at : handler_at + 400]
+    assert "clearEndpointForm()" in handler
+    assert handler.index("clearEndpointForm()") < handler.index("endpointProvider")
+
+
+def test_detail_navigation_uses_up_and_down_keys() -> None:
+    """逐张检查用上下键换图。左右键留给游标。"""
+    handler_at = INDEX_HTML.index("#datasetDetail').addEventListener('keydown'")
+    handler = INDEX_HTML[handler_at : handler_at + 700]
+    assert "ArrowUp" in handler
+    assert "ArrowDown" in handler
+    assert "ArrowLeft" not in handler
+    assert "ArrowRight" not in handler
+
+
+def test_arrow_keys_inside_editable_fields_do_not_change_image() -> None:
+    """对话框里有五个可输入栏位。
+
+    在里面按方向键是要移动游标或换行。换掉图片会让人正在打的字消失。
+    """
+    handler_at = INDEX_HTML.index("#datasetDetail').addEventListener('keydown'")
+    handler = INDEX_HTML[handler_at : handler_at + 700]
+    for tag in ("TEXTAREA", "INPUT", "SELECT"):
+        assert tag in handler
+    assert "isContentEditable" in handler
+
+
+def test_review_note_is_gone_and_approve_button_is_there() -> None:
+    """说明文字改成即时编辑之后。备注栏没有存在的理由了。"""
+    assert "datasetDetailNote" not in INDEX_HTML
+    assert 'id="datasetDetailApprove"' in INDEX_HTML
+
+
+def test_approve_does_not_skip_the_next_image_when_the_list_shrinks() -> None:
+    """带着筛选审核时。通过的这张会离开清单。
+
+    此时同一个位置就是下一张。再 +1 会跳过一张。
+    """
+    handler_at = INDEX_HTML.index("async function approveDetail()")
+    handler = INDEX_HTML[handler_at : handler_at + 1200]
+    assert "stillListed" in handler
+    assert "Math.min(previousIndex" in handler
+    assert "$('#datasetDetail').close()" in handler
+
+
+def test_each_image_keeps_its_own_translation() -> None:
+    """翻过的那张切回来还在。没翻过的留空。
+
+    不能就这样留着上一张的——挂在另一张草稿旁边会被当成这张的意思。
+    """
+    assert "captionLocales" in INDEX_HTML
+    handler_at = INDEX_HTML.index("function restoreKrea2Locale(item)")
+    handler = INDEX_HTML[handler_at : handler_at + 900]
+    assert "state.captionLocales[item.relative_path]" in handler
+    # 草稿变了之后旧译文对应的已经不是眼前这段
+    assert "cached.caption===draft" in handler

@@ -320,13 +320,44 @@ class ModelConnectionStore:
             raise ModelConnectionError(message)
         return [_endpoint_from_mapping(item) for item in items]
 
-    def _write(self, endpoints: list[ModelEndpoint]) -> None:
+    def get_caption_assist(self) -> ModelConnection | None:
+        """翻译与改写要用哪个模型。
+
+        没有设定时回传 None。呼叫端会退回「第一个启用的连线」——
+        那是设定这个选项之前的行为。保持可用比强迫先设定重要。
+        """
+        stored = self._read_caption_assist()
+        return self.resolve(stored) if stored else None
+
+    def set_caption_assist(self, connection_id: str) -> None:
+        """记下选择。空字串代表清除。回到自动挑第一个。"""
+        value = connection_id.strip()
+        if value and self.resolve(value) is None:
+            message = "选择的模型连接不存在或已停用"
+            raise ModelConnectionError(message)
+        self._write(self._read_endpoints(), caption_assist=value)
+
+    def _read_caption_assist(self) -> str:
+        if not self.path.is_file():
+            return ""
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ""
+        return str(payload.get("caption_assist", "")) if isinstance(payload, dict) else ""
+
+    def _write(self, endpoints: list[ModelEndpoint], caption_assist: str | None = None) -> None:
         self.initialize()
         temporary = self.path.with_name(f".{self.path.name}.{secrets.token_hex(8)}.tmp")
+        # caption_assist 不是 endpoints 的一部分。但存在同一个档案里。
+        # None 代表这次不是要改它——沿用既有值。否则每次存端点都会把它清掉。
+        keep = self._read_caption_assist() if caption_assist is None else caption_assist
         payload = {
             "endpoints": [endpoint.stored() for endpoint in endpoints],
             "format": MODEL_CONNECTION_FORMAT,
         }
+        if keep:
+            payload["caption_assist"] = keep
         temporary.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -352,20 +383,42 @@ def validate_model_base_url(value: str) -> str:
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         message = "模型服务地址不能包含账号、查询参数或片段"
         raise ModelConnectionError(message)
-    if scheme == "http" and not _is_loopback(host):
-        message = "远程模型服务必须使用 HTTPS。HTTP 只允许本机地址"
+    if scheme == "http" and not _is_local_network(host):
+        message = "公网模型服务必须使用 HTTPS。HTTP 只允许本机与内网地址"
         raise ModelConnectionError(message)
     path = (parsed.path or "").rstrip("/")
     return urlunsplit((scheme, parsed.netloc.lower(), path, "", ""))
 
 
-def _is_loopback(host: str) -> bool:
+# 不路由到网际网路的位址。自架模型服务通常就放在这些网段。
+# 不用 ipaddress 的 is_private 是因为它也涵盖 100.64.0.0/10 CGNAT——
+# 那段流量会经过电信业者的网路。不属于「自己的区网」。
+_LOCAL_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+)
+
+
+def _is_local_network(host: str) -> bool:
+    """本机或自己的区网。
+
+    只认 IP 字面值。主机名要经过 DNS 才知道指向哪里。
+    而 DNS 的答案可以被改——放行 example.local 这类名字等于
+    把判断交给一个我们无法验证的来源。需要用区网服务就填 IP。
+    """
     if host == "localhost":
         return True
     try:
-        return ipaddress.ip_address(host).is_loopback
+        address = ipaddress.ip_address(host)
     except ValueError:
         return False
+    if address.is_loopback:
+        return True
+    return any(address in network for network in _LOCAL_NETWORKS)
 
 
 def _clean_string(value: object, limit: int) -> str:
@@ -402,9 +455,11 @@ def _guess_provider(base_url: str) -> Provider:
     port = parsed.port
     if host == "api.openai.com":
         return "openai"
-    if _is_loopback(host) and port == LM_STUDIO_PORT:
+    # 跑在区网另一台机器上的 LM Studio 依然是 LM Studio。
+    # provider 只是显示标签。不影响请求行为。猜对了使用者少改一次。
+    if _is_local_network(host) and port == LM_STUDIO_PORT:
         return "lm_studio"
-    if _is_loopback(host) and port == OLLAMA_PORT:
+    if _is_local_network(host) and port == OLLAMA_PORT:
         return "ollama"
     return "openai_compatible"
 

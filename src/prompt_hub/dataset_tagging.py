@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from prompt_hub.config import Settings
 from prompt_hub.tag_locale import TagLocaleError, resolve_canonical_tag
 
 MAX_BATCH_TAG_ASSETS = 24
@@ -18,13 +19,17 @@ def store_wd14_result(
     asset_id: str,
     result: dict[str, object],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    settings = Settings.from_environment()
     tagging = {
         "tagger": str(result.get("tagger", "wd14")),
-        "model": str(result.get("model", "SmilingWolf/wd-swinv2-tagger-v3")),
+        "model": str(result.get("model", settings.wd14_model_name)),
         "provider": str(result.get("provider", "")),
         "tagged_at": datetime.now(UTC).isoformat(),
-        "general_threshold": result.get("general_threshold", 0.35),
-        "character_threshold": result.get("character_threshold", 0.85),
+        "general_threshold": result.get("general_threshold", settings.wd14_general_threshold),
+        "character_threshold": result.get(
+            "character_threshold",
+            settings.wd14_character_threshold,
+        ),
         "rating": _scored_tag(result.get("rating")),
         "general": _scored_tags(result.get("general")),
         "characters": _scored_tags(result.get("characters")),

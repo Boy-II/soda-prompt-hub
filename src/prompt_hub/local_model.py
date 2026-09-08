@@ -11,6 +11,14 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 from PIL import Image, ImageOps
 
 from prompt_hub.creative import SLOT_LABELS, SLOT_ORDER
+from prompt_hub.dataset_curation_support import (
+    CaptionMode,
+    normalize_caption_settings,
+    normalize_caption_with_settings,
+)
+from prompt_hub.dataset_curation_support import (
+    caption_mode_contract as _caption_mode_contract,
+)
 from prompt_hub.model_connections import MODEL_REF_PATTERN
 
 if TYPE_CHECKING:
@@ -25,6 +33,10 @@ MAX_MODEL_RESPONSE_BYTES = 4 * 1024 * 1024
 
 class LocalModelError(RuntimeError):
     pass
+
+
+def caption_mode_contract() -> dict[str, Any]:
+    return _caption_mode_contract()
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -297,9 +309,24 @@ def draft_krea2_caption(
     image_path: Path,
     model: str,
     existing_caption: str = "",
+    mode: CaptionMode = "general",
+    trigger: str = "",
+    media_tags: bool = True,
+    options: dict[str, bool] | None = None,
+    max_tokens: int = 300,
     base_url: str = DEFAULT_LM_STUDIO_URL,
     connections: ModelConnectionStore | None = None,
 ) -> dict[str, Any]:
+    settings = normalize_caption_settings(
+        "krea2",
+        {
+            "mode": mode,
+            "trigger": trigger,
+            "media_tags": media_tags,
+            "options": options or {},
+            "max_tokens": max_tokens,
+        },
+    )
     instruction = (
         "You write concise English natural-language training captions for Krea 2 image datasets. "
         "Return one JSON object only, with keys caption, observations, and safety_warning. "
@@ -312,6 +339,10 @@ def draft_krea2_caption(
         "If explicit sexual content may depict a minor, do not describe explicit details; set a "
         "clear safety_warning and keep the caption non-explicit. Do not infer invisible anatomy or "
         "identity. "
+        f"Caption mode is {settings['mode']}. {_mode_instruction(settings['mode'], 'krea2')} "
+        f"{_option_instruction(settings['options'])} "
+        f"{_media_instruction(media_tags=settings['media_tags'], profile_id='krea2')} "
+        f"{_trigger_instruction(settings['mode'], settings['trigger'], profile_id='krea2')} "
         "Use ASCII English only and do not reveal reasoning."
     )
     context = (
@@ -331,7 +362,7 @@ def draft_krea2_caption(
             },
         ],
         "temperature": 0.15,
-        "max_output_tokens": 650,
+        "max_output_tokens": settings["max_tokens"],
         "reasoning": "off",
         "stream": False,
         "store": False,
@@ -344,7 +375,7 @@ def draft_krea2_caption(
             text_prompt=f"Draft a Krea 2 caption for this local dataset image. {context}",
             image_data_url=image_data_url,
             temperature=0.15,
-            max_tokens=650,
+            max_tokens=settings["max_tokens"],
         )
     else:
         server_root = base_url.rstrip("/").removesuffix("/v1")
@@ -366,7 +397,11 @@ def draft_krea2_caption(
         raw = _extract_json_object(content)
     except json.JSONDecodeError as error:
         raise LocalModelError("视觉模型没有返回可识别的 Krea 2 草稿 JSON") from error
-    caption = " ".join(str(raw.get("caption", "")).split())
+    caption = normalize_caption_with_settings(
+        "krea2",
+        " ".join(str(raw.get("caption", "")).split()),
+        settings,
+    )
     if not caption:
         raise LocalModelError("本地视觉模型返回了空的 Krea 2 草稿")
     if not caption.isascii():
@@ -376,6 +411,7 @@ def draft_krea2_caption(
     return {
         "model": model,
         "draft": caption[:12000],
+        "caption_settings": settings,
         "observations": {
             str(key)[:80]: " ".join(str(value).split())[:1000]
             for key, value in observations.items()
@@ -390,9 +426,24 @@ def draft_anima_tags(
     image_path: Path,
     model: str,
     existing_tags: str = "",
+    mode: CaptionMode = "general",
+    trigger: str = "",
+    media_tags: bool = True,
+    options: dict[str, bool] | None = None,
+    max_tokens: int = 300,
     base_url: str = DEFAULT_LM_STUDIO_URL,
     connections: ModelConnectionStore | None = None,
 ) -> dict[str, Any]:
+    settings = normalize_caption_settings(
+        "anima",
+        {
+            "mode": mode,
+            "trigger": trigger,
+            "media_tags": media_tags,
+            "options": options or {},
+            "max_tokens": max_tokens,
+        },
+    )
     instruction = (
         "You write concise Booru-style English tags for Anima image datasets. "
         "Return one JSON object only, with keys tags, rating, and safety_warning. "
@@ -402,7 +453,12 @@ def draft_anima_tags(
         "Do not include artist names, copyrights, watermarks, or identity guesses unless they "
         "are visibly established by the image. Legal adult SFW or NSFW images may be tagged "
         "objectively. If explicit sexual content may depict a minor, set a clear safety_warning "
-        "and omit explicit tags. Do not reveal reasoning."
+        "and omit explicit tags. "
+        f"Caption mode is {settings['mode']}. {_mode_instruction(settings['mode'], 'anima')} "
+        f"{_option_instruction(settings['options'])} "
+        f"{_media_instruction(media_tags=settings['media_tags'], profile_id='anima')} "
+        f"{_trigger_instruction(settings['mode'], settings['trigger'], profile_id='anima')} "
+        "Do not reveal reasoning."
     )
     context = (
         f"Existing reviewed or draft Anima tags for reference only: {existing_tags[:1200]}"
@@ -419,7 +475,7 @@ def draft_anima_tags(
             {"type": "text", "content": text_prompt},
         ],
         "temperature": 0.1,
-        "max_output_tokens": 500,
+        "max_output_tokens": settings["max_tokens"],
         "reasoning": "off",
         "stream": False,
         "store": False,
@@ -432,7 +488,7 @@ def draft_anima_tags(
             text_prompt=text_prompt,
             image_data_url=image_data_url,
             temperature=0.1,
-            max_tokens=500,
+            max_tokens=settings["max_tokens"],
         )
         provider = "external"
     else:
@@ -456,7 +512,11 @@ def draft_anima_tags(
         raw = _extract_json_object(content)
     except json.JSONDecodeError as error:
         raise LocalModelError("视觉模型没有返回可识别的 Anima 标签草稿 JSON") from error
-    tags = _clean_anima_tags(raw.get("tags", []))
+    tags = normalize_caption_with_settings(
+        "anima",
+        ", ".join(_clean_anima_tags(raw.get("tags", []))),
+        settings,
+    ).split(", ")
     if not tags:
         raise LocalModelError("视觉模型返回了空的 Anima 标签草稿")
     rating_value = raw.get("rating", "")
@@ -480,8 +540,89 @@ def draft_anima_tags(
         "general": general_tags,
         "characters": [],
         "tag_string": ", ".join(tags),
+        "caption_settings": settings,
         "safety_warning": " ".join(str(raw.get("safety_warning", "")).split())[:2000],
     }
+
+
+CAPTION_REVISION_SYSTEM_PROMPT = (
+    "You revise English image captions used as LoRA training data. "
+    "The user gives you the current English caption and a note written in Chinese. "
+    "The note is one of two things. It may be a corrected Chinese rendering of the "
+    "whole caption, in which case apply only the differences it introduces against "
+    "the current caption. Or it may be an instruction describing what to change or add. "
+    "Decide which it is from its content. "
+    "Keep every detail the note does not touch, and keep the same descriptive register. "
+    "Reply with only the revised English caption itself. One paragraph. "
+    "No explanation, no quotes, no Chinese."
+)
+CAPTION_REVISION_MAX_TOKENS = 1200
+CAPTION_REVISION_TIMEOUT = 120
+MAX_REVISION_CAPTION_LENGTH = 12000
+MAX_REVISION_NOTE_LENGTH = 4000
+
+
+def revise_caption_with_model(
+    caption: str,
+    instruction: str,
+    *,
+    connections: ModelConnectionStore | None = None,
+) -> str:
+    """按修正意见改写英文说明。
+
+    修正意见可以是整段改写后的中文。也可以是一句指示。两种都由模型自己
+    判断。因为使用者在同一个输入框里两种都会用。
+
+    失败一律抛错而不是回空字串。翻译回空是合理的 对照是辅助信息。
+    没有就不显示 。但改写是使用者按下按钮主动要求的动作。静默不做
+    会像按钮坏了。而且前端要靠这个错误来决定不要覆盖既有草稿。
+    """
+    text = caption.strip()
+    note = instruction.strip()
+    if not text:
+        raise LocalModelError("草稿是空的，没有可改写的内容")
+    if not note:
+        raise LocalModelError("请先填写修正意见")
+    if len(text) > MAX_REVISION_CAPTION_LENGTH or len(note) > MAX_REVISION_NOTE_LENGTH:
+        raise LocalModelError("内容过长，无法改写")
+
+    # 与翻译走同一个选择 使用者在模型服务里指定的那个。
+    # 没有指定时退回第一个启用的连线。
+    connection = connections.get_caption_assist() if connections else None
+    if connection is None:
+        rows = connections.list_connections() if connections else []
+        if not rows:
+            raise LocalModelError("没有可用的模型连接，无法改写")
+        connection = rows[0]
+
+    payload = {
+        "model": connection.model_name,
+        "messages": [
+            {"role": "system", "content": CAPTION_REVISION_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": f"Current caption:\n{text}\n\nNote (Chinese):\n{note}",
+            },
+        ],
+        "temperature": 0.2,
+        "max_tokens": CAPTION_REVISION_MAX_TOKENS,
+        "stream": False,
+    }
+    response = _request_json(
+        f"{connection.base_url.rstrip('/')}/chat/completions",
+        method="POST",
+        payload=payload,
+        timeout=CAPTION_REVISION_TIMEOUT,
+        api_key=connection.api_key,
+        service_name="改写服务",
+    )
+    try:
+        revised = str(response["choices"][0]["message"]["content"]).strip()
+    except (KeyError, IndexError, TypeError) as error:
+        raise LocalModelError("改写服务返回了无法解析的结果") from error
+    if not revised:
+        raise LocalModelError("改写服务返回了空结果")
+    return revised
 
 
 def _request_json(
@@ -637,3 +778,58 @@ def _clean_anima_tags(value: Any) -> list[str]:
             seen.add(key)
             tags.append(tag)
     return tags[:120]
+
+
+def _mode_instruction(mode: CaptionMode, profile_id: str) -> str:
+    if mode == "general":
+        return "Describe all visible caption-worthy details."
+    if mode == "portrait":
+        return (
+            "Do not describe facial features; cover body, pose, scene, light, "
+            "composition, and outfit."
+        )
+    if mode == "outfit":
+        return (
+            "Do not describe clothing or outfit details; cover subject, scene, light, "
+            "composition, and action."
+        )
+    if profile_id == "anima":
+        return (
+            "Do not include style, color-grading, or lighting tags; cover subject, outfit, "
+            "scene, composition, and action."
+        )
+    return (
+        "Do not describe visual style, color grading, or lighting; cover subject, outfit, "
+        "scene, composition, and action."
+    )
+
+
+def _option_instruction(options: dict[str, bool]) -> str:
+    enabled = [key.replace("_", " ") for key, value in options.items() if value]
+    if not enabled:
+        return "All advanced switches are off."
+    return "Advanced switches enabled: " + ", ".join(enabled) + "."
+
+
+def _media_instruction(*, media_tags: bool, profile_id: str) -> str:
+    if not media_tags:
+        return "Do not describe or include the image medium, rendering medium, or medium tags."
+    # Training captions keep the medium separate from the trigger word so later style prompts
+    # can override it instead of inheriting a fixed photographic property.
+    if profile_id == "anima":
+        return (
+            "Identify the visible medium and include only matching medium tags, such as photo, "
+            "anime_coloring, illustration, or 3d_render. Never assume a photographic medium."
+        )
+    return (
+        "Describe the visible image medium accurately when it is useful, such as photography, "
+        "anime illustration, digital painting, or 3D rendering. Never assume photography."
+    )
+
+
+def _trigger_instruction(mode: CaptionMode, trigger: str, *, profile_id: str) -> str:
+    if mode == "general" or not trigger:
+        return "No trigger word should be inserted."
+    if profile_id == "anima":
+        return f"Prefix the trigger tag {trigger} before other tags while keeping count tags."
+    return f"Use {trigger} as the subject name instead of a generic subject phrase."

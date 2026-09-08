@@ -10,12 +10,14 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from prompt_hub.config import DEFAULT_TAGGER_MODEL_ID
 from prompt_hub.dataset_workspace import (
     ARCHIVE_JOB_TYPE,
     MAX_ARCHIVE_UPLOAD_BYTES,
     DatasetWorkspaceError,
     DatasetWorkspaceStore,
 )
+from prompt_hub.local_model import caption_mode_contract
 from prompt_hub.remote_nodes import RemoteNodeError, RemoteNodeStore
 
 if TYPE_CHECKING:
@@ -26,6 +28,11 @@ if TYPE_CHECKING:
 class DatasetWorkspaceImport(BaseModel):
     source_path: str = Field(min_length=1, max_length=4096)
     name: str = Field(default="", max_length=160)
+    # 来源出处。交接进来的工作区若不记这个。
+    # 事后无从分辨它是从哪个筛选项目、哪一版分析交出来的。
+    # 跟手动挑的文件夹长得一模一样。
+    origin: dict[str, Any] | None = Field(default=None)
+    source_origin: str = Field(default="user_directory", max_length=64)
 
 
 class DatasetReviewItem(BaseModel):
@@ -43,17 +50,28 @@ class DatasetWD14QueueInput(BaseModel):
     scope: Literal["untagged", "failed", "selected", "filtered", "all"] = "untagged"
     paths: list[str] = Field(default_factory=list, max_length=100000)
     tagger: Literal["wd14", "model"] = "wd14"
+    tagger_model_id: Literal["wd-swinv2-tagger-v3", "idolsankaku-swinv2-tagger-v1"] = (
+        DEFAULT_TAGGER_MODEL_ID
+    )
     model: str = Field(default="", max_length=400)
-    general_threshold: float = Field(default=0.35, ge=0, le=1)
-    character_threshold: float = Field(default=0.85, ge=0, le=1)
     provider: Literal["auto", "coreml", "cpu"] = "auto"
     overwrite: bool = False
+    mode: Literal["general", "portrait", "outfit", "style"] = "general"
+    trigger: str = Field(default="", max_length=120)
+    media_tags: bool = True
+    options: dict[str, bool] = Field(default_factory=dict)
+    max_tokens: int = Field(default=300, ge=1, le=1200)
 
 
 class DatasetKrea2VLMQueueInput(BaseModel):
     scope: Literal["selected", "missing", "failed", "all"] = "missing"
     paths: list[str] = Field(default_factory=list, max_length=100000)
     model: str = Field(min_length=1, max_length=400)
+    mode: Literal["general", "portrait", "outfit", "style"] = "general"
+    trigger: str = Field(default="", max_length=120)
+    media_tags: bool = True
+    options: dict[str, bool] = Field(default_factory=dict)
+    max_tokens: int = Field(default=300, ge=1, le=1200)
 
 
 class DatasetKrea2DraftInput(BaseModel):
@@ -83,6 +101,11 @@ class DatasetCaptionInput(BaseModel):
     profile_id: Literal["anima", "krea2"]
     caption: str = Field(default="", max_length=12000)
     caption_status: Literal["draft", "reviewed"] = "reviewed"
+    mode: Literal["general", "portrait", "outfit", "style"] = "general"
+    trigger: str = Field(default="", max_length=120)
+    media_tags: bool = True
+    options: dict[str, bool] = Field(default_factory=dict)
+    max_tokens: int = Field(default=300, ge=1, le=1200)
 
 
 class DatasetSourceCaptionInput(BaseModel):
@@ -90,14 +113,25 @@ class DatasetSourceCaptionInput(BaseModel):
     paths: list[str] = Field(default_factory=list, max_length=100000)
     overwrite_existing: bool = False
     caption_status: Literal["draft", "reviewed"] = "draft"
+    mode: Literal["general", "portrait", "outfit", "style"] = "general"
+    trigger: str = Field(default="", max_length=120)
+    media_tags: bool = True
+    options: dict[str, bool] = Field(default_factory=dict)
+    max_tokens: int = Field(default=300, ge=1, le=1200)
 
 
 class DatasetBulkTagsInput(BaseModel):
+    profile_id: Literal["anima", "krea2"] = "anima"
     paths: list[str] = Field(min_length=1, max_length=100000)
     add: list[str] = Field(default_factory=list, max_length=500)
     remove: list[str] = Field(default_factory=list, max_length=500)
     replace: dict[str, str] = Field(default_factory=dict)
     sort: bool = False
+    mode: Literal["general", "portrait", "outfit", "style"] = "general"
+    trigger: str = Field(default="", max_length=120)
+    media_tags: bool = True
+    options: dict[str, bool] = Field(default_factory=dict)
+    max_tokens: int = Field(default=300, ge=1, le=1200)
 
 
 class DatasetConflictRule(BaseModel):
@@ -131,6 +165,10 @@ def create_workspace_router(
     def list_dataset_workspaces() -> list[dict[str, Any]]:
         return workspace_store.list_workspaces()
 
+    @router.get("/api/dataset-workspaces/caption-modes")
+    def get_dataset_workspace_caption_modes() -> dict[str, Any]:
+        return caption_mode_contract()
+
     @router.get("/api/dataset-workspaces/browse")
     def browse_dataset_directories(
         path: Annotated[str, Query(max_length=4096)] = "",
@@ -146,7 +184,12 @@ def create_workspace_router(
     )
     def import_dataset_workspace(payload: DatasetWorkspaceImport) -> dict[str, Any]:
         try:
-            workspace = workspace_store.register(payload.source_path, name=payload.name)
+            workspace = workspace_store.register(
+                payload.source_path,
+                name=payload.name,
+                origin=payload.origin,
+                source_origin=payload.source_origin,
+            )
         except DatasetWorkspaceError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         job = job_runner.submit(
@@ -327,8 +370,7 @@ def create_workspace_router(
         except DatasetWorkspaceError as error:
             _raise_workspace_http(error)
 
-    @router.put("/api/dataset-workspaces/{workspace_id}/caption")
-    def update_dataset_workspace_caption(
+    def _update_dataset_workspace_caption(
         workspace_id: str,
         payload: DatasetCaptionInput,
     ) -> dict[str, Any]:
@@ -339,9 +381,26 @@ def create_workspace_router(
                 profile_id=payload.profile_id,
                 caption=payload.caption,
                 status=payload.caption_status,
+                caption_settings=payload.model_dump(
+                    include={"mode", "trigger", "media_tags", "options", "max_tokens"}
+                ),
             )
         except DatasetWorkspaceError as error:
             _raise_workspace_http(error)
+
+    @router.post("/api/dataset-workspaces/{workspace_id}/caption")
+    def post_dataset_workspace_caption(
+        workspace_id: str,
+        payload: DatasetCaptionInput,
+    ) -> dict[str, Any]:
+        return _update_dataset_workspace_caption(workspace_id, payload)
+
+    @router.put("/api/dataset-workspaces/{workspace_id}/caption")
+    def put_dataset_workspace_caption(
+        workspace_id: str,
+        payload: DatasetCaptionInput,
+    ) -> dict[str, Any]:
+        return _update_dataset_workspace_caption(workspace_id, payload)
 
     @router.post("/api/dataset-workspaces/{workspace_id}/source-captions/preview")
     def preview_dataset_workspace_source_captions(

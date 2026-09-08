@@ -7,7 +7,13 @@
       --muted: #5b5a53;
       --line: rgba(23, 24, 21, .19);
       --shadow: 0 22px 55px rgba(29, 27, 20, .14);
+      --home-step-label: "开始 / 01";
+      --local-library-label: "本机资料";
+      --search-step-label: "查找 / 02";
+      --result-step-label: "结果 / 05";
     }
+    html[lang="zh-TW"] { --home-step-label: "開始 / 01"; --local-library-label: "本機資料"; --search-step-label: "搜尋 / 02"; --result-step-label: "結果 / 05"; }
+    html[lang="en"] { --home-step-label: "START / 01"; --local-library-label: "LOCAL LIBRARY"; --search-step-label: "SEARCH / 02"; --result-step-label: "RESULTS / 05"; }
     * { box-sizing: border-box; }
     html { background: #20211e; scroll-behavior: smooth; }
     body {
@@ -86,6 +92,18 @@
     .app-nav-button:hover { color: var(--ink); background: #e2dccd; }
     .app-nav-button[aria-current="page"] { background: var(--signal); color: #fff8eb; }
     .tag-language-button { color: var(--ink); background: var(--acid); }
+    .ui-language-control {
+      min-width: 128px;
+      display: grid;
+      align-content: center;
+      gap: 3px;
+      border-left: 1px solid var(--line);
+      padding: 7px 12px;
+      background: #f5f0e4;
+    }
+    .ui-language-control span { color: var(--muted); font: 800 8px/1 monospace; letter-spacing: .08em; }
+    .ui-language-control select { width: 100%; border: 0; background: transparent; color: var(--ink); font: 800 10px/1.2 monospace; cursor: pointer; }
+    html[lang="en"] [data-remote-device-name] { margin-inline: .25em; }
     .home-page {
       display: grid;
       grid-template-columns: minmax(0, 1.35fr) minmax(310px, .65fr);
@@ -95,7 +113,7 @@
     .home-lead, .home-guide, .home-first-guide, .home-source-setup, .home-footnote { background: var(--paper); box-shadow: var(--shadow); }
     .home-lead { min-height: 590px; padding: clamp(34px, 6vw, 78px); position: relative; overflow: hidden; }
     .home-lead::after {
-      content: "开始 / 01";
+      content: var(--home-step-label);
       position: absolute;
       right: -24px;
       bottom: 74px;
@@ -248,7 +266,7 @@
       justify-content: space-between;
     }
     .stats-panel::after {
-      content: "本机资料";
+      content: var(--local-library-label);
       position: absolute;
       right: -35px;
       top: 48%;
@@ -593,6 +611,7 @@
       .app-brand { width: 100%; min-height: 58px; border-right: 0; }
       .app-nav-items { width: 100%; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: visible; }
       .app-nav-button { min-width: 0; min-height: 46px; padding: 0 8px; border-bottom: 1px solid var(--line); }
+      .ui-language-control { min-height: 46px; border-bottom: 1px solid var(--line); }
       .archive-header, .workspace, .home-page { grid-template-columns: 1fr; }
       aside { position: static; }
       .stats-panel { min-height: 220px; }
@@ -607,6 +626,7 @@
       .app-nav-items { display: none; grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .app-nav[data-menu-open="true"] .app-nav-items { display: grid; }
       .app-nav-button { min-height: 48px; padding: 0 12px; }
+      .ui-language-control { min-height: 48px; border-bottom: 1px solid var(--line); }
       .home-lead, .home-guide { padding: 28px 22px; }
       .home-lead h1 { font-size: 58px; }
       .home-actions { display: grid; }

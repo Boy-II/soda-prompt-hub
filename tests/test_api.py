@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
-from prompt_hub import __version__
+from prompt_hub import __version__, api, local_model
 from prompt_hub.api import create_app
 from prompt_hub.database import PromptDatabase
 from prompt_hub.importers import import_all
+from prompt_hub.model_connections import ModelConnection
 
 
 def test_home_uses_configured_device_name_without_script_injection(settings) -> None:
@@ -314,6 +316,30 @@ def test_openapi_reports_public_release_version(settings) -> None:
         assert client.get("/openapi.json").json()["info"]["version"] == __version__
 
 
+def test_api_exposes_selected_tagger_calibration(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/api/tagger-config")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["default_id"] == "wd-swinv2-tagger-v3"
+    assert payload["id"] == "wd-swinv2-tagger-v3"
+    assert [model["id"] for model in payload["models"]] == [
+        "wd-swinv2-tagger-v3",
+        "idolsankaku-swinv2-tagger-v1",
+    ]
+    assert payload["models"][0] == {
+        "id": "wd-swinv2-tagger-v3",
+        "label": "二次元与插画",
+        "model": "SmilingWolf/wd-swinv2-tagger-v3",
+        "general_threshold": 0.35,
+        "character_threshold": 0.85,
+        "available": False,
+    }
+    assert payload["models"][1]["label"] == "真人与摄影"
+    assert payload["models"][1]["general_threshold"] == 0.3094
+
+
 def test_page_uses_scoped_headers_and_accessible_contrast(settings) -> None:
     app = create_app(settings)
 
@@ -495,3 +521,93 @@ def test_api_imports_and_searches_oc_manager_json(settings) -> None:
             content=b"broken",
         )
         assert invalid.status_code == 422
+
+
+class TestCaptionRevision:
+    """按修正意见改写英文草稿。修正意见可以是整段中文。也可以是一句指示。"""
+
+    def test_sends_both_draft_and_note_to_the_model(self, monkeypatch) -> None:
+        """草稿要一起送出。只送指示的话模型不知道在改什么。"""
+        captured = {}
+
+        def fake_request(url, **kwargs):
+            captured["url"] = url
+            captured["payload"] = kwargs["payload"]
+            return {"choices": [{"message": {"content": "A revised caption."}}]}
+
+        monkeypatch.setattr(local_model, "_request_json", fake_request)
+        revised = local_model.revise_caption_with_model(
+            "A woman by the window.",
+            "加入对肤色的描述。",
+            connections=_OneConnection(),
+        )
+
+        assert revised == "A revised caption."
+        user_message = captured["payload"]["messages"][-1]["content"]
+        assert "A woman by the window." in user_message
+        assert "加入对肤色的描述。" in user_message
+
+    def test_failure_raises_so_the_draft_is_not_overwritten(self, monkeypatch) -> None:
+        """改写失败要抛错。前端靠它决定不动既有草稿。"""
+        unavailable = local_model.LocalModelError(SERVICE_DOWN)
+
+        def explode(*_args, **_kwargs):
+            raise unavailable
+
+        monkeypatch.setattr(local_model, "_request_json", explode)
+        with pytest.raises(local_model.LocalModelError):
+            local_model.revise_caption_with_model(
+                "A woman.", "改一下", connections=_OneConnection()
+            )
+
+    def test_empty_result_is_an_error_not_an_empty_draft(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            local_model,
+            "_request_json",
+            lambda *_args, **_kwargs: {"choices": [{"message": {"content": "   "}}]},
+        )
+        with pytest.raises(local_model.LocalModelError):
+            local_model.revise_caption_with_model(
+                "A woman.", "改一下", connections=_OneConnection()
+            )
+
+    def test_no_connection_is_an_error(self) -> None:
+        with pytest.raises(local_model.LocalModelError):
+            local_model.revise_caption_with_model("A woman.", "改一下", connections=None)
+
+    def test_endpoint_reports_failure_as_422(self, settings, monkeypatch) -> None:
+        down = api.LocalModelError(SERVICE_DOWN)
+
+        def explode(*_args, **_kwargs):
+            raise down
+
+        monkeypatch.setattr(api, "revise_caption_with_model", explode)
+        with TestClient(create_app(settings)) as client:
+            response = client.post(
+                "/api/captions/revise",
+                json={"caption": "A woman.", "instruction": "改一下"},
+            )
+
+        assert response.status_code == 422
+        assert SERVICE_DOWN in response.json()["detail"]
+
+
+class _OneConnection:
+    def get_caption_assist(self):
+        return None
+
+    def list_connections(self):
+        return [
+            ModelConnection(
+                connection_id="c1",
+                label="local",
+                provider="lmstudio",
+                base_url="http://127.0.0.1:1234/v1",
+                api_key="",
+                model_name="qwen",
+                supports_vision=True,
+            )
+        ]
+
+
+SERVICE_DOWN = "服务不可用"
