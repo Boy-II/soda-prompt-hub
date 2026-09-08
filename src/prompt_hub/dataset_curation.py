@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from uuid import uuid4
 
 from prompt_hub.dataset_curation_support import (
+    _apply_krea2_operation,
     _apply_tag_operation,
     _atomic_json_write,
     _change_summary,
@@ -30,6 +31,8 @@ from prompt_hub.dataset_curation_support import (
     _suspicious_tag,
     _timestamp_token,
     _write_hash_manifest,
+    normalize_caption_settings,
+    normalize_caption_with_settings,
 )
 from prompt_hub.dataset_tagging import normalize_tag_draft
 from prompt_hub.dataset_workspace import DatasetWorkspaceError, DatasetWorkspaceStore
@@ -44,7 +47,7 @@ if TYPE_CHECKING:
 CaptionProfile = Literal["anima", "krea2"]
 Tagger = Callable[[Path], dict[str, object]]
 TaggerFactory = Callable[[float, float, ProviderMode], Tagger]
-Krea2Captioner = Callable[[Path, str, str], dict[str, Any]]
+Krea2Captioner = Callable[[Path, str, str, Mapping[str, Any]], dict[str, Any]]
 
 CURATION_FORMAT = "soda-prompt-hub-dataset-curation-v1"
 LOW_FREQUENCY_MAX = 2
@@ -125,8 +128,8 @@ class DatasetCurationStore:
         workspace_id = str(payload.get("workspace_id", ""))
         if not workspace_id:
             raise DatasetWorkspaceError("WD14 job is missing workspace_id")
-        general_threshold = float(payload.get("general_threshold", 0.35))
-        character_threshold = float(payload.get("character_threshold", 0.85))
+        general_threshold = self.settings.wd14_general_threshold
+        character_threshold = self.settings.wd14_character_threshold
         provider = str(payload.get("provider", "auto"))
         if provider not in {"auto", "coreml", "cpu"}:
             raise DatasetWorkspaceError("Unsupported WD14 provider")
@@ -136,6 +139,7 @@ class DatasetCurationStore:
         model = str(payload.get("model", "")).strip()
         if tagger_mode == "model" and not model:
             raise DatasetWorkspaceError("使用模型打标时必须选择打标模型")
+        caption_settings = normalize_caption_settings("anima", payload)
         paths = self._select_tag_paths(workspace_id, payload)
         job_id = str(getattr(context, "job_id", ""))
         state = self.read_state(workspace_id)
@@ -195,10 +199,24 @@ class DatasetCurationStore:
                         image_path=image_path,
                         model=model,
                         existing_tags=_current_caption(current, "anima"),
+                        mode=caption_settings["mode"],
+                        trigger=caption_settings["trigger"],
+                        media_tags=caption_settings["media_tags"],
+                        options=caption_settings["options"],
+                        max_tokens=caption_settings["max_tokens"],
                         connections=self._model_connections,
                     )
                 elif tagger is not None:
-                    result = tagger(image_path)
+                    tagger_result = tagger(image_path)
+                    result = {
+                        **tagger_result,
+                        "tag_string": normalize_caption_with_settings(
+                            "anima",
+                            str(tagger_result.get("tag_string", "")),
+                            caption_settings,
+                        ),
+                        "caption_settings": caption_settings,
+                    }
                 else:
                     raise DatasetWorkspaceError("WD14 模型尚未准备完成")
             except Exception as error:  # noqa: BLE001
@@ -241,6 +259,7 @@ class DatasetCurationStore:
         model = str(payload.get("model", "")).strip()
         if not model:
             raise DatasetWorkspaceError("Krea 2 VLM job is missing model")
+        caption_settings = normalize_caption_settings("krea2", payload)
         paths = self._select_krea2_paths(workspace_id, payload)
         job_id = str(getattr(context, "job_id", ""))
         state = self.read_state(workspace_id)
@@ -286,7 +305,9 @@ class DatasetCurationStore:
             item = _state_item(state, relative_path)
             existing_caption = _current_caption(item, "krea2")
             try:
-                result = self._krea2_captioner(image_path, model, existing_caption)
+                result = self._krea2_captioner(
+                    image_path, model, existing_caption, caption_settings
+                )
                 draft = _normalize_caption("krea2", str(result.get("draft", "")))
                 if not draft:
                     raise DatasetWorkspaceError("本地视觉模型返回了空的 Krea 2 草稿")
@@ -530,9 +551,18 @@ class DatasetCurationStore:
         profile_id: CaptionProfile,
         caption: str,
         status: Literal["draft", "reviewed"] = "reviewed",
+        caption_settings: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         self._known_record(workspace_id, relative_path)
-        clean = _normalize_caption(profile_id, caption)
+        clean = (
+            normalize_caption_with_settings(
+                profile_id,
+                caption,
+                normalize_caption_settings(profile_id, caption_settings),
+            )
+            if caption_settings is not None
+            else _normalize_caption(profile_id, caption)
+        )
         with self._lock:
             state = self.read_state(workspace_id)
             item = _state_item(state, relative_path)
@@ -674,17 +704,23 @@ class DatasetCurationStore:
         paths: Iterable[str],
         operation: Mapping[str, Any],
     ) -> dict[str, Any]:
+        profile_id = _operation_profile(operation)
         state = self.read_state(workspace_id)
         changes = []
         for relative_path in dict.fromkeys(str(path) for path in paths):
             self._known_record(workspace_id, relative_path)
             item = _state_item(state, relative_path)
-            before = _current_caption(item, "anima")
-            after = _apply_tag_operation(before, operation)
+            before = _current_caption(item, profile_id)
+            after = (
+                _apply_tag_operation(before, operation)
+                if profile_id == "anima"
+                else _apply_krea2_operation(before, operation)
+            )
             if before != after:
                 changes.append({"relative_path": relative_path, "before": before, "after": after})
         return {
             "workspace_id": workspace_id,
+            "profile_id": profile_id,
             "changed": len(changes),
             "changes": changes,
             "summary": _change_summary(changes),
@@ -704,8 +740,8 @@ class DatasetCurationStore:
                 return {**preview, "snapshot": None}
             snapshot = self._write_snapshot(
                 workspace_id,
-                operation="bulk-anima-tags",
-                profile_id="anima",
+                operation=f"bulk-{preview['profile_id']}-caption",
+                profile_id=preview["profile_id"],
                 changes=changes,
             )
             state = self.read_state(workspace_id)
@@ -713,7 +749,7 @@ class DatasetCurationStore:
                 item = _state_item(state, str(change["relative_path"]))
                 _set_caption(
                     item,
-                    "anima",
+                    preview["profile_id"],
                     str(change["after"]),
                     status="draft",
                     source="bulk-edit",
@@ -1225,6 +1261,7 @@ class DatasetCurationStore:
     ) -> Tagger:
         return WD14Tagger(
             model_root=self.settings.wd14_model_root,
+            model_name=self.settings.wd14_model_name,
             general_threshold=general_threshold,
             character_threshold=character_threshold,
             provider=provider,
@@ -1235,11 +1272,17 @@ class DatasetCurationStore:
         image_path: Path,
         model: str,
         existing_caption: str,
+        caption_settings: Mapping[str, Any],
     ) -> dict[str, Any]:
         return draft_krea2_caption(
             image_path=image_path,
             model=model,
             existing_caption=existing_caption,
+            mode=caption_settings["mode"],
+            trigger=str(caption_settings["trigger"]),
+            media_tags=bool(caption_settings["media_tags"]),
+            options=dict(caption_settings["options"]),
+            max_tokens=int(caption_settings["max_tokens"]),
         )
 
     def _select_tag_paths(
@@ -1342,6 +1385,7 @@ class DatasetCurationStore:
                 "draft": draft,
                 "observations": observations,
                 "safety_warning": str(result.get("safety_warning", ""))[:2000],
+                "caption_settings": result.get("caption_settings", {}),
                 "source_sha256": source_sha256,
                 "created_at": _now(),
                 "error": "",
@@ -1402,13 +1446,20 @@ class DatasetCurationStore:
                 "model": str(result.get("model", "SmilingWolf/wd-swinv2-tagger-v3")),
                 "provider": str(result.get("provider", "")),
                 "tagged_at": _now(),
-                "general_threshold": result.get("general_threshold", 0.35),
-                "character_threshold": result.get("character_threshold", 0.85),
+                "general_threshold": result.get(
+                    "general_threshold",
+                    self.settings.wd14_general_threshold,
+                ),
+                "character_threshold": result.get(
+                    "character_threshold",
+                    self.settings.wd14_character_threshold,
+                ),
                 "rating": result.get("rating"),
                 "general": result.get("general", []),
                 "characters": result.get("characters", []),
                 "elapsed_seconds": result.get("elapsed_seconds"),
                 "safety_warning": str(result.get("safety_warning", ""))[:2000],
+                "caption_settings": result.get("caption_settings", {}),
                 "error": "",
             }
             if tagger == "model" and model:
@@ -1613,6 +1664,14 @@ def _snapshot_profile(payload: Mapping[str, Any]) -> str:
     return "krea2" if operation.startswith("edit-krea2") else "anima"
 
 
+def _operation_profile(operation: Mapping[str, Any]) -> CaptionProfile:
+    profile_id = str(operation.get("profile_id", "anima"))
+    if profile_id not in {"anima", "krea2"}:
+        message = "Invalid bulk caption profile"
+        raise DatasetWorkspaceError(message)
+    return profile_id  # type: ignore[return-value]
+
+
 def _completed_by_job(item: object, job_id: str) -> bool:
     if not isinstance(item, dict):
         return False
@@ -1640,6 +1699,7 @@ def _vlm_record(value: object) -> dict[str, Any]:
     record.setdefault("draft", "")
     record.setdefault("observations", {})
     record.setdefault("safety_warning", "")
+    record.setdefault("caption_settings", {})
     record.setdefault("source_sha256", "")
     record.setdefault("created_at", "")
     record.setdefault("error", "")

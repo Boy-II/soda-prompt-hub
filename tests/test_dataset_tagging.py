@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from prompt_hub.api import create_app
+from prompt_hub.config import TAGGER_MODELS, TaggerModelConfig
 from prompt_hub.dataset_tagging import (
     DatasetTaggingError,
     normalize_tag_draft,
@@ -102,9 +103,16 @@ def test_store_and_review_wd14_result_without_overwriting_other_profile() -> Non
 
 
 def test_single_tag_and_review_api(settings, monkeypatch) -> None:
+    captured = {}
+
+    def fake_tag_image(image, **kwargs):
+        captured["image"] = image
+        captured.update(kwargs)
+        return _tag_result()
+
     monkeypatch.setattr(
         "prompt_hub.dataset_routes.tag_image",
-        lambda *_args, **_kwargs: _tag_result(),
+        fake_tag_image,
     )
     with TestClient(create_app(settings)) as client:
         project = _create_project(client)
@@ -119,11 +127,15 @@ def test_single_tag_and_review_api(settings, monkeypatch) -> None:
 
         tagged = client.post(
             f"{base}/tag",
-            json={"general_threshold": 0.4, "character_threshold": 0.9, "limit": 40},
+            json={"general_threshold": 0.99, "character_threshold": 0.99, "limit": 40},
         )
         assert tagged.status_code == 200
         assert tagged.json()["asset"]["wd14_tagging"]["draft_tags"] == "1girl, solo"
         assert "dataset_captions" not in tagged.json()["asset"]
+        assert captured["model_root"] == settings.wd14_model_root
+        assert captured["model_name"] == settings.wd14_model_name
+        assert captured["general_threshold"] == settings.wd14_general_threshold
+        assert captured["character_threshold"] == settings.wd14_character_threshold
 
         saved = client.put(
             f"{base}/tag-review",
@@ -247,3 +259,36 @@ def test_scored_tag_handles_missing_none_and_legacy_scores() -> None:
     assert general[0] == {"tag": "missing"}
     assert general[1] == {"tag": "none"}
     assert general[2] == {"tag": "legacy", "score": 1.0}
+
+
+def test_store_wd14_result_uses_configured_tagger_calibration_when_missing(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    root = tmp_path / "library"
+    custom_id = "test-calibrated-tagger"
+    TAGGER_MODELS[custom_id] = TaggerModelConfig(
+        id=custom_id,
+        model_name="example/test-calibrated-tagger",
+        relative_root=tmp_path / "unused",
+        general_threshold=0.42,
+        character_threshold=0.77,
+    )
+    monkeypatch.setenv("PROMPT_HUB_LIBRARY_ROOT", str(root))
+    monkeypatch.setenv("PROMPT_HUB_TAGGER_MODEL", custom_id)
+    try:
+        project = {"generation": {"result_assets": [{"asset_id": "asset-1"}]}}
+        result = {
+            "tag_string": "1girl, solo",
+            "general": [{"tag": "1girl"}, {"tag": "solo"}],
+            "characters": [],
+        }
+
+        _generation, asset = store_wd14_result(project, asset_id="asset-1", result=result)
+    finally:
+        del TAGGER_MODELS[custom_id]
+
+    tagging = asset["wd14_tagging"]
+    assert tagging["model"] == "example/test-calibrated-tagger"
+    assert tagging["general_threshold"] == 0.42
+    assert tagging["character_threshold"] == 0.77

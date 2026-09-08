@@ -215,7 +215,7 @@ def doctor(settings: Settings, *, service_url: str = "http://127.0.0.1:8765") ->
         {
             "name": "wd14_model",
             "ok": (settings.wd14_model_root / "model.onnx").is_file(),
-            "detail": str(settings.wd14_model_root),
+            "detail": f"{settings.wd14_model_name}: {settings.wd14_model_root}",
         }
     )
     checks.append(_service_check(service_url))

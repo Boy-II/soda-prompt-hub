@@ -63,7 +63,13 @@ from prompt_hub.source_sync import SourceSyncService
 from prompt_hub.sourcing import allowed_safety_levels, source_candidates
 from prompt_hub.tag_completion_routes import create_tag_completion_router
 from prompt_hub.tag_completions import TAG_DOWNLOAD_JOB_TYPE, TagCompletionStore
-from prompt_hub.tag_locale import TagLocaleError, localize_tags, tag_catalog
+from prompt_hub.tag_locale import (
+    TagLocaleCache,
+    TagLocaleError,
+    localize_tags,
+    make_model_translator,
+    tag_catalog,
+)
 from prompt_hub.visual_assets import VisualAssetCatalog
 from prompt_hub.visual_model import (
     DOWNLOAD_JOB_TYPE,
@@ -177,17 +183,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         image_path: Path,
         model: str,
         existing_caption: str,
+        caption_settings: dict[str, Any],
     ) -> dict[str, Any]:
         if not MODEL_REF_PATTERN.fullmatch(model):
             return DatasetCurationStore._default_krea2_captioner(  # noqa: SLF001
                 image_path,
                 model,
                 existing_caption,
+                caption_settings,
             )
         return draft_krea2_caption(
             image_path=image_path,
             model=model,
             existing_caption=existing_caption,
+            mode=caption_settings["mode"],
+            trigger=str(caption_settings["trigger"]),
+            media_tags=bool(caption_settings["media_tags"]),
+            options=dict(caption_settings["options"]),
+            max_tokens=int(caption_settings["max_tokens"]),
             connections=model_connections,
         )
 
@@ -226,9 +239,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         descriptor = bundled_visual_model_descriptor(bundled_model_root)
     visual_encoder = LocalVisualEncoder(descriptor)
     local_visual = LocalVisualIndexService(embedding_store, visual_catalog, visual_encoder)
+    tag_locale_cache = TagLocaleCache(active_settings.database_path)
+    tag_translator = make_model_translator(model_connections)
     tag_store = TagCompletionStore(
         active_settings.database_path,
         active_settings.tag_completions_root,
+        locale_cache=tag_locale_cache,
     )
     job_runner = BackgroundJobRunner(
         job_store,
@@ -344,10 +360,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def get_compute_contract() -> dict[str, Any]:
         return compute_contract()
 
+    @application.get("/api/tagger-config")
+    def get_tagger_config() -> dict[str, Any]:
+        return {
+            "id": active_settings.wd14_model_config.id,
+            "model": active_settings.wd14_model_name,
+            "general_threshold": active_settings.wd14_general_threshold,
+            "character_threshold": active_settings.wd14_character_threshold,
+        }
+
     @application.post("/api/tags/localize")
     def get_localized_tags(payload: TagLocaleInput) -> dict[str, Any]:
         try:
-            items = localize_tags(payload.tags, language=payload.language)
+            items = localize_tags(
+                payload.tags,
+                language=payload.language,
+                cache=tag_locale_cache,
+                translator=tag_translator,
+            )
         except TagLocaleError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return {"language": payload.language, "items": items}

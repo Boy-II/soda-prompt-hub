@@ -280,6 +280,19 @@ def test_openapi_reports_public_release_version(settings) -> None:
         assert client.get("/openapi.json").json()["info"]["version"] == "1.0.0"
 
 
+def test_api_exposes_selected_tagger_calibration(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/api/tagger-config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "idolsankaku-swinv2-tagger-v1",
+        "model": "deepghs/idolsankaku-swinv2-tagger-v1",
+        "general_threshold": 0.3094,
+        "character_threshold": 0.85,
+    }
+
+
 def test_page_uses_scoped_headers_and_accessible_contrast(settings) -> None:
     app = create_app(settings)
 

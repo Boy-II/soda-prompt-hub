@@ -43,11 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve = subparsers.add_parser("serve", help="Run the local Prompt Hub web service")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
-    tag = subparsers.add_parser("tag-image", help="Tag one local image with WD SwinV2 V3")
+    tag = subparsers.add_parser("tag-image", help="Tag one local image with the configured tagger")
     tag.add_argument("image")
     tag.add_argument("--model-root", default="")
-    tag.add_argument("--general-threshold", type=float, default=0.35)
-    tag.add_argument("--character-threshold", type=float, default=0.85)
     tag.add_argument("--limit", type=int, default=80)
     tag.add_argument("--provider", choices=("auto", "coreml", "cpu"), default="auto")
     subparsers.add_parser("mcp", help="Run the MCP server over stdio")
@@ -115,8 +113,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             result = tag_image(
                 args.image,
                 model_root=model_root,
-                general_threshold=args.general_threshold,
-                character_threshold=args.character_threshold,
+                model_name=settings.wd14_model_name,
+                general_threshold=settings.wd14_general_threshold,
+                character_threshold=settings.wd14_character_threshold,
                 limit=args.limit,
                 provider=args.provider,
             )

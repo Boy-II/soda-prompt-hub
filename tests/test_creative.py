@@ -374,6 +374,25 @@ def test_external_model_ui_keeps_existing_creative_actions() -> None:
     ):
         assert marker in INDEX_HTML
 
+    for removed_marker in (
+        'id="datasetGeneralThreshold"',
+        'id="datasetCharacterThreshold"',
+        'id="wd14GeneralThreshold"',
+        'id="wd14CharacterThreshold"',
+        "general_threshold:Number(",
+        "character_threshold:Number(",
+        "WD14 阈值必须在 0 到 1 之间",
+    ):
+        assert removed_marker not in INDEX_HTML
+
+    # 校准值要显示。但不可写死在 HTML 里。
+    # 切换 PROMPT_HUB_TAGGER_MODEL 后写死的字串会说谎。
+    # 两个页面都必须有显示位并向 /api/tagger-config 取值。
+    assert 'id="wd14Calibration"' in INDEX_HTML
+    assert 'id="datasetWd14Calibration"' in INDEX_HTML
+    assert INDEX_HTML.count("/api/tagger-config") >= 2
+    assert "deepghs/idolsankaku-swinv2-tagger-v1" not in INDEX_HTML
+
     assert "可手工填写模型名称" not in INDEX_HTML
 
     assert "document.querySelector(`[data-endpoint-model-enabled=" not in INDEX_HTML

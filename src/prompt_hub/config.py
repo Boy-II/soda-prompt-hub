@@ -5,6 +5,34 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+@dataclass(frozen=True, slots=True)
+class TaggerModelConfig:
+    id: str
+    model_name: str
+    relative_root: Path
+    general_threshold: float
+    character_threshold: float = 0.85
+
+
+TAGGER_MODELS: dict[str, TaggerModelConfig] = {
+    "idolsankaku-swinv2-tagger-v1": TaggerModelConfig(
+        id="idolsankaku-swinv2-tagger-v1",
+        model_name="deepghs/idolsankaku-swinv2-tagger-v1",
+        relative_root=Path("tagger") / "idolsankaku-swinv2-tagger-v1",
+        # Thresholds are model calibration, not global knobs; using the WD
+        # community threshold on this model reads someone else's scale.
+        general_threshold=0.3094,
+    ),
+    "wd-swinv2-tagger-v3": TaggerModelConfig(
+        id="wd-swinv2-tagger-v3",
+        model_name="SmilingWolf/wd-swinv2-tagger-v3",
+        relative_root=Path("wd14") / "wd-swinv2-tagger-v3",
+        general_threshold=0.35,
+    ),
+}
+DEFAULT_TAGGER_MODEL_ID = "idolsankaku-swinv2-tagger-v1"
+
+
 def _default_library_root() -> Path:
     """Choose a public default without disconnecting existing personal installs."""
     home = Path.home()
@@ -132,5 +160,27 @@ class Settings:
         return Path(os.environ.get("PROMPT_HUB_MODELS_ROOT", default_root)).expanduser()
 
     @property
+    def wd14_model_config(self) -> TaggerModelConfig:
+        selected = os.environ.get("PROMPT_HUB_TAGGER_MODEL", DEFAULT_TAGGER_MODEL_ID)
+        try:
+            return TAGGER_MODELS[selected]
+        except KeyError as error:
+            allowed = ", ".join(sorted(TAGGER_MODELS))
+            message = f"Unsupported tagger model: {selected}. Choose one of: {allowed}"
+            raise ValueError(message) from error
+
+    @property
     def wd14_model_root(self) -> Path:
-        return self.models_root / "wd14" / "wd-swinv2-tagger-v3"
+        return self.models_root / self.wd14_model_config.relative_root
+
+    @property
+    def wd14_model_name(self) -> str:
+        return self.wd14_model_config.model_name
+
+    @property
+    def wd14_general_threshold(self) -> float:
+        return self.wd14_model_config.general_threshold
+
+    @property
+    def wd14_character_threshold(self) -> float:
+        return self.wd14_model_config.character_threshold

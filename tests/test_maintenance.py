@@ -9,7 +9,7 @@ import pytest
 from prompt_hub.creative import CreativeStore
 from prompt_hub.database import PromptDatabase
 from prompt_hub.embedding_index import EmbeddingIndexStore
-from prompt_hub.maintenance import BackupManager, MaintenanceError, verify_backup
+from prompt_hub.maintenance import BackupManager, MaintenanceError, doctor, verify_backup
 
 
 def _seed_backup_roots(settings) -> dict[str, str]:
@@ -127,3 +127,20 @@ def test_backup_rejects_low_disk_without_leaving_partial_directory(
 
     assert not destination.exists()
     assert not list(destination.parent.glob(f".{destination.name}.tmp-*"))
+
+
+def test_doctor_checks_selected_tagger_model(settings, monkeypatch) -> None:
+    model_root = settings.wd14_model_root
+    model_root.mkdir(parents=True)
+    (model_root / "model.onnx").write_bytes(b"fake")
+    monkeypatch.setattr(
+        "prompt_hub.maintenance.shutil.disk_usage",
+        lambda _path: SimpleNamespace(free=10 * 1024**3),
+    )
+    monkeypatch.setattr("prompt_hub.maintenance._service_check", lambda _url: {"ok": True})
+
+    report = doctor(settings)
+
+    wd14_check = next(item for item in report["checks"] if item["name"] == "wd14_model")
+    assert wd14_check["ok"] is True
+    assert wd14_check["detail"] == f"{settings.wd14_model_name}: {model_root}"

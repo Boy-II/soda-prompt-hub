@@ -12,6 +12,7 @@ from prompt_hub.creative import apply_result_review
 from prompt_hub.local_model import (
     LocalModelError,
     analyze_result_image,
+    caption_mode_contract,
     draft_anima_tags,
     draft_krea2_caption,
 )
@@ -263,8 +264,100 @@ def test_local_vision_krea2_caption_uses_native_chat_and_english(tmp_path, monke
     assert captured["payload"]["reasoning"] == "off"
     assert captured["payload"]["input"][0]["type"] == "image"
     assert "previous reviewed caption" in captured["payload"]["input"][1]["content"]
-    assert result["draft"] == "An adult character stands in soft teal studio light."
+    assert result["draft"] == (
+        "An adult character stands in soft teal studio light in a realistic photo medium."
+    )
     assert result["observations"]["lighting"] == "soft teal studio light"
+
+
+def test_krea2_caption_settings_replace_subject_and_keep_media_tags(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "dataset.png"
+    Image.new("RGB", (80, 120), "teal").save(image_path)
+    captured = {}
+
+    def fake_request(_url, **kwargs):
+        captured.update(kwargs)
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": json.dumps(
+                        {
+                            "caption": "A woman sits on a chair in a white dress.",
+                            "observations": {"subject": "woman", "outfit": "white dress"},
+                            "safety_warning": "",
+                        }
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr("prompt_hub.local_model._request_json", fake_request)
+    result = draft_krea2_caption(
+        image_path=image_path,
+        model="vision-model",
+        mode="portrait",
+        trigger="miru",
+        options={"avoid_meta_phrases": True, "lighting": True},
+        max_tokens=123,
+    )
+
+    assert captured["payload"]["max_output_tokens"] == 123
+    assert "portrait" in captured["payload"]["system_prompt"]
+    assert "facial features" in captured["payload"]["system_prompt"]
+    assert "avoid meta phrases" in captured["payload"]["system_prompt"]
+    assert result["draft"].startswith("miru sits on a chair")
+    assert "photo" in result["draft"]
+    assert "realistic" in result["draft"]
+
+
+@pytest.mark.parametrize(
+    ("caption", "expected"),
+    [
+        (
+            "A young woman sitting on a chair in a white dress.",
+            "miru sitting on a chair in a white dress in a realistic photo medium.",
+        ),
+        (
+            "A close-up of a woman sitting on a chair.",
+            "A close-up of miru sitting on a chair in a realistic photo medium.",
+        ),
+    ],
+)
+def test_krea2_subject_replacement_handles_common_openings(
+    tmp_path,
+    monkeypatch,
+    caption,
+    expected,
+) -> None:
+    image_path = tmp_path / "dataset.png"
+    Image.new("RGB", (80, 120), "teal").save(image_path)
+
+    def fake_request(_url, **_kwargs):
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": json.dumps(
+                        {
+                            "caption": caption,
+                            "observations": {},
+                            "safety_warning": "",
+                        }
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr("prompt_hub.local_model._request_json", fake_request)
+    result = draft_krea2_caption(
+        image_path=image_path,
+        model="vision-model",
+        mode="portrait",
+        trigger="miru",
+    )
+
+    assert result["draft"] == expected
 
 
 def test_local_vision_anima_tags_parse_json_tags(tmp_path, monkeypatch) -> None:
@@ -300,11 +393,135 @@ def test_local_vision_anima_tags_parse_json_tags(tmp_path, monkeypatch) -> None:
     assert "Existing reviewed or draft Anima tags" in captured["payload"]["input"][1]["content"]
     assert result["tagger"] == "model"
     assert result["model"] == "vision-model"
-    assert result["tag_string"] == "1girl, solo, blue_eyes"
+    assert result["tag_string"] == "1girl, solo, blue_eyes, photo, realistic"
     assert result["general"][0] == {"tag": "1girl"}
     assert "score" not in result["general"][0]
     assert result["rating"] == {"tag": "safe"}
     assert "score" not in result["rating"]
+
+
+def test_anima_caption_settings_prefix_trigger_preserve_structure_and_ignore_sentence_options(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    image_path = tmp_path / "dataset.png"
+    Image.new("RGB", (80, 120), "teal").save(image_path)
+    captured = {}
+
+    def fake_request(_url, **kwargs):
+        captured.update(kwargs)
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": json.dumps(
+                        {
+                            "tags": ["1girl", "solo", "blue_eyes", "white_dress"],
+                            "rating": "safe",
+                            "safety_warning": "",
+                        }
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr("prompt_hub.local_model._request_json", fake_request)
+    result = draft_anima_tags(
+        image_path=image_path,
+        model="vision-model",
+        mode="portrait",
+        trigger="miru",
+        options={"avoid_meta_phrases": True, "avoid_vague": True, "plain_words": True},
+    )
+
+    assert "avoid meta phrases" not in captured["payload"]["system_prompt"]
+    assert result["tag_string"].startswith("miru, 1girl, solo")
+    assert "blue_eyes" not in result["tag_string"]
+    assert "photo" in result["tag_string"]
+    assert "realistic" in result["tag_string"]
+
+
+def test_anima_mode_filtering_uses_exact_tag_groups_not_substrings(tmp_path, monkeypatch) -> None:
+    image_path = tmp_path / "dataset.png"
+    Image.new("RGB", (80, 120), "teal").save(image_path)
+
+    def fake_request(_url, **_kwargs):
+        return {
+            "output": [
+                {
+                    "type": "message",
+                    "content": json.dumps(
+                        {
+                            "tags": [
+                                "1girl",
+                                "solo",
+                                "two-tone_hair",
+                                "multicolored_hair",
+                                "surface",
+                                "face",
+                            ],
+                            "rating": "safe",
+                            "safety_warning": "",
+                        }
+                    ),
+                }
+            ]
+        }
+
+    monkeypatch.setattr("prompt_hub.local_model._request_json", fake_request)
+    style = draft_anima_tags(
+        image_path=image_path,
+        model="vision-model",
+        mode="style",
+        trigger="miru",
+    )
+    portrait = draft_anima_tags(
+        image_path=image_path,
+        model="vision-model",
+        mode="portrait",
+        trigger="miru",
+    )
+
+    style_tags = style["tag_string"].split(", ")
+    portrait_tags = portrait["tag_string"].split(", ")
+    assert "two-tone_hair" in style_tags
+    assert "multicolored_hair" in style_tags
+    assert "surface" in portrait_tags
+    assert "face" not in portrait_tags
+
+
+def test_caption_mode_contract_matches_documented_modes_and_options() -> None:
+    contract = caption_mode_contract()
+    assert [mode["id"] for mode in contract["modes"]] == [
+        "general",
+        "portrait",
+        "outfit",
+        "style",
+    ]
+    portrait = next(mode for mode in contract["modes"] if mode["id"] == "portrait")
+    assert portrait == {
+        "id": "portrait",
+        "label": "肖像",
+        "omits": "臉部五官",
+        "trigger_label": "人物稱呼",
+    }
+    options = {option["id"]: option for option in contract["options"]}
+    assert set(options) == {
+        "age",
+        "lighting",
+        "light_source",
+        "camera_angle",
+        "action",
+        "content_rating",
+        "exclude_artwork_info",
+        "avoid_meta_phrases",
+        "depth_of_field",
+        "shot_type",
+        "avoid_vague",
+        "plain_words",
+    }
+    assert options["avoid_meta_phrases"]["profiles"] == ["krea2"]
+    assert all(option["default"] is False for option in contract["options"])
 
 
 def test_local_vision_anima_tags_rejects_non_json(tmp_path, monkeypatch) -> None:

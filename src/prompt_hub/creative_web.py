@@ -329,7 +329,7 @@ CREATIVE_SCRIPT = r"""
   };
   const safetyLabels = {sfw:'普通',suggestive:'轻度成人向',adult:'成人向','explicit-adult':'明确成人向',unrated:'尚未分级'};
   const wd14RatingLabels = {general:'普通',sensitive:'轻度成人向',questionable:'成人向',explicit:'明确成人向',unknown:'尚未判断'};
-  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', tagStatus: null, tagDownloading: false, workflowProfiles: [], windowsModels: [], windowsLoras: [], workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
+  const creativeState = {project: null, projects: [], recipes: [], outputs: {}, profile: 'anima', tagStatus: null, tagDownloading: false, taggerConfig: null, workflowProfiles: [], windowsModels: [], windowsLoras: [], workflowLoraPickerOpen: false, workflowLoraQuery: '', workflowLoraFolder: '', workflowMessage: '', workflowMessageProjectId: '', datasetProfile: 'anima', datasetMessage: '', datasetMessageProjectId: '', journey: null, journeyProjectId: '', journeyRun: 0, suggestion: null, sourcing: null, sourcingProjectId: '', sourcingRun: 0, review: null, reviewAssetId: '', reviewProjectId: '', iteration: null, iterationProjectId: '', iterationRun: 0, iterationMessage: '', iterationMessageProjectId: '', visionAvailable: false, saveTimer: null, compileTimer: null, loadedMeta: false};
 
   async function creativeJson(url, options = {}) {
     const response = await fetch(url, options);
@@ -700,6 +700,7 @@ CREATIVE_SCRIPT = r"""
     const localCount = Number(models.local_count ?? models.models.filter(model => model.source !== 'external').length); const externalCount = Number(models.external_count ?? models.models.filter(model => model.source === 'external').length);
     $('#lmStatus').textContent = models.available ? `可用模型：LM Studio ${localCount} 个，外部 ${externalCount} 个；默认优先已加载的本地模型。` : '当前没有可用模型，手动编辑与双格式输出仍可使用。';
     $('#assistCreative').disabled = !models.available || !models.models.length;
+    try { const taggerConfig = await creativeJson('/api/tagger-config'); creativeState.taggerConfig = taggerConfig; $('#wd14Calibration').textContent = `目前模型 ${taggerConfig.model} · 校准值 general ${taggerConfig.general_threshold} / character ${taggerConfig.character_threshold}`; } catch (error) { $('#wd14Calibration').textContent = `打标模型校准值读取失败：${error.message}`; }
     creativeState.loadedMeta = true;
   }
 
@@ -998,9 +999,7 @@ CREATIVE_SCRIPT = r"""
   function wd14Payload() {
     const tagger=$('#wd14TaggerMode').value, model=$('#wd14TaggerModel').value;
     if(tagger==='model' && !model) throw new Error('请先选择用于打标的视觉模型');
-    const general = Number($('#wd14GeneralThreshold').value); const character = Number($('#wd14CharacterThreshold').value);
-    if (tagger==='wd14' && (!Number.isFinite(general) || general < 0 || general > 1 || !Number.isFinite(character) || character < 0 || character > 1)) throw new Error('WD14 阈值必须在 0 到 1 之间');
-    return {tagger, model, general_threshold:general, character_threshold:character, limit:80};
+    return {tagger, model, limit:80};
   }
 
   function applyDatasetProject(project, message) {

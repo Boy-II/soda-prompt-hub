@@ -48,8 +48,6 @@ class DatasetExportInput(BaseModel):
 class DatasetTagInput(BaseModel):
     tagger: Literal["wd14", "model"] = "wd14"
     model: str = Field(default="", max_length=400)
-    general_threshold: float = Field(default=0.35, ge=0, le=1)
-    character_threshold: float = Field(default=0.85, ge=0, le=1)
     limit: int = Field(default=80, ge=1, le=200)
 
 
@@ -251,8 +249,9 @@ def _tag_dataset_asset(
     return tag_image(
         path,
         model_root=settings.wd14_model_root,
-        general_threshold=payload.general_threshold,
-        character_threshold=payload.character_threshold,
+        model_name=settings.wd14_model_name,
+        general_threshold=settings.wd14_general_threshold,
+        character_threshold=settings.wd14_character_threshold,
         limit=payload.limit,
         provider="auto",
     )

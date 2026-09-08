@@ -11,6 +11,14 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 from PIL import Image, ImageOps
 
 from prompt_hub.creative import SLOT_LABELS, SLOT_ORDER
+from prompt_hub.dataset_curation_support import (
+    CaptionMode,
+    normalize_caption_settings,
+    normalize_caption_with_settings,
+)
+from prompt_hub.dataset_curation_support import (
+    caption_mode_contract as _caption_mode_contract,
+)
 from prompt_hub.model_connections import MODEL_REF_PATTERN
 
 if TYPE_CHECKING:
@@ -25,6 +33,10 @@ MAX_MODEL_RESPONSE_BYTES = 4 * 1024 * 1024
 
 class LocalModelError(RuntimeError):
     pass
+
+
+def caption_mode_contract() -> dict[str, Any]:
+    return _caption_mode_contract()
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -297,9 +309,24 @@ def draft_krea2_caption(
     image_path: Path,
     model: str,
     existing_caption: str = "",
+    mode: CaptionMode = "general",
+    trigger: str = "",
+    media_tags: bool = True,
+    options: dict[str, bool] | None = None,
+    max_tokens: int = 300,
     base_url: str = DEFAULT_LM_STUDIO_URL,
     connections: ModelConnectionStore | None = None,
 ) -> dict[str, Any]:
+    settings = normalize_caption_settings(
+        "krea2",
+        {
+            "mode": mode,
+            "trigger": trigger,
+            "media_tags": media_tags,
+            "options": options or {},
+            "max_tokens": max_tokens,
+        },
+    )
     instruction = (
         "You write concise English natural-language training captions for Krea 2 image datasets. "
         "Return one JSON object only, with keys caption, observations, and safety_warning. "
@@ -312,6 +339,10 @@ def draft_krea2_caption(
         "If explicit sexual content may depict a minor, do not describe explicit details; set a "
         "clear safety_warning and keep the caption non-explicit. Do not infer invisible anatomy or "
         "identity. "
+        f"Caption mode is {settings['mode']}. {_mode_instruction(settings['mode'], 'krea2')} "
+        f"{_option_instruction(settings['options'])} "
+        f"{_media_instruction(media_tags=settings['media_tags'], profile_id='krea2')} "
+        f"{_trigger_instruction(settings['mode'], settings['trigger'], profile_id='krea2')} "
         "Use ASCII English only and do not reveal reasoning."
     )
     context = (
@@ -331,7 +362,7 @@ def draft_krea2_caption(
             },
         ],
         "temperature": 0.15,
-        "max_output_tokens": 650,
+        "max_output_tokens": settings["max_tokens"],
         "reasoning": "off",
         "stream": False,
         "store": False,
@@ -344,7 +375,7 @@ def draft_krea2_caption(
             text_prompt=f"Draft a Krea 2 caption for this local dataset image. {context}",
             image_data_url=image_data_url,
             temperature=0.15,
-            max_tokens=650,
+            max_tokens=settings["max_tokens"],
         )
     else:
         server_root = base_url.rstrip("/").removesuffix("/v1")
@@ -366,7 +397,11 @@ def draft_krea2_caption(
         raw = _extract_json_object(content)
     except json.JSONDecodeError as error:
         raise LocalModelError("视觉模型没有返回可识别的 Krea 2 草稿 JSON") from error
-    caption = " ".join(str(raw.get("caption", "")).split())
+    caption = normalize_caption_with_settings(
+        "krea2",
+        " ".join(str(raw.get("caption", "")).split()),
+        settings,
+    )
     if not caption:
         raise LocalModelError("本地视觉模型返回了空的 Krea 2 草稿")
     if not caption.isascii():
@@ -376,6 +411,7 @@ def draft_krea2_caption(
     return {
         "model": model,
         "draft": caption[:12000],
+        "caption_settings": settings,
         "observations": {
             str(key)[:80]: " ".join(str(value).split())[:1000]
             for key, value in observations.items()
@@ -390,9 +426,24 @@ def draft_anima_tags(
     image_path: Path,
     model: str,
     existing_tags: str = "",
+    mode: CaptionMode = "general",
+    trigger: str = "",
+    media_tags: bool = True,
+    options: dict[str, bool] | None = None,
+    max_tokens: int = 300,
     base_url: str = DEFAULT_LM_STUDIO_URL,
     connections: ModelConnectionStore | None = None,
 ) -> dict[str, Any]:
+    settings = normalize_caption_settings(
+        "anima",
+        {
+            "mode": mode,
+            "trigger": trigger,
+            "media_tags": media_tags,
+            "options": options or {},
+            "max_tokens": max_tokens,
+        },
+    )
     instruction = (
         "You write concise Booru-style English tags for Anima image datasets. "
         "Return one JSON object only, with keys tags, rating, and safety_warning. "
@@ -402,7 +453,12 @@ def draft_anima_tags(
         "Do not include artist names, copyrights, watermarks, or identity guesses unless they "
         "are visibly established by the image. Legal adult SFW or NSFW images may be tagged "
         "objectively. If explicit sexual content may depict a minor, set a clear safety_warning "
-        "and omit explicit tags. Do not reveal reasoning."
+        "and omit explicit tags. "
+        f"Caption mode is {settings['mode']}. {_mode_instruction(settings['mode'], 'anima')} "
+        f"{_option_instruction(settings['options'])} "
+        f"{_media_instruction(media_tags=settings['media_tags'], profile_id='anima')} "
+        f"{_trigger_instruction(settings['mode'], settings['trigger'], profile_id='anima')} "
+        "Do not reveal reasoning."
     )
     context = (
         f"Existing reviewed or draft Anima tags for reference only: {existing_tags[:1200]}"
@@ -419,7 +475,7 @@ def draft_anima_tags(
             {"type": "text", "content": text_prompt},
         ],
         "temperature": 0.1,
-        "max_output_tokens": 500,
+        "max_output_tokens": settings["max_tokens"],
         "reasoning": "off",
         "stream": False,
         "store": False,
@@ -432,7 +488,7 @@ def draft_anima_tags(
             text_prompt=text_prompt,
             image_data_url=image_data_url,
             temperature=0.1,
-            max_tokens=500,
+            max_tokens=settings["max_tokens"],
         )
         provider = "external"
     else:
@@ -456,7 +512,11 @@ def draft_anima_tags(
         raw = _extract_json_object(content)
     except json.JSONDecodeError as error:
         raise LocalModelError("视觉模型没有返回可识别的 Anima 标签草稿 JSON") from error
-    tags = _clean_anima_tags(raw.get("tags", []))
+    tags = normalize_caption_with_settings(
+        "anima",
+        ", ".join(_clean_anima_tags(raw.get("tags", []))),
+        settings,
+    ).split(", ")
     if not tags:
         raise LocalModelError("视觉模型返回了空的 Anima 标签草稿")
     rating_value = raw.get("rating", "")
@@ -480,6 +540,7 @@ def draft_anima_tags(
         "general": general_tags,
         "characters": [],
         "tag_string": ", ".join(tags),
+        "caption_settings": settings,
         "safety_warning": " ".join(str(raw.get("safety_warning", "")).split())[:2000],
     }
 
@@ -637,3 +698,52 @@ def _clean_anima_tags(value: Any) -> list[str]:
             seen.add(key)
             tags.append(tag)
     return tags[:120]
+
+
+def _mode_instruction(mode: CaptionMode, profile_id: str) -> str:
+    if mode == "general":
+        return "Describe all visible caption-worthy details."
+    if mode == "portrait":
+        return (
+            "Do not describe facial features; cover body, pose, scene, light, "
+            "composition, and outfit."
+        )
+    if mode == "outfit":
+        return (
+            "Do not describe clothing or outfit details; cover subject, scene, light, "
+            "composition, and action."
+        )
+    if profile_id == "anima":
+        return (
+            "Do not include style, color-grading, or lighting tags; cover subject, outfit, "
+            "scene, composition, and action."
+        )
+    return (
+        "Do not describe visual style, color grading, or lighting; cover subject, outfit, "
+        "scene, composition, and action."
+    )
+
+
+def _option_instruction(options: dict[str, bool]) -> str:
+    enabled = [key.replace("_", " ") for key, value in options.items() if value]
+    if not enabled:
+        return "All advanced switches are off."
+    return "Advanced switches enabled: " + ", ".join(enabled) + "."
+
+
+def _media_instruction(*, media_tags: bool, profile_id: str) -> str:
+    if not media_tags:
+        return "Do not force photo or realistic medium tags."
+    # Training captions keep the medium separate from the trigger word so later style prompts
+    # can override it instead of inheriting a fixed photographic property.
+    if profile_id == "anima":
+        return "Include photo and realistic as medium tags when the image is photographic."
+    return "Mention realistic photo medium when the image is photographic."
+
+
+def _trigger_instruction(mode: CaptionMode, trigger: str, *, profile_id: str) -> str:
+    if mode == "general" or not trigger:
+        return "No trigger word should be inserted."
+    if profile_id == "anima":
+        return f"Prefix the trigger tag {trigger} before other tags while keeping count tags."
+    return f"Use {trigger} as the subject name instead of a generic subject phrase."
