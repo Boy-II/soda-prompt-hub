@@ -383,20 +383,42 @@ def validate_model_base_url(value: str) -> str:
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         message = "模型服务地址不能包含账号、查询参数或片段"
         raise ModelConnectionError(message)
-    if scheme == "http" and not _is_loopback(host):
-        message = "远程模型服务必须使用 HTTPS。HTTP 只允许本机地址"
+    if scheme == "http" and not _is_local_network(host):
+        message = "公网模型服务必须使用 HTTPS。HTTP 只允许本机与内网地址"
         raise ModelConnectionError(message)
     path = (parsed.path or "").rstrip("/")
     return urlunsplit((scheme, parsed.netloc.lower(), path, "", ""))
 
 
-def _is_loopback(host: str) -> bool:
+# 不路由到网际网路的位址。自架模型服务通常就放在这些网段。
+# 不用 ipaddress 的 is_private 是因为它也涵盖 100.64.0.0/10 CGNAT——
+# 那段流量会经过电信业者的网路。不属于「自己的区网」。
+_LOCAL_NETWORKS = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("fc00::/7"),
+    ipaddress.ip_network("fe80::/10"),
+)
+
+
+def _is_local_network(host: str) -> bool:
+    """本机或自己的区网。
+
+    只认 IP 字面值。主机名要经过 DNS 才知道指向哪里。
+    而 DNS 的答案可以被改——放行 example.local 这类名字等于
+    把判断交给一个我们无法验证的来源。需要用区网服务就填 IP。
+    """
     if host == "localhost":
         return True
     try:
-        return ipaddress.ip_address(host).is_loopback
+        address = ipaddress.ip_address(host)
     except ValueError:
         return False
+    if address.is_loopback:
+        return True
+    return any(address in network for network in _LOCAL_NETWORKS)
 
 
 def _clean_string(value: object, limit: int) -> str:
@@ -433,9 +455,11 @@ def _guess_provider(base_url: str) -> Provider:
     port = parsed.port
     if host == "api.openai.com":
         return "openai"
-    if _is_loopback(host) and port == LM_STUDIO_PORT:
+    # 跑在区网另一台机器上的 LM Studio 依然是 LM Studio。
+    # provider 只是显示标签。不影响请求行为。猜对了使用者少改一次。
+    if _is_local_network(host) and port == LM_STUDIO_PORT:
         return "lm_studio"
-    if _is_loopback(host) and port == OLLAMA_PORT:
+    if _is_local_network(host) and port == OLLAMA_PORT:
         return "ollama"
     return "openai_compatible"
 

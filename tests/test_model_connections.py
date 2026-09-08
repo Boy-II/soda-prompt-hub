@@ -16,6 +16,7 @@ from prompt_hub.model_connections import (
     MODEL_REF_PATTERN,
     ModelConnectionError,
     ModelConnectionStore,
+    _guess_provider,
     _parse_model_names,
     validate_model_base_url,
 )
@@ -664,3 +665,39 @@ class TestCaptionAssistSelection:
         assert after["configured"] is True
         assert after["connection_id"] == second
         assert [option["id"] for option in after["options"]] == [first, second]
+
+
+class TestLocalNetworkEndpoints:
+    """自架模型服务通常在区网里。而且多半只有 HTTP。"""
+
+    def test_private_addresses_may_use_plain_http(self) -> None:
+        for url in (
+            "http://192.168.1.180:8888/v1",
+            "http://10.0.0.5:8000/v1",
+            "http://172.16.3.4/v1",
+            "http://127.0.0.1:1234/v1",
+            "http://localhost:1234/v1",
+        ):
+            assert validate_model_base_url(url).startswith("http://")
+
+    def test_public_http_is_still_refused(self) -> None:
+        """放行的是不路由到网际网路的位址。不是放弃 HTTPS 要求。"""
+        for url in ("http://api.example.com/v1", "http://8.8.8.8/v1"):
+            with pytest.raises(ModelConnectionError):
+                validate_model_base_url(url)
+
+    def test_carrier_grade_nat_is_not_our_lan(self) -> None:
+        """100.64/10 会经过电信业者的网路。不属于「自己的区网」。"""
+        with pytest.raises(ModelConnectionError):
+            validate_model_base_url("http://100.64.1.1/v1")
+
+    def test_hostnames_are_not_trusted_as_local(self) -> None:
+        """主机名要经过 DNS 才知道指向哪里。而 DNS 的答案可以被改。"""
+        with pytest.raises(ModelConnectionError):
+            validate_model_base_url("http://myserver.local/v1")
+
+    def test_lan_lm_studio_and_ollama_are_recognised(self) -> None:
+        """跑在别台机器上的 LM Studio 依然是 LM Studio。"""
+        assert _guess_provider("http://192.168.1.180:1234/v1") == "lm_studio"
+        assert _guess_provider("http://192.168.1.180:11434/v1") == "ollama"
+        assert _guess_provider("http://192.168.1.180:8888/v1") == "openai_compatible"
