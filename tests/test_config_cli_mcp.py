@@ -60,10 +60,26 @@ def test_settings_from_environment(tmp_path, monkeypatch) -> None:
     assert settings.git_sources_root.exists()
 
 
-def test_settings_default_tagger_model_targets_real_photo_model(tmp_path, monkeypatch) -> None:
+def test_settings_default_tagger_model_targets_anime_illustration_model(
+    tmp_path,
+    monkeypatch,
+) -> None:
     root = tmp_path / "custom-library"
     monkeypatch.setenv("PROMPT_HUB_LIBRARY_ROOT", str(root))
     monkeypatch.delenv("PROMPT_HUB_TAGGER_MODEL", raising=False)
+
+    settings = Settings.from_environment()
+
+    assert settings.wd14_model_root == (tmp_path / "models" / "wd14" / "wd-swinv2-tagger-v3")
+    assert settings.wd14_model_name == "SmilingWolf/wd-swinv2-tagger-v3"
+    assert settings.wd14_general_threshold == 0.35
+    assert settings.wd14_character_threshold == 0.85
+
+
+def test_settings_can_select_real_photo_tagger_model(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "custom-library"
+    monkeypatch.setenv("PROMPT_HUB_LIBRARY_ROOT", str(root))
+    monkeypatch.setenv("PROMPT_HUB_TAGGER_MODEL", "idolsankaku-swinv2-tagger-v1")
 
     settings = Settings.from_environment()
 
@@ -72,19 +88,6 @@ def test_settings_default_tagger_model_targets_real_photo_model(tmp_path, monkey
     )
     assert settings.wd14_model_name == "deepghs/idolsankaku-swinv2-tagger-v1"
     assert settings.wd14_general_threshold == 0.3094
-    assert settings.wd14_character_threshold == 0.85
-
-
-def test_settings_can_select_legacy_wd14_tagger_model(tmp_path, monkeypatch) -> None:
-    root = tmp_path / "custom-library"
-    monkeypatch.setenv("PROMPT_HUB_LIBRARY_ROOT", str(root))
-    monkeypatch.setenv("PROMPT_HUB_TAGGER_MODEL", "wd-swinv2-tagger-v3")
-
-    settings = Settings.from_environment()
-
-    assert settings.wd14_model_root == tmp_path / "models" / "wd14" / "wd-swinv2-tagger-v3"
-    assert settings.wd14_model_name == "SmilingWolf/wd-swinv2-tagger-v3"
-    assert settings.wd14_general_threshold == 0.35
 
 
 def test_cli_init_stats_and_search(tmp_path, monkeypatch, capsys) -> None:
@@ -116,11 +119,9 @@ def test_cli_tag_image_uses_personal_model_root(tmp_path, monkeypatch, capsys) -
 
     assert json.loads(capsys.readouterr().out)["tag_string"] == "1girl, solo"
     assert captured["image"] == "sample.png"
-    assert captured["model_root"] == (
-        tmp_path / "models" / "tagger" / "idolsankaku-swinv2-tagger-v1"
-    )
-    assert captured["model_name"] == "deepghs/idolsankaku-swinv2-tagger-v1"
-    assert captured["general_threshold"] == 0.3094
+    assert captured["model_root"] == tmp_path / "models" / "wd14" / "wd-swinv2-tagger-v3"
+    assert captured["model_name"] == "SmilingWolf/wd-swinv2-tagger-v3"
+    assert captured["general_threshold"] == 0.35
     assert captured["character_threshold"] == 0.85
     assert captured["limit"] == 12
 

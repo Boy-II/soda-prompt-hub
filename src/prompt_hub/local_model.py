@@ -813,12 +813,18 @@ def _option_instruction(options: dict[str, bool]) -> str:
 
 def _media_instruction(*, media_tags: bool, profile_id: str) -> str:
     if not media_tags:
-        return "Do not force photo or realistic medium tags."
+        return "Do not describe or include the image medium, rendering medium, or medium tags."
     # Training captions keep the medium separate from the trigger word so later style prompts
     # can override it instead of inheriting a fixed photographic property.
     if profile_id == "anima":
-        return "Include photo and realistic as medium tags when the image is photographic."
-    return "Mention realistic photo medium when the image is photographic."
+        return (
+            "Identify the visible medium and include only matching medium tags, such as photo, "
+            "anime_coloring, illustration, or 3d_render. Never assume a photographic medium."
+        )
+    return (
+        "Describe the visible image medium accurately when it is useful, such as photography, "
+        "anime illustration, digital painting, or 3D rendering. Never assume photography."
+    )
 
 
 def _trigger_instruction(mode: CaptionMode, trigger: str, *, profile_id: str) -> str:

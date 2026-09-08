@@ -4,7 +4,7 @@ SEARCH_STYLES = r"""
   .discovery-page[hidden] { display: none; }
   .discovery-hero { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(300px,.65fr); border: 1px solid var(--line); background: var(--paper); box-shadow: var(--shadow); }
   .discovery-copy { position: relative; overflow: hidden; min-height: 330px; padding: 48px; border-right: 1px solid var(--line); }
-  .discovery-copy::after { content: "查找 / 02"; position: absolute; right: -8px; bottom: -20px; color: rgba(23,24,21,.06); font: 900 78px/1 monospace; transform: rotate(-5deg); }
+  .discovery-copy::after { content: var(--search-step-label); position: absolute; right: -8px; bottom: -20px; color: rgba(23,24,21,.06); font: 900 78px/1 monospace; transform: rotate(-5deg); }
   .discovery-copy h1 { margin: 18px 0 13px; font: 800 clamp(52px,7vw,96px)/.84 "Iowan Old Style",serif; letter-spacing: -.055em; }
   .discovery-copy p { max-width: 690px; color: var(--muted); line-height: 1.7; }
   .discovery-index { display: flex; flex-direction: column; justify-content: center; padding: 34px; background: var(--ink); color: var(--paper); }

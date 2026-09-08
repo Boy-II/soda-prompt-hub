@@ -17,6 +17,7 @@ from prompt_hub.workspace_web import WORKSPACE_HTML, WORKSPACE_SCRIPT, WORKSPACE
 INDEX_HTML = (
     read_web_asset("index.html")
     .replace("__PROMPT_HUB_BASE_STYLES__", read_web_asset("base.css"), 1)
+    .replace("__PROMPT_HUB_I18N_SCRIPT__", read_web_asset("i18n.js"), 1)
     .replace("__PROMPT_HUB_BASE_SCRIPT__", read_web_asset("base.js"), 1)
 )
 

@@ -12,9 +12,17 @@ class TaggerModelConfig:
     relative_root: Path
     general_threshold: float
     character_threshold: float = 0.85
+    label: str = ""
 
 
 TAGGER_MODELS: dict[str, TaggerModelConfig] = {
+    "wd-swinv2-tagger-v3": TaggerModelConfig(
+        id="wd-swinv2-tagger-v3",
+        model_name="SmilingWolf/wd-swinv2-tagger-v3",
+        relative_root=Path("wd14") / "wd-swinv2-tagger-v3",
+        general_threshold=0.35,
+        label="二次元与插画",
+    ),
     "idolsankaku-swinv2-tagger-v1": TaggerModelConfig(
         id="idolsankaku-swinv2-tagger-v1",
         model_name="deepghs/idolsankaku-swinv2-tagger-v1",
@@ -22,15 +30,10 @@ TAGGER_MODELS: dict[str, TaggerModelConfig] = {
         # Thresholds are model calibration, not global knobs; using the WD
         # community threshold on this model reads someone else's scale.
         general_threshold=0.3094,
-    ),
-    "wd-swinv2-tagger-v3": TaggerModelConfig(
-        id="wd-swinv2-tagger-v3",
-        model_name="SmilingWolf/wd-swinv2-tagger-v3",
-        relative_root=Path("wd14") / "wd-swinv2-tagger-v3",
-        general_threshold=0.35,
+        label="真人与摄影",
     ),
 }
-DEFAULT_TAGGER_MODEL_ID = "idolsankaku-swinv2-tagger-v1"
+DEFAULT_TAGGER_MODEL_ID = "wd-swinv2-tagger-v3"
 
 
 def _default_library_root() -> Path:
@@ -162,12 +165,18 @@ class Settings:
     @property
     def wd14_model_config(self) -> TaggerModelConfig:
         selected = os.environ.get("PROMPT_HUB_TAGGER_MODEL", DEFAULT_TAGGER_MODEL_ID)
+        return self.tagger_model_config(selected)
+
+    def tagger_model_config(self, model_id: str) -> TaggerModelConfig:
         try:
-            return TAGGER_MODELS[selected]
+            return TAGGER_MODELS[model_id]
         except KeyError as error:
             allowed = ", ".join(sorted(TAGGER_MODELS))
-            message = f"Unsupported tagger model: {selected}. Choose one of: {allowed}"
+            message = f"Unsupported tagger model: {model_id}. Choose one of: {allowed}"
             raise ValueError(message) from error
+
+    def tagger_model_root(self, model_id: str) -> Path:
+        return self.models_root / self.tagger_model_config(model_id).relative_root
 
     @property
     def wd14_model_root(self) -> Path:
