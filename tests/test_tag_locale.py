@@ -79,11 +79,19 @@ class _FakeConnection:
 
 
 class _FakeConnections:
-    def __init__(self, connection: _FakeConnection | None = None) -> None:
+    def __init__(
+        self,
+        connection: _FakeConnection | None = None,
+        assist: _FakeConnection | None = None,
+    ) -> None:
         self._connection = connection
+        self._assist = assist
 
     def list_connections(self) -> list[_FakeConnection]:
         return [self._connection] if self._connection else []
+
+    def get_caption_assist(self) -> _FakeConnection | None:
+        return self._assist
 
 
 def test_manual_table_wins_over_cache(tmp_path) -> None:

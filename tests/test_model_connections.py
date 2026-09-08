@@ -598,3 +598,69 @@ def test_deleted_external_connection_is_not_sent_to_lm_studio(settings) -> None:
             target_profile="anima",
             connections=store,
         )
+
+
+class TestCaptionAssistSelection:
+    """翻译与改写用哪个模型是使用者选的。不是「刚好排第一」。"""
+
+    def _store_with_two_models(self, settings) -> tuple[ModelConnectionStore, str, str]:
+        store = ModelConnectionStore(settings)
+        saved = store.save_endpoint(_endpoint_payload())
+        store.save_endpoint_models(
+            saved["id"],
+            [
+                {"name": "first-model", "enabled": True, "supports_vision": True},
+                {"name": "second-model", "enabled": True, "supports_vision": True},
+            ],
+        )
+        return store, f"{saved['id']}::first-model", f"{saved['id']}::second-model"
+
+    def test_unset_falls_back_so_it_keeps_working(self, settings) -> None:
+        """没设定过也要能用。强迫先设定不如保持可用。"""
+        store, _, _ = self._store_with_two_models(settings)
+        assert store.get_caption_assist() is None
+
+    def test_selection_wins_over_the_first_connection(self, settings) -> None:
+        store, first, second = self._store_with_two_models(settings)
+        store.set_caption_assist(second)
+
+        chosen = store.get_caption_assist()
+        assert chosen is not None
+        assert chosen.connection_id == second
+        assert store.list_connections()[0].connection_id == first
+
+    def test_saving_an_endpoint_does_not_wipe_the_selection(self, settings) -> None:
+        """设定跟端点存在同一个档案里。写端点时忘了带上它就会被清掉。"""
+        store, _, second = self._store_with_two_models(settings)
+        store.set_caption_assist(second)
+
+        store.save_endpoint(_endpoint_payload(label="改个名字"))
+
+        chosen = store.get_caption_assist()
+        assert chosen is not None
+        assert chosen.connection_id == second
+
+    def test_blank_clears_back_to_automatic(self, settings) -> None:
+        store, _, second = self._store_with_two_models(settings)
+        store.set_caption_assist(second)
+        store.set_caption_assist("")
+        assert store.get_caption_assist() is None
+
+    def test_unknown_connection_is_rejected(self, settings) -> None:
+        store, _first, _second = self._store_with_two_models(settings)
+        with pytest.raises(ModelConnectionError):
+            store.set_caption_assist("external-0000000000000000::nope")
+
+    def test_endpoint_exposes_current_choice_and_whether_it_was_chosen(self, settings) -> None:
+        _store, first, second = self._store_with_two_models(settings)
+        with TestClient(create_app(settings)) as client:
+            unset = client.get("/api/caption-assist").json()
+            assert unset["configured"] is False
+            assert unset["connection_id"] == first
+
+            client.put("/api/caption-assist", json={"connection_id": second})
+            after = client.get("/api/caption-assist").json()
+
+        assert after["configured"] is True
+        assert after["connection_id"] == second
+        assert [option["id"] for option in after["options"]] == [first, second]

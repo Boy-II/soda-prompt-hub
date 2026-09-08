@@ -320,13 +320,44 @@ class ModelConnectionStore:
             raise ModelConnectionError(message)
         return [_endpoint_from_mapping(item) for item in items]
 
-    def _write(self, endpoints: list[ModelEndpoint]) -> None:
+    def get_caption_assist(self) -> ModelConnection | None:
+        """翻译与改写要用哪个模型。
+
+        没有设定时回传 None。呼叫端会退回「第一个启用的连线」——
+        那是设定这个选项之前的行为。保持可用比强迫先设定重要。
+        """
+        stored = self._read_caption_assist()
+        return self.resolve(stored) if stored else None
+
+    def set_caption_assist(self, connection_id: str) -> None:
+        """记下选择。空字串代表清除。回到自动挑第一个。"""
+        value = connection_id.strip()
+        if value and self.resolve(value) is None:
+            message = "选择的模型连接不存在或已停用"
+            raise ModelConnectionError(message)
+        self._write(self._read_endpoints(), caption_assist=value)
+
+    def _read_caption_assist(self) -> str:
+        if not self.path.is_file():
+            return ""
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ""
+        return str(payload.get("caption_assist", "")) if isinstance(payload, dict) else ""
+
+    def _write(self, endpoints: list[ModelEndpoint], caption_assist: str | None = None) -> None:
         self.initialize()
         temporary = self.path.with_name(f".{self.path.name}.{secrets.token_hex(8)}.tmp")
+        # caption_assist 不是 endpoints 的一部分。但存在同一个档案里。
+        # None 代表这次不是要改它——沿用既有值。否则每次存端点都会把它清掉。
+        keep = self._read_caption_assist() if caption_assist is None else caption_assist
         payload = {
             "endpoints": [endpoint.stored() for endpoint in endpoints],
             "format": MODEL_CONNECTION_FORMAT,
         }
+        if keep:
+            payload["caption_assist"] = keep
         temporary.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",

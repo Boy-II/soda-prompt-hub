@@ -388,9 +388,17 @@ def translate_caption_with_model(
 
 
 def _pick_connection(connections: ModelConnectionStore | None) -> ModelConnection | None:
+    """优先用使用者在模型服务里指定的那个。
+
+    没有指定时退回第一个启用的连线——那是设定这个选项之前的行为。
+    但「刚好排第一」不该是隐含的决定 启用顺序一变。翻译就会无声换模型。
+    """
     if connections is None:
         return None
     try:
+        chosen = connections.get_caption_assist()
+        if chosen is not None:
+            return chosen
         rows = connections.list_connections()
     except (ValueError, OSError):
         return None

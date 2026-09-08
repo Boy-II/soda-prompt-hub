@@ -586,10 +586,14 @@ def revise_caption_with_model(
     if len(text) > MAX_REVISION_CAPTION_LENGTH or len(note) > MAX_REVISION_NOTE_LENGTH:
         raise LocalModelError("内容过长，无法改写")
 
-    rows = connections.list_connections() if connections else []
-    if not rows:
-        raise LocalModelError("没有可用的模型连接，无法改写")
-    connection = rows[0]
+    # 与翻译走同一个选择 使用者在模型服务里指定的那个。
+    # 没有指定时退回第一个启用的连线。
+    connection = connections.get_caption_assist() if connections else None
+    if connection is None:
+        rows = connections.list_connections() if connections else []
+        if not rows:
+            raise LocalModelError("没有可用的模型连接，无法改写")
+        connection = rows[0]
 
     payload = {
         "model": connection.model_name,

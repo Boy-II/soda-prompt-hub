@@ -582,6 +582,9 @@ class TestCaptionRevision:
 
 
 class _OneConnection:
+    def get_caption_assist(self):
+        return None
+
     def list_connections(self):
         return [
             ModelConnection(
