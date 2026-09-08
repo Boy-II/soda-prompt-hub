@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import shutil
 import time
 from pathlib import Path
 from threading import Event
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image, ImageEnhance
 
 from prompt_hub.api import create_app
 from prompt_hub.background_jobs import BackgroundJobStore, JobContext
-from prompt_hub.dataset_workspace import DatasetWorkspaceStore
+from prompt_hub.dataset_workspace import DatasetWorkspaceError, DatasetWorkspaceStore
 from prompt_hub.remote_nodes import BRIDGE_DIRECTORIES
 
 
@@ -448,3 +450,57 @@ def test_import_records_origin_for_handoff(tmp_path, settings) -> None:
     workspace = response.json()["workspace"]
     assert workspace["origin"] == origin
     assert workspace["source_origin"] == "pic_dataset_tool"
+
+
+def test_workspace_reports_when_its_source_is_gone(tmp_path, settings) -> None:
+    """来源被移走后要一眼看得出来。"""
+    source = tmp_path / "gone-later"
+    source.mkdir()
+    (source / "001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+
+    store = DatasetWorkspaceStore(settings)
+    store.initialize()
+    workspace = store.register(source, name="gone-later")
+
+    assert store.get(workspace["workspace_id"])["source_available"] is True
+
+    shutil.rmtree(source)
+    assert store.get(workspace["workspace_id"])["source_available"] is False
+    assert store.list_workspaces()[0]["source_available"] is False
+
+
+def test_availability_is_not_written_back_into_the_manifest(tmp_path, settings) -> None:
+    """目录可能只是暂时没挂载。把「不在」固化进档案会让重新挂载后仍显示失效。"""
+    source = tmp_path / "unmounted"
+    source.mkdir()
+    (source / "001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+
+    store = DatasetWorkspaceStore(settings)
+    store.initialize()
+    workspace = store.register(source, name="unmounted")
+    workspace_id = workspace["workspace_id"]
+
+    shutil.rmtree(source)
+    assert store.get(workspace_id)["source_available"] is False
+
+    source.mkdir()
+    (source / "001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+    assert store.get(workspace_id)["source_available"] is True
+
+
+def test_queue_fails_fast_with_one_clear_reason(tmp_path, settings) -> None:
+    """52 张各自回「图片不存在」会把真正的原因拆散。"""
+    source = tmp_path / "removed"
+    source.mkdir()
+    (source / "001.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+
+    store = DatasetWorkspaceStore(settings)
+    store.initialize()
+    workspace = store.register(source, name="removed")
+    shutil.rmtree(source)
+
+    with pytest.raises(DatasetWorkspaceError) as error:
+        store.require_source(workspace["workspace_id"])
+
+    assert "已经不在" in str(error.value)
+    assert str(source) in str(error.value)

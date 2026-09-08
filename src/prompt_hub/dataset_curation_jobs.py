@@ -73,6 +73,7 @@ class DatasetCurationJobsMixin:
         workspace_id = str(payload.get("workspace_id", ""))
         if not workspace_id:
             raise DatasetWorkspaceError("WD14 job is missing workspace_id")
+        self.workspace_store.require_source(workspace_id)
         general_threshold = self.settings.wd14_general_threshold
         character_threshold = self.settings.wd14_character_threshold
         caption_settings = normalize_caption_settings("anima", payload)
@@ -201,6 +202,7 @@ class DatasetCurationJobsMixin:
         workspace_id = str(payload.get("workspace_id", ""))
         if not workspace_id:
             raise DatasetWorkspaceError("Krea 2 VLM job is missing workspace_id")
+        self.workspace_store.require_source(workspace_id)
         model = str(payload.get("model", "")).strip()
         if not model:
             raise DatasetWorkspaceError("Krea 2 VLM job is missing model")

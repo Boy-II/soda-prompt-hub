@@ -53,6 +53,28 @@ class DatasetWorkspaceError(ValueError):
     pass
 
 
+WORKSPACE_MISSING_MESSAGE = "数据集工作区不存在"
+
+
+def _source_is_available(source_path: str) -> bool:
+    if not source_path:
+        return False
+    try:
+        return Path(source_path).expanduser().is_dir()
+    except (OSError, ValueError):
+        return False
+
+
+def _with_source_availability(workspace: dict[str, Any]) -> dict[str, Any]:
+    """标注来源是否还在。
+
+    只加在读出来的副本上。不写回 manifest——目录可能只是暂时没挂载。
+    把「不在」固化进档案会让重新挂载后仍显示失效。
+    """
+    workspace["source_available"] = _source_is_available(str(workspace.get("source_path", "")))
+    return workspace
+
+
 class DatasetWorkspaceStore:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -102,7 +124,7 @@ class DatasetWorkspaceStore:
         path = self._manifest_path(workspace_id)
         if path is None or not path.is_file():
             return None
-        return _load_json(path)
+        return _with_source_availability(_load_json(path))
 
     def list_workspaces(self) -> list[dict[str, Any]]:
         workspaces = []
@@ -110,10 +132,28 @@ class DatasetWorkspaceStore:
             return workspaces
         for path in self.root.glob("dataset-*/workspace.json"):
             try:
-                workspaces.append(_load_json(path))
+                workspaces.append(_with_source_availability(_load_json(path)))
             except (OSError, ValueError, json.JSONDecodeError):
                 continue
         return sorted(workspaces, key=lambda item: str(item.get("updated_at", "")), reverse=True)
+
+    def require_source(self, workspace_id: str) -> Path:
+        """确认来源目录还在。不在就立刻报清楚。
+
+        来源被移走或删掉之后。逐张解析会一张一张地回「图片不存在」。
+        52 张就是 52 条各自独立的错误——真正的原因是整个目录不见了。
+        这个诊断在逐张那一层被拆散了。所以在队列开始前先问一次。
+        """
+        workspace = self.get(workspace_id)
+        if workspace is None:
+            raise DatasetWorkspaceError(WORKSPACE_MISSING_MESSAGE)
+        source = str(workspace.get("source_path", ""))
+        if not _source_is_available(source):
+            raise DatasetWorkspaceError(
+                f"数据集来源目录已经不在：{source}。"
+                "它可能被移动或删除了。请重新导入，或把目录放回原处。"
+            )
+        return Path(source)
 
     def find_by_source(self, source_path: Path) -> dict[str, Any] | None:
         source = str(source_path.resolve())
