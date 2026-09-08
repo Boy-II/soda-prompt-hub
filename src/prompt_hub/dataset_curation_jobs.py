@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from prompt_hub.config import DEFAULT_TAGGER_MODEL_ID, TaggerModelConfig
 from prompt_hub.dataset_curation_records import (
     CaptionProfile,
     JobProgress,
@@ -36,7 +37,7 @@ if TYPE_CHECKING:
     from prompt_hub.model_connections import ModelConnectionStore
 
 Tagger = Callable[[Path], dict[str, object]]
-TaggerFactory = Callable[[float, float, ProviderMode], Tagger]
+TaggerFactory = Callable[[TaggerModelConfig, ProviderMode], Tagger]
 Krea2Captioner = Callable[[Path, str, str, Mapping[str, Any]], dict[str, Any]]
 
 
@@ -88,8 +89,6 @@ class DatasetCurationJobsMixin:
         if not workspace_id:
             raise DatasetWorkspaceError("WD14 job is missing workspace_id")
         self.workspace_store.require_source(workspace_id)
-        general_threshold = self.settings.wd14_general_threshold
-        character_threshold = self.settings.wd14_character_threshold
         caption_settings = normalize_caption_settings("anima", payload)
         provider = str(payload.get("provider", "auto"))
         if provider not in {"auto", "coreml", "cpu"}:
@@ -100,9 +99,18 @@ class DatasetCurationJobsMixin:
         model = str(payload.get("model", "")).strip()
         if tagger_mode == "model" and not model:
             raise DatasetWorkspaceError("使用模型打标时必须选择打标模型")
+        try:
+            tagger_config = self.settings.tagger_model_config(
+                str(payload.get("tagger_model_id", DEFAULT_TAGGER_MODEL_ID))
+            )
+        except ValueError as error:
+            raise DatasetWorkspaceError(str(error)) from error
         paths = self._select_tag_paths(workspace_id, payload)
         job_id = str(getattr(context, "job_id", ""))
         state = self.read_state(workspace_id)
+        if tagger_mode == "wd14" and state.get("tagger_model_id") != tagger_config.id:
+            state["tagger_model_id"] = tagger_config.id
+            self._write_state(workspace_id, state)
         if job_id:
             paths = [
                 path for path in paths if not _completed_by_job(_state_item(state, path), job_id)
@@ -121,8 +129,7 @@ class DatasetCurationJobsMixin:
             None
             if tagger_mode == "model"
             else self._tagger_factory(
-                general_threshold,
-                character_threshold,
+                tagger_config,
                 provider,  # type: ignore[arg-type]
             )
         )
@@ -171,6 +178,11 @@ class DatasetCurationJobsMixin:
                     tagger_result = tagger(image_path)
                     result = {
                         **tagger_result,
+                        "model": tagger_config.model_name,
+                        "tagger_model_id": tagger_config.id,
+                        "tagger_model_label": tagger_config.label,
+                        "general_threshold": tagger_config.general_threshold,
+                        "character_threshold": tagger_config.character_threshold,
                         "tag_string": normalize_caption_with_settings(
                             "anima",
                             str(tagger_result.get("tag_string", "")),
@@ -437,15 +449,14 @@ class DatasetCurationJobsMixin:
 
     def _default_tagger_factory(
         self,
-        general_threshold: float,
-        character_threshold: float,
+        config: TaggerModelConfig,
         provider: ProviderMode,
     ) -> Tagger:
         return WD14Tagger(
-            model_root=self.settings.wd14_model_root,
-            model_name=self.settings.wd14_model_name,
-            general_threshold=general_threshold,
-            character_threshold=character_threshold,
+            model_root=self.settings.tagger_model_root(config.id),
+            model_name=config.model_name,
+            general_threshold=config.general_threshold,
+            character_threshold=config.character_threshold,
             provider=provider,
         ).tag
 
@@ -626,6 +637,8 @@ class DatasetCurationJobsMixin:
                 "job_id": job_id,
                 "tagger": tagger,
                 "model": str(result.get("model", "SmilingWolf/wd-swinv2-tagger-v3")),
+                "tagger_model_id": str(result.get("tagger_model_id", "")),
+                "tagger_model_label": str(result.get("tagger_model_label", "")),
                 "provider": str(result.get("provider", "")),
                 "tagged_at": _now(),
                 "general_threshold": result.get(

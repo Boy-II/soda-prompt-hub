@@ -4,7 +4,7 @@ COMFY_STYLES = r"""
   .comfy-page .eyebrow, .comfy-page .section-label, .comfy-panel label { text-transform: none; }
   .comfy-hero { display: grid; grid-template-columns: 1.15fr .85fr; min-height: 330px; border: 1px solid var(--line); background: var(--paper); box-shadow: var(--shadow); }
   .comfy-hero-copy { position: relative; overflow: hidden; padding: 48px; border-right: 1px solid var(--line); background: linear-gradient(135deg, rgba(216,75,42,.08), transparent 55%); }
-  .comfy-hero-copy::after { content: "结果 / 05"; position: absolute; right: -8px; bottom: -20px; color: rgba(23,24,21,.06); font: 900 72px/1 monospace; transform: rotate(-5deg); }
+  .comfy-hero-copy::after { content: var(--result-step-label); position: absolute; right: -8px; bottom: -20px; color: rgba(23,24,21,.06); font: 900 72px/1 monospace; transform: rotate(-5deg); }
   .comfy-hero h1 { max-width: 720px; margin: 12px 0 16px; font: 900 clamp(46px, 7vw, 90px)/.83 Georgia, serif; letter-spacing: -.06em; }
   .comfy-hero p { max-width: 720px; line-height: 1.7; }
   .comfy-flow { display: flex; flex-direction: column; justify-content: center; padding: 38px; background: #d8d1bf; }

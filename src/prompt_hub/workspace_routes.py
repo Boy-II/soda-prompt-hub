@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from prompt_hub.config import DEFAULT_TAGGER_MODEL_ID
 from prompt_hub.dataset_workspace import (
     ARCHIVE_JOB_TYPE,
     MAX_ARCHIVE_UPLOAD_BYTES,
@@ -49,6 +50,9 @@ class DatasetWD14QueueInput(BaseModel):
     scope: Literal["untagged", "failed", "selected", "filtered", "all"] = "untagged"
     paths: list[str] = Field(default_factory=list, max_length=100000)
     tagger: Literal["wd14", "model"] = "wd14"
+    tagger_model_id: Literal["wd-swinv2-tagger-v3", "idolsankaku-swinv2-tagger-v1"] = (
+        DEFAULT_TAGGER_MODEL_ID
+    )
     model: str = Field(default="", max_length=400)
     provider: Literal["auto", "coreml", "cpu"] = "auto"
     overwrite: bool = False

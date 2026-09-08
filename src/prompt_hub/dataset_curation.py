@@ -6,6 +6,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
+from prompt_hub.config import DEFAULT_TAGGER_MODEL_ID
 from prompt_hub.dataset_curation_export import DatasetExportMixin
 from prompt_hub.dataset_curation_jobs import (
     DatasetCurationJobsMixin,
@@ -119,6 +120,7 @@ class DatasetCurationStore(DatasetCurationJobsMixin, DatasetExportMixin):
             image["curation"] = curation
         report["curation_revision"] = int(state.get("revision", 0))
         report["curation_updated_at"] = str(state.get("updated_at", ""))
+        report["tagger_model_id"] = str(state.get("tagger_model_id", DEFAULT_TAGGER_MODEL_ID))
         return report
 
     def analytics(self, workspace_id: str) -> dict[str, Any]:

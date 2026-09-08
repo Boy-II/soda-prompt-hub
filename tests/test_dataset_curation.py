@@ -17,6 +17,7 @@ from prompt_hub.dataset_curation_jobs import _batch_failure_message
 from prompt_hub.dataset_curation_support import (
     _normalize_caption,
     normalize_caption_settings,
+    normalize_caption_with_settings,
 )
 from prompt_hub.dataset_workspace import DatasetWorkspaceError, DatasetWorkspaceStore
 
@@ -94,9 +95,11 @@ def _fake_factory(calls: list[str]):
     return tag
 
 
-def _fake_factory_with_thresholds(calls: list[tuple[float, float, str]]):
-    def factory(general: float, character: float, provider: str):
-        calls.append((general, character, provider))
+def _fake_factory_with_thresholds(calls: list[tuple[str, float, float, str]]):
+    def factory(config, provider: str):
+        general = config.general_threshold
+        character = config.character_threshold
+        calls.append((config.id, general, character, provider))
 
         def tag(_path: Path) -> dict[str, object]:
             return {
@@ -164,7 +167,7 @@ def test_workspace_wd14_applies_caption_settings_and_model_threshold_defaults(
     tmp_path,
 ) -> None:
     _source_path, workspace_store, workspace = _scanned_workspace(settings, tmp_path, count=1)
-    calls: list[tuple[float, float, str]] = []
+    calls: list[tuple[str, float, float, str]] = []
     curation = DatasetCurationStore(
         settings,
         workspace_store,
@@ -184,12 +187,18 @@ def test_workspace_wd14_applies_caption_settings_and_model_threshold_defaults(
     )
 
     assert result["completed"] == 1
-    assert calls == [(settings.wd14_general_threshold, settings.wd14_character_threshold, "auto")]
+    assert calls == [
+        (
+            "wd-swinv2-tagger-v3",
+            settings.wd14_general_threshold,
+            settings.wd14_character_threshold,
+            "auto",
+        )
+    ]
     state = curation.read_state(workspace["workspace_id"])
     item = state["items"]["image-0.png"]
-    assert item["captions"]["anima"]["current"] == (
-        "miru, 1girl, solo, white_dress, photo, realistic"
-    )
+    assert item["captions"]["anima"]["current"] == "miru, 1girl, solo, white_dress"
+    assert item["wd14"]["tagger_model_id"] == "wd-swinv2-tagger-v3"
     assert item["wd14"]["general_threshold"] == settings.wd14_general_threshold
     assert item["wd14"]["caption_settings"]["trigger"] == "miru"
 
@@ -201,7 +210,7 @@ def test_workspace_wd14_captions_bulk_snapshots_and_export(settings, tmp_path) -
     curation = DatasetCurationStore(
         settings,
         workspace_store,
-        tagger_factory=lambda _general, _character, _provider: _fake_factory(factory_calls),
+        tagger_factory=lambda _config, _provider: _fake_factory(factory_calls),
     )
     curation.initialize()
     context = _RecordingContext()
@@ -238,8 +247,8 @@ def test_workspace_wd14_captions_bulk_snapshots_and_export(settings, tmp_path) -
 
     state = curation.read_state(workspace["workspace_id"])
     first = state["items"]["image-0.png"]
-    assert first["wd14"]["model"] == "fake-wd14"
-    assert first["captions"]["anima"]["current"] == "1girl, solo, grey_hair, photo, realistic"
+    assert first["wd14"]["model"] == "SmilingWolf/wd-swinv2-tagger-v3"
+    assert first["captions"]["anima"]["current"] == "1girl, solo, grey_hair"
     assert first["captions"]["krea2"]["current"] == ""
 
     with pytest.raises(DatasetWorkspaceError, match="英文"):
@@ -602,7 +611,13 @@ def test_caption_modes_api_exposes_backend_contract(settings) -> None:
         "style",
     ]
     assert payload["modes"][0]["trigger_label"] == ""
+    assert payload["modes"][0]["omits"] == "无"
+    assert payload["modes"][1]["omits"] == "面部五官"
+    assert payload["modes"][1]["trigger_label"] == "人物称呼"
+    assert payload["modes"][2]["label"] == "服装"
+    assert payload["modes"][3]["label"] == "风格"
     assert payload["media_tags_default"] is True
+    assert payload["media_tags_by_mode"]["style"] is False
     assert payload["max_tokens_default"] == 300
     assert {option["id"] for option in payload["options"] if option["profiles"] == ["krea2"]} == {
         "avoid_meta_phrases",
@@ -664,7 +679,96 @@ def test_caption_endpoint_accepts_contract_post_and_applies_trigger(settings, tm
         )
 
     assert response.status_code == 200
-    assert response.json()["caption"]["current"] == "miru, 1girl, solo, photo, realistic"
+    assert response.json()["caption"]["current"] == "miru, 1girl, solo"
+
+
+def test_media_tags_keep_detected_medium_without_forcing_photo() -> None:
+    anima_settings = normalize_caption_settings("anima", {"media_tags": True})
+    assert (
+        normalize_caption_with_settings(
+            "anima",
+            "1girl, solo, anime_coloring",
+            anima_settings,
+        )
+        == "1girl, solo, anime_coloring"
+    )
+
+    krea_settings = normalize_caption_settings("krea2", {"media_tags": True})
+    assert (
+        normalize_caption_with_settings(
+            "krea2",
+            "An anime illustration with flat cel shading.",
+            krea_settings,
+        )
+        == "An anime illustration with flat cel shading."
+    )
+
+
+def test_media_tags_can_be_omitted_and_style_mode_defaults_to_omitted() -> None:
+    anima_settings = normalize_caption_settings("anima", {"media_tags": False})
+    assert (
+        normalize_caption_with_settings(
+            "anima",
+            "1girl, solo, photo, realistic, anime_coloring",
+            anima_settings,
+        )
+        == "1girl, solo"
+    )
+
+    krea_settings = normalize_caption_settings("krea2", {"media_tags": False})
+    assert (
+        normalize_caption_with_settings(
+            "krea2",
+            "A woman stands by a window in a realistic photo medium.",
+            krea_settings,
+        )
+        == "A woman stands by a window."
+    )
+
+    style_settings = normalize_caption_settings("krea2", {"mode": "style"})
+    assert style_settings["media_tags"] is False
+
+
+def test_workspace_can_select_photo_tagger_per_dataset(settings, tmp_path) -> None:
+    _source_path, workspace_store, workspace = _scanned_workspace(settings, tmp_path, count=1)
+    calls: list[tuple[str, float, float, str]] = []
+    curation = DatasetCurationStore(
+        settings,
+        workspace_store,
+        tagger_factory=_fake_factory_with_thresholds(calls),
+    )
+
+    result = curation.tag_job(
+        {
+            "workspace_id": workspace["workspace_id"],
+            "scope": "all",
+            "tagger_model_id": "idolsankaku-swinv2-tagger-v1",
+        },
+        _RecordingContext(),
+    )
+
+    assert result["completed"] == 1
+    assert calls == [("idolsankaku-swinv2-tagger-v1", 0.3094, 0.85, "auto")]
+    item = curation.read_state(workspace["workspace_id"])["items"]["image-0.png"]
+    assert item["wd14"]["tagger_model_id"] == "idolsankaku-swinv2-tagger-v1"
+    assert item["wd14"]["model"] == "deepghs/idolsankaku-swinv2-tagger-v1"
+
+
+def test_workspace_rejects_unknown_local_tagger(settings, tmp_path) -> None:
+    source = _source(tmp_path, 1)
+    with TestClient(create_app(settings)) as client:
+        imported = client.post(
+            "/api/dataset-workspaces/import",
+            json={"source_path": str(source)},
+        ).json()
+        workspace_id = imported["workspace"]["workspace_id"]
+        assert _wait(client, imported["job"]["job_id"])["status"] == "completed"
+        response = client.post(
+            f"/api/dataset-workspaces/{workspace_id}/wd14",
+            json={"scope": "all", "tagger_model_id": "unknown-tagger"},
+        )
+
+    assert response.status_code == 422
 
 
 def _wait(client: TestClient, job_id: str) -> dict:
@@ -685,7 +789,7 @@ def test_workspace_curation_api_queues_long_job_and_decorates_report(
 ) -> None:
     source = _source(tmp_path, 2)
 
-    def factory(_self, _general, _character, _provider):
+    def factory(_self, _config, _provider):
         return _fake_factory([])
 
     monkeypatch.setattr(DatasetCurationStore, "_default_tagger_factory", factory)
@@ -726,7 +830,7 @@ def test_wd14_queue_over_24_resumes_without_overwriting_reviewed_captions(
     curation = DatasetCurationStore(
         settings,
         workspace_store,
-        tagger_factory=lambda _general, _character, _provider: _fake_factory(factory_calls),
+        tagger_factory=lambda _config, _provider: _fake_factory(factory_calls),
     )
     curation.update_caption(
         workspace["workspace_id"],

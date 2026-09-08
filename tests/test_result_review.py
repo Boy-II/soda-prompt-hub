@@ -264,13 +264,14 @@ def test_local_vision_krea2_caption_uses_native_chat_and_english(tmp_path, monke
     assert captured["payload"]["reasoning"] == "off"
     assert captured["payload"]["input"][0]["type"] == "image"
     assert "previous reviewed caption" in captured["payload"]["input"][1]["content"]
-    assert result["draft"] == (
-        "An adult character stands in soft teal studio light in a realistic photo medium."
-    )
+    assert result["draft"] == "An adult character stands in soft teal studio light."
     assert result["observations"]["lighting"] == "soft teal studio light"
 
 
-def test_krea2_caption_settings_replace_subject_and_keep_media_tags(tmp_path, monkeypatch) -> None:
+def test_krea2_caption_settings_replace_subject_without_forcing_photo(
+    tmp_path,
+    monkeypatch,
+) -> None:
     image_path = tmp_path / "dataset.png"
     Image.new("RGB", (80, 120), "teal").save(image_path)
     captured = {}
@@ -307,8 +308,8 @@ def test_krea2_caption_settings_replace_subject_and_keep_media_tags(tmp_path, mo
     assert "facial features" in captured["payload"]["system_prompt"]
     assert "avoid meta phrases" in captured["payload"]["system_prompt"]
     assert result["draft"].startswith("miru sits on a chair")
-    assert "photo" in result["draft"]
-    assert "realistic" in result["draft"]
+    assert "photo" not in result["draft"]
+    assert "realistic" not in result["draft"]
 
 
 @pytest.mark.parametrize(
@@ -316,11 +317,11 @@ def test_krea2_caption_settings_replace_subject_and_keep_media_tags(tmp_path, mo
     [
         (
             "A young woman sitting on a chair in a white dress.",
-            "miru sitting on a chair in a white dress in a realistic photo medium.",
+            "miru sitting on a chair in a white dress.",
         ),
         (
             "A close-up of a woman sitting on a chair.",
-            "A close-up of miru sitting on a chair in a realistic photo medium.",
+            "A close-up of miru sitting on a chair.",
         ),
     ],
 )
@@ -393,7 +394,7 @@ def test_local_vision_anima_tags_parse_json_tags(tmp_path, monkeypatch) -> None:
     assert "Existing reviewed or draft Anima tags" in captured["payload"]["input"][1]["content"]
     assert result["tagger"] == "model"
     assert result["model"] == "vision-model"
-    assert result["tag_string"] == "1girl, solo, blue_eyes, photo, realistic"
+    assert result["tag_string"] == "1girl, solo, blue_eyes"
     assert result["general"][0] == {"tag": "1girl"}
     assert "score" not in result["general"][0]
     assert result["rating"] == {"tag": "safe"}
@@ -437,8 +438,8 @@ def test_anima_caption_settings_prefix_trigger_preserve_structure_and_ignore_sen
     assert "avoid meta phrases" not in captured["payload"]["system_prompt"]
     assert result["tag_string"].startswith("miru, 1girl, solo")
     assert "blue_eyes" not in result["tag_string"]
-    assert "photo" in result["tag_string"]
-    assert "realistic" in result["tag_string"]
+    assert "photo" not in result["tag_string"]
+    assert "realistic" not in result["tag_string"]
 
 
 def test_anima_mode_filtering_uses_exact_tag_groups_not_substrings(tmp_path, monkeypatch) -> None:
@@ -502,8 +503,8 @@ def test_caption_mode_contract_matches_documented_modes_and_options() -> None:
     assert portrait == {
         "id": "portrait",
         "label": "肖像",
-        "omits": "臉部五官",
-        "trigger_label": "人物稱呼",
+        "omits": "面部五官",
+        "trigger_label": "人物称呼",
     }
     options = {option["id"]: option for option in contract["options"]}
     assert set(options) == {

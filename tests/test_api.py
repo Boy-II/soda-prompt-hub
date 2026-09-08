@@ -321,12 +321,23 @@ def test_api_exposes_selected_tagger_calibration(settings) -> None:
         response = client.get("/api/tagger-config")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "id": "idolsankaku-swinv2-tagger-v1",
-        "model": "deepghs/idolsankaku-swinv2-tagger-v1",
-        "general_threshold": 0.3094,
+    payload = response.json()
+    assert payload["default_id"] == "wd-swinv2-tagger-v3"
+    assert payload["id"] == "wd-swinv2-tagger-v3"
+    assert [model["id"] for model in payload["models"]] == [
+        "wd-swinv2-tagger-v3",
+        "idolsankaku-swinv2-tagger-v1",
+    ]
+    assert payload["models"][0] == {
+        "id": "wd-swinv2-tagger-v3",
+        "label": "二次元与插画",
+        "model": "SmilingWolf/wd-swinv2-tagger-v3",
+        "general_threshold": 0.35,
         "character_threshold": 0.85,
+        "available": False,
     }
+    assert payload["models"][1]["label"] == "真人与摄影"
+    assert payload["models"][1]["general_threshold"] == 0.3094
 
 
 def test_page_uses_scoped_headers_and_accessible_contrast(settings) -> None:

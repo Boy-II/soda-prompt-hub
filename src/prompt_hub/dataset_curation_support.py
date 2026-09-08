@@ -34,6 +34,28 @@ CAPTION_OPTION_IDS = (
     "plain_words",
 )
 TAG_IGNORED_OPTIONS = {"avoid_meta_phrases", "avoid_vague", "plain_words"}
+ANIMA_MEDIA_TAGS = {
+    "3d",
+    "3d_render",
+    "anime_coloring",
+    "digital_art",
+    "illustration",
+    "lineart",
+    "oil_painting_(medium)",
+    "painting_(medium)",
+    "photo",
+    "photorealistic",
+    "realistic",
+    "sketch",
+    "traditional_media",
+    "watercolor_(medium)",
+}
+KREA2_MEDIA_SUFFIX = re.compile(
+    r"\s+(?:(?:rendered|depicted)\s+)?(?:in|as)\s+(?:an?\s+)?"
+    r"(?:realistic\s+)?(?:photo(?:graphic)?|photograph|anime|illustration|digital art|"
+    r"3d render|painting|watercolor|sketch)(?:\s+(?:medium|style))?(?=[.!?,;:]|$)",
+    flags=re.IGNORECASE,
+)
 
 
 class CaptionSettings(TypedDict):
@@ -118,30 +140,31 @@ def caption_mode_contract() -> dict[str, Any]:
             {
                 "id": "general",
                 "label": "通用",
-                "omits": "無",
+                "omits": "无",
                 "trigger_label": "",
             },
             {
                 "id": "portrait",
                 "label": "肖像",
-                "omits": "臉部五官",
-                "trigger_label": "人物稱呼",
+                "omits": "面部五官",
+                "trigger_label": "人物称呼",
             },
             {
                 "id": "outfit",
-                "label": "服裝",
-                "omits": "服裝",
-                "trigger_label": "服裝名稱",
+                "label": "服装",
+                "omits": "服装",
+                "trigger_label": "服装名称",
             },
             {
                 "id": "style",
-                "label": "風格",
-                "omits": "畫風、色調、光線",
-                "trigger_label": "風格名稱",
+                "label": "风格",
+                "omits": "画风、色调、光线",
+                "trigger_label": "风格名称",
             },
         ],
         "options": options,
         "media_tags_default": True,
+        "media_tags_by_mode": {"general": True, "portrait": True, "outfit": True, "style": False},
         "max_tokens_default": MAX_CAPTION_TOKENS,
     }
 
@@ -166,7 +189,7 @@ def normalize_caption_settings(
         for option_id in CAPTION_OPTION_IDS
         if profile_id != "anima" or option_id not in TAG_IGNORED_OPTIONS
     }
-    with_default = raw.get("media_tags", True)
+    with_default = raw.get("media_tags", mode != "style")
     with_tokens = raw.get("max_tokens", MAX_CAPTION_TOKENS)
     try:
         max_tokens = int(with_tokens)
@@ -185,18 +208,18 @@ def normalize_caption_settings(
 
 def _caption_option_label(option_id: str) -> str:
     return {
-        "age": "包含年齡資訊",
-        "lighting": "描述光線",
+        "age": "包含年龄信息",
+        "lighting": "描述光线",
         "light_source": "描述光源",
-        "camera_angle": "描述鏡頭角度",
-        "action": "描述動作",
-        "content_rating": "包含內容分級",
-        "exclude_artwork_info": "排除作品資訊",
-        "avoid_meta_phrases": "避免元短語",
+        "camera_angle": "描述镜头角度",
+        "action": "描述动作",
+        "content_rating": "包含内容分级",
+        "exclude_artwork_info": "排除作品信息",
+        "avoid_meta_phrases": "避免元短语",
         "depth_of_field": "描述景深",
-        "shot_type": "描述景別",
+        "shot_type": "描述景别",
         "avoid_vague": "避免模糊描述",
-        "plain_words": "使用平實詞彙",
+        "plain_words": "使用直白词汇",
     }.get(option_id, option_id)
 
 
@@ -279,8 +302,8 @@ def _apply_anima_caption_settings(
         for tag in tags
         if not any(_tag_matches_omitted_marker(tag, marker) for marker in omitted)
     ]
-    if settings["media_tags"]:
-        filtered.extend(["photo", "realistic"])
+    if not settings["media_tags"]:
+        filtered = [tag for tag in filtered if tag not in ANIMA_MEDIA_TAGS]
     if settings["mode"] != "general" and settings["trigger"]:
         filtered.insert(0, normalize_tag_draft(settings["trigger"].replace(" ", "_")))
     return list(dict.fromkeys(tag for tag in filtered if tag))
@@ -291,10 +314,8 @@ def _apply_krea2_caption_settings(caption: str, settings: CaptionSettings) -> st
     trigger = settings["trigger"]
     if settings["mode"] != "general" and trigger:
         clean = _replace_krea2_subject(clean, trigger)
-    if settings["media_tags"]:
-        lower = clean.casefold()
-        if "photo" not in lower and "realistic" not in lower:
-            clean = clean.rstrip(".") + " in a realistic photo medium."
+    if not settings["media_tags"]:
+        clean = KREA2_MEDIA_SUFFIX.sub("", clean)
     return clean
 
 

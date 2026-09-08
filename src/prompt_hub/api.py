@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -15,7 +15,7 @@ from prompt_hub.background_jobs import BackgroundJobRunner, BackgroundJobStore
 from prompt_hub.comfy_results import ComfyResultStore
 from prompt_hub.comfy_routes import create_comfy_router
 from prompt_hub.compute_bridge import compute_contract
-from prompt_hub.config import Settings
+from prompt_hub.config import DEFAULT_TAGGER_MODEL_ID, TAGGER_MODELS, Settings
 from prompt_hub.creative import (
     CreativeStore,
     apply_iteration_suggestions,
@@ -195,7 +195,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         image_path: Path,
         model: str,
         existing_caption: str,
-        caption_settings: dict[str, Any],
+        caption_settings: Mapping[str, Any],
     ) -> dict[str, Any]:
         if not MODEL_REF_PATTERN.fullmatch(model):
             return DatasetCurationStore._default_krea2_captioner(  # noqa: SLF001
@@ -380,11 +380,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/api/tagger-config")
     def get_tagger_config() -> dict[str, Any]:
+        models = [
+            {
+                "id": config.id,
+                "label": config.label,
+                "model": config.model_name,
+                "general_threshold": config.general_threshold,
+                "character_threshold": config.character_threshold,
+                "available": all(
+                    (active_settings.tagger_model_root(config.id) / filename).is_file()
+                    for filename in ("model.onnx", "selected_tags.csv")
+                ),
+            }
+            for config in TAGGER_MODELS.values()
+        ]
         return {
+            "default_id": DEFAULT_TAGGER_MODEL_ID,
             "id": active_settings.wd14_model_config.id,
             "model": active_settings.wd14_model_name,
             "general_threshold": active_settings.wd14_general_threshold,
             "character_threshold": active_settings.wd14_character_threshold,
+            "models": models,
         }
 
     @application.post("/api/tags/localize")
