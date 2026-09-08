@@ -503,3 +503,21 @@ def test_revision_overwrites_draft_and_drops_stale_translation() -> None:
     # 失败分支不可以碰草稿
     failure = revise_block[revise_block.index("catch(error)") :]
     assert "datasetDetailKrea2Draft').value=" not in failure
+
+
+def test_endpoint_editor_says_whether_it_will_add_or_overwrite() -> None:
+    """表单存过一次之后会停在编辑状态。
+
+    只写「保存」的话。改成另一个服务的位址再存就会盖掉前一个而毫无提示。
+    """
+    assert "更新「${editing}」" in INDEX_HTML
+    assert "'新增服务'" in INDEX_HTML
+    assert 'id="newEndpoint"' in INDEX_HTML
+
+
+def test_choosing_a_preset_starts_a_new_endpoint() -> None:
+    """选预设代表要配置另一个服务。不该沿用上一次的编辑目标。"""
+    handler_at = INDEX_HTML.index("#remoteEndpointPresets').addEventListener")
+    handler = INDEX_HTML[handler_at : handler_at + 400]
+    assert "clearEndpointForm()" in handler
+    assert handler.index("clearEndpointForm()") < handler.index("endpointProvider")
