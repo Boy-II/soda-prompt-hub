@@ -186,8 +186,7 @@ WORKSPACE_HTML = r"""
       <div class="dataset-action-row"><button id="datasetDetailDraftSave">只保存草稿</button><button class="dataset-primary" id="datasetDetailDraftConfirm">确认写入 Krea 2</button></div>
       <p class="dataset-hint">确认时系统会保存一份可回退的修改记录；Anima 与 WD14 不会改变。</p>
       <div class="dataset-similar-panel"><button id="datasetFindSimilar" disabled>以此图查相似</button><span id="datasetFindSimilarStatus">正在检查真实视觉索引……</span></div>
-      <label>审核备注<textarea id="datasetDetailNote" maxlength="2000" placeholder="记录质量、特征、需要修正的标签……"></textarea></label>
-      <button class="dataset-primary" id="datasetDetailSave">保存审核和两种说明</button>
+      <div class="dataset-action-row"><button class="dataset-primary" id="datasetDetailApprove">审核通过并看下一张</button><button id="datasetDetailSave">只保存不改状态</button></div>
       <details><summary>文件指纹与来源</summary><pre id="datasetDetailHashes"></pre></details>
     </div>
   </dialog>
@@ -455,7 +454,7 @@ WORKSPACE_SCRIPT = r"""
 <script>
 (() => {
   const deviceName = () => window.getPromptHubDeviceName?.() || 'Windows 绘图设备';
-  const state = {captionContract: null, captionOptions: {}, workspaces: [], active: null, report: null, analytics: null, models: [], exports: [], preflight: null, visible: [], pageItems: [], page: 1, pageSize: 24, selected: new Set(), detailIndex: -1, poll: null, bulkPreview: null, sourceCaptionPreview: null, mode: 'simple', step: 0, browse: null, zipFile: null, importJob: null};
+  const state = {captionContract: null, captionOptions: {}, captionLocales: {}, workspaces: [], active: null, report: null, analytics: null, models: [], exports: [], preflight: null, visible: [], pageItems: [], page: 1, pageSize: 24, selected: new Set(), detailIndex: -1, poll: null, bulkPreview: null, sourceCaptionPreview: null, mode: 'simple', step: 0, browse: null, zipFile: null, importJob: null};
   const compactDatasetView = window.matchMedia('(max-width: 700px)');
   const labels = {pending:'未审核', approved:'保留', needs_review:'待复查', excluded:'排除'};
   const workspaceStatusLabels = {registered:'等待扫描', scanning:'正在扫描', ready:'可使用', failed:'扫描失败', queued:'等待扫描', canceled:'已取消'};
@@ -523,11 +522,45 @@ WORKSPACE_SCRIPT = r"""
   async function rollbackSnapshot() { const id=$('#datasetSnapshot').value; if (!id || !confirm(`恢复说明文字修改记录 ${id}？当前内容也会先保存，之后仍可找回。`)) return; const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/snapshots/${encodeURIComponent(id)}/rollback`,{method:'POST'}); $('#datasetBulkResult').textContent=`已恢复 ${result.changed} 张；同时保存了当前内容，记录编号 ${result.snapshot}。`; await loadReport(); }
   function detailItem() { return state.pageItems[state.detailIndex]; }
   async function renderDetailTags(item) { const caption=$('#datasetDetailAnima').value, tags=caption.split(',').map(value=>value.trim()).filter(Boolean), candidates=[...new Set([...(item.curation?.wd14?.general || []).map(value=>value.tag).filter(Boolean),...tags])], selected=new Set(tags); await window.ensureTagLabels?.(candidates); $('#datasetDetailTagChips').innerHTML=candidates.map(tag=>`<button class="${selected.has(tag)?'selected':''}" data-detail-tag="${escapeHtml(tag)}" aria-pressed="${selected.has(tag)}">${escapeHtml(window.displayCanonicalTag?.(tag) || tag)}</button>`).join(''); }
-  function renderDetail() { const item=detailItem(); if (!item) return; const wd14=item.curation?.wd14 || {status:'untagged'}, vlm=item.curation?.krea2_vlm || {status:'empty'}, anima=item.curation?.captions?.anima || {}, krea=item.curation?.captions?.krea2 || {}, vlmTime=vlm.created_at?` · ${vlm.created_at.slice(0,16).replace('T',' ')}`:''; $('#datasetDetailImage').src=item.original_url; $('#datasetDetailName').textContent=item.relative_path; $('#datasetDetailMeta').textContent=`${item.width}×${item.height} · ${item.format} · ${(item.bytes/1024).toFixed(1)} KiB`; $('#datasetDetailStatus').value=item.review?.status || 'pending'; $('#datasetDetailCaption').value=item.caption || ''; $('#datasetDetailAnima').value=anima.current || ''; $('#datasetDetailKrea2').value=krea.current || ''; $('#datasetDetailKrea2Draft').value=vlm.draft || ''; $('#datasetDetailKrea2Locale').value=''; $('#datasetDetailKrea2LocaleStatus').textContent='按需翻译，逐张确认时才发送请求'; $('#datasetDetailKrea2Revision').value=''; $('#datasetDetailKrea2ReviseStatus').textContent='改写会覆盖上方英文草稿。确认前都还能改。'; $('#datasetDetailWD14').textContent=taggerDetailLabel(wd14); $('#datasetDetailKrea2VLM').textContent=vlm.status==='failed'?`失败：${vlm.error || '未知错误'}`:['completed','confirmed'].includes(vlm.status)?`${vlm.model || '人工保存草稿'}${vlmTime}${vlm.status==='confirmed'?' · 已确认':''}`:'尚无草稿'; $('#datasetDetailKrea2Warning').hidden=!vlm.safety_warning; $('#datasetDetailKrea2Warning').textContent=vlm.safety_warning || ''; $('#datasetDetailDraftConfirm').disabled=!vlm.draft; $('#datasetDetailNote').value=item.review?.note || ''; $('#datasetDetailHashes').textContent=`SHA-256：${item.sha256}\npHash：${item.phash || '—'}\n原始说明：${item.caption_path || '缺失'}\n来源文件：${item.relative_path}\nAnima 状态：${anima.status || 'empty'}\nKrea 2 状态：${krea.status || 'empty'}\n视觉草稿哈希：${vlm.source_sha256 || '—'}`; $('#datasetPrevious').disabled=state.detailIndex<=0; $('#datasetNext').disabled=state.detailIndex>=state.pageItems.length-1; $('#datasetFindSimilar').disabled=true; $('#datasetFindSimilarStatus').textContent='正在检查真实视觉索引……'; refreshSimilarStatus(item).catch(error=>$('#datasetFindSimilarStatus').textContent=error.message); renderDetailTags(item).catch(console.error); }
+  function renderDetail() { const item=detailItem(); if (!item) return; const wd14=item.curation?.wd14 || {status:'untagged'}, vlm=item.curation?.krea2_vlm || {status:'empty'}, anima=item.curation?.captions?.anima || {}, krea=item.curation?.captions?.krea2 || {}, vlmTime=vlm.created_at?` · ${vlm.created_at.slice(0,16).replace('T',' ')}`:''; $('#datasetDetailImage').src=item.original_url; $('#datasetDetailName').textContent=item.relative_path; $('#datasetDetailMeta').textContent=`${item.width}×${item.height} · ${item.format} · ${(item.bytes/1024).toFixed(1)} KiB`; $('#datasetDetailStatus').value=item.review?.status || 'pending'; $('#datasetDetailCaption').value=item.caption || ''; $('#datasetDetailAnima').value=anima.current || ''; $('#datasetDetailKrea2').value=krea.current || ''; $('#datasetDetailKrea2Draft').value=vlm.draft || ''; restoreKrea2Locale(item); $('#datasetDetailKrea2Revision').value=''; $('#datasetDetailKrea2ReviseStatus').textContent='改写会覆盖上方英文草稿。确认前都还能改。'; $('#datasetDetailWD14').textContent=taggerDetailLabel(wd14); $('#datasetDetailKrea2VLM').textContent=vlm.status==='failed'?`失败：${vlm.error || '未知错误'}`:['completed','confirmed'].includes(vlm.status)?`${vlm.model || '人工保存草稿'}${vlmTime}${vlm.status==='confirmed'?' · 已确认':''}`:'尚无草稿'; $('#datasetDetailKrea2Warning').hidden=!vlm.safety_warning; $('#datasetDetailKrea2Warning').textContent=vlm.safety_warning || ''; $('#datasetDetailDraftConfirm').disabled=!vlm.draft; $('#datasetDetailHashes').textContent=`SHA-256：${item.sha256}\npHash：${item.phash || '—'}\n原始说明：${item.caption_path || '缺失'}\n来源文件：${item.relative_path}\nAnima 状态：${anima.status || 'empty'}\nKrea 2 状态：${krea.status || 'empty'}\n视觉草稿哈希：${vlm.source_sha256 || '—'}`; $('#datasetPrevious').disabled=state.detailIndex<=0; $('#datasetNext').disabled=state.detailIndex>=state.pageItems.length-1; $('#datasetFindSimilar').disabled=true; $('#datasetFindSimilarStatus').textContent='正在检查真实视觉索引……'; refreshSimilarStatus(item).catch(error=>$('#datasetFindSimilarStatus').textContent=error.message); renderDetailTags(item).catch(console.error); }
   async function refreshSimilarStatus(item) { const digest=item.sha256, result=await api(`/api/hybrid-search/source-status?source_sha256=${encodeURIComponent(digest)}`); if(detailItem()?.sha256!==digest) return; $('#datasetFindSimilar').disabled=!result.available; $('#datasetFindSimilarStatus').textContent=result.available?`已进入 ${result.indexes.length} 个真实索引，可以查相似图。`:'等待 Windows 设备生成真实 CLIP / SigLIP 索引；当前不生成伪结果。'; }
   function openDetail(index) { state.detailIndex=index; renderDetail(); $('#datasetDetail').showModal(); }
+  function restoreKrea2Locale(item) {
+    // 译文按图记住。翻过的那张切回来还在。不必重翻。
+    // 但也不能就这样留着上一张的。挂在另一张草稿旁边会被当成这张的意思。
+    const cached=state.captionLocales[item.relative_path];
+    const draft=String(item.curation?.krea2_vlm?.draft || '');
+    // 草稿变了 重新生成或改写过 之后。旧译文对应的已经不是眼前这段。
+    const usable=cached && cached.caption===draft ? cached.localized : '';
+    $('#datasetDetailKrea2Locale').value=usable;
+    $('#datasetDetailKrea2LocaleStatus').textContent=usable
+      ? '仅供对照。导出的始终是英文草稿'
+      : (cached?'草稿已变动。需要对照请重新翻译':'按需翻译。逐张确认时才发送请求');
+  }
+
   function moveDetail(offset) { const next=state.detailIndex+offset; if (next<0 || next>=state.pageItems.length) return; state.detailIndex=next; renderDetail(); }
-  async function saveDetail() { const item=detailItem(); if (!item) return; const requests=[api(`/api/dataset-workspaces/${state.active.workspace_id}/review`,jsonOptions({items:[{relative_path:item.relative_path,status:$('#datasetDetailStatus').value,selected:state.selected.has(item.relative_path),note:$('#datasetDetailNote').value}]}))], anima=$('#datasetDetailAnima').value.trim(), krea=$('#datasetDetailKrea2').value.trim(); if (anima!==String(item.curation?.captions?.anima?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'anima',caption:anima,caption_status:'reviewed'}))); if (krea!==String(item.curation?.captions?.krea2?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'krea2',caption:krea,caption_status:'reviewed'}))); await Promise.all(requests); await loadReport(); state.detailIndex=state.pageItems.findIndex(candidate=>candidate.relative_path===item.relative_path); renderDetail(); }
+  async function approveDetail() {
+    // 说明文字是即时改的。审核通过就是「这张我看完了」。
+    // 顺手带到下一张——逐张确认时最常做的就是这个动作。
+    const button=$('#datasetDetailApprove');
+    const item=detailItem();
+    if (!item) return;
+    const previousIndex=state.detailIndex;
+    button.disabled=true;
+    try {
+      $('#datasetDetailStatus').value='approved';
+      await saveDetail();
+      // 带着筛选审核时，通过的这张会离开清单。此时同一个位置就是下一张，
+      // 不能再 +1（会跳过一张），也不能停在 -1（对话框会留着上一张的内容）。
+      const stillListed=state.pageItems.some(candidate=>candidate.relative_path===item.relative_path);
+      if (stillListed) { moveDetail(1); return; }
+      if (!state.pageItems.length) { $('#datasetDetail').close(); return; }
+      state.detailIndex=Math.min(previousIndex, state.pageItems.length-1);
+      renderDetail();
+    } finally { button.disabled=false; }
+  }
+
+  async function saveDetail() { const item=detailItem(); if (!item) return; const requests=[api(`/api/dataset-workspaces/${state.active.workspace_id}/review`,jsonOptions({items:[{relative_path:item.relative_path,status:$('#datasetDetailStatus').value,selected:state.selected.has(item.relative_path),}]}))], anima=$('#datasetDetailAnima').value.trim(), krea=$('#datasetDetailKrea2').value.trim(); if (anima!==String(item.curation?.captions?.anima?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'anima',caption:anima,caption_status:'reviewed'}))); if (krea!==String(item.curation?.captions?.krea2?.current || '')) requests.push(api(`/api/dataset-workspaces/${state.active.workspace_id}/caption`,jsonOptions({relative_path:item.relative_path,profile_id:'krea2',caption:krea,caption_status:'reviewed'}))); await Promise.all(requests); await loadReport(); state.detailIndex=state.pageItems.findIndex(candidate=>candidate.relative_path===item.relative_path); renderDetail(); }
   async function saveKrea2Draft(confirmDraft) { const item=detailItem(), draft=$('#datasetDetailKrea2Draft').value.trim(); if (!item) return; if (confirmDraft && !draft) return alert('确认前需要一份英文 Krea 2 草稿。'); if (confirmDraft && !confirm('确认把这份视觉模型草稿写入正式 Krea 2 图片说明？系统会先保存可回退的修改记录。')) return; const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/krea2-draft`,jsonOptions({relative_path:item.relative_path,draft,confirm:confirmDraft})); await loadReport(); state.detailIndex=state.pageItems.findIndex(candidate=>candidate.relative_path===item.relative_path); renderDetail(); if (confirmDraft) $('#datasetDetailKrea2VLM').textContent=`已确认写入 Krea 2 · ${result.snapshot}`; }
   async function rescan() { if (!state.active) return; await api(`/api/dataset-workspaces/${state.active.workspace_id}/rescan`,{method:'POST'}); await loadWorkspaces(state.active.workspace_id); startPolling(); }
   async function removeWorkspace() { if (!state.active) return; const zipArchive=state.active.source_origin==='zip_archive'; const message=zipArchive?'只移除 Prompt Hub 中的记录和解压副本；你上传的原始 zip 文件不会被删除。继续吗？':'只移除 Prompt Hub 中的记录和派生缩略图。原文件夹不会删除。继续吗？'; if (!confirm(message)) return; const source=state.active.source_path; await api(`/api/dataset-workspaces/${state.active.workspace_id}`,{method:'DELETE'}); state.active=null; state.report=null; await loadWorkspaces(); alert(zipArchive?`工作区记录和解压副本已移除。原始 zip 保持不变：\n${source}`:`工作区记录已移除。源目录保持不变：\n${source}`); }
@@ -690,6 +723,7 @@ WORKSPACE_SCRIPT = r"""
   $('#datasetAnalytics').addEventListener('click',event=>{ const button=event.target.closest('[data-bulk-tag]'); if (button) appendBulkTag(button.dataset.bulkTag); });
   document.querySelectorAll('[data-export-profile]').forEach(button=>button.addEventListener('click',()=>exportVersion(button.dataset.exportProfile).catch(error=>alert(error.message)))); $('#datasetRollbackSnapshot').addEventListener('click',()=>rollbackSnapshot().catch(error=>alert(error.message)));
   $('#datasetRescan').addEventListener('click',()=>rescan().catch(error=>alert(error.message))); $('#datasetRemove').addEventListener('click',()=>removeWorkspace().catch(error=>alert(error.message)));
+  $('#datasetDetailApprove').addEventListener('click',()=>approveDetail().catch(error=>alert(error.message)));
   $('#datasetDetailClose').addEventListener('click',()=>$('#datasetDetail').close()); $('#datasetPrevious').addEventListener('click',()=>moveDetail(-1)); $('#datasetNext').addEventListener('click',()=>moveDetail(1)); $('#datasetDetailSave').addEventListener('click',()=>saveDetail().catch(error=>alert(error.message)));
   $('#datasetDetailDraftSave').addEventListener('click',()=>saveKrea2Draft(false).catch(error=>alert(error.message))); $('#datasetDetailDraftConfirm').addEventListener('click',()=>saveKrea2Draft(true).catch(error=>alert(error.message)));
   $('#datasetFindSimilar').addEventListener('click',()=>{ const item=detailItem(); if(!item) return; $('#datasetDetail').close(); window.openSimilarImage?.(item.sha256,item.filename||item.relative_path); });
@@ -709,7 +743,9 @@ WORKSPACE_SCRIPT = r"""
     try {
       const result=await api('/api/captions/localize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({caption})});
       $('#datasetDetailKrea2Locale').value=result.localized || '';
-      status.textContent=result.localized?'仅供对照，导出的始终是英文草稿':'翻译服务没有返回结果；草稿本身不受影响';
+      const current=detailItem();
+      if (current && result.localized) state.captionLocales[current.relative_path]={caption,localized:result.localized};
+      status.textContent=result.localized?'仅供对照。导出的始终是英文草稿':'翻译服务没有返回结果。草稿本身不受影响';
     } catch(error) { $('#datasetDetailKrea2Locale').value=''; status.textContent=`翻译失败：${error.message}`; }
   });
   $('#datasetDetailKrea2Revise').addEventListener('click',async()=>{
@@ -725,6 +761,8 @@ WORKSPACE_SCRIPT = r"""
       $('#datasetDetailKrea2Draft').value=result.revised;
       // 旧译文对应的是改写前的草稿。留着会对不上。比没有更容易误导。
       $('#datasetDetailKrea2Locale').value='';
+      const revised=detailItem();
+      if (revised) delete state.captionLocales[revised.relative_path];
       $('#datasetDetailKrea2LocaleStatus').textContent='草稿已改写。需要对照请重新翻译';
       status.textContent='已改写。草稿只在这里改动。按下方按钮才会保存。';
     } catch(error) {

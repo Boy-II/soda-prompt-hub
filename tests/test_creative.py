@@ -543,3 +543,34 @@ def test_arrow_keys_inside_editable_fields_do_not_change_image() -> None:
     for tag in ("TEXTAREA", "INPUT", "SELECT"):
         assert tag in handler
     assert "isContentEditable" in handler
+
+
+def test_review_note_is_gone_and_approve_button_is_there() -> None:
+    """说明文字改成即时编辑之后。备注栏没有存在的理由了。"""
+    assert "datasetDetailNote" not in INDEX_HTML
+    assert 'id="datasetDetailApprove"' in INDEX_HTML
+
+
+def test_approve_does_not_skip_the_next_image_when_the_list_shrinks() -> None:
+    """带着筛选审核时。通过的这张会离开清单。
+
+    此时同一个位置就是下一张。再 +1 会跳过一张。
+    """
+    handler_at = INDEX_HTML.index("async function approveDetail()")
+    handler = INDEX_HTML[handler_at : handler_at + 1200]
+    assert "stillListed" in handler
+    assert "Math.min(previousIndex" in handler
+    assert "$('#datasetDetail').close()" in handler
+
+
+def test_each_image_keeps_its_own_translation() -> None:
+    """翻过的那张切回来还在。没翻过的留空。
+
+    不能就这样留着上一张的——挂在另一张草稿旁边会被当成这张的意思。
+    """
+    assert "captionLocales" in INDEX_HTML
+    handler_at = INDEX_HTML.index("function restoreKrea2Locale(item)")
+    handler = INDEX_HTML[handler_at : handler_at + 900]
+    assert "state.captionLocales[item.relative_path]" in handler
+    # 草稿变了之后旧译文对应的已经不是眼前这段
+    assert "cached.caption===draft" in handler
