@@ -101,7 +101,7 @@ WORKSPACE_HTML = r"""
             <div class="dataset-curation-block" data-caption-profile="anima">
               <strong>方案 B · WD14 生成 Anima 草稿</strong>
               <p class="dataset-hint">只在缺少 Anima 标签时使用。结果是待人工检查的草稿，不会直接进入交付版本。</p>
-              <div class="dataset-thresholds"><label>打标方式<select id="datasetTaggerMode"><option value="wd14">WD14 本地模型</option><option value="model">使用模型</option></select></label><label id="datasetTaggerModelWrap" hidden>用于打标的模型<select id="datasetTaggerModel"><option value="">正在读取视觉模型……</option></select></label></div>
+              <div class="dataset-thresholds"><label>打标模型<select id="datasetTaggerMode"><option value="wd14">WD14 本地模型</option><option value="model">使用模型</option></select></label><label id="datasetTaggerModelWrap" hidden>用于打标的模型<select id="datasetTaggerModel"><option value="">正在读取视觉模型……</option></select></label></div>
               <p id="datasetTaggerHint" class="dataset-hint">默认使用 WD14；也可以改用已连接的视觉模型生成 Booru 标签草稿。</p>
               <div class="dataset-thresholds" id="datasetWd14Thresholds"><label>图片类型<select id="datasetLocalTaggerModel"><option value="">正在读取本地打标模型……</option></select></label><p class="dataset-hint" id="datasetWd14Calibration">正在读取打标模型设置……</p></div>
               <div class="dataset-action-row"><button data-wd14-scope="selected">为已选生成草稿</button><button data-wd14-scope="untagged">补齐未打标草稿</button><button data-wd14-scope="failed">重试失败项</button><button class="dataset-advanced-only" data-wd14-scope="all">高级：全部重跑</button></div>
@@ -158,7 +158,7 @@ WORKSPACE_HTML = r"""
             <article class="dataset-preflight" id="datasetPreflight"><div><strong>交付前检查</strong><span id="datasetPreflightBadge">尚未检查</span></div><p id="datasetPreflightSummary">系统会检查坏图、缺少说明、未审核、完全重复和同名 `.txt` 冲突。</p><ul id="datasetPreflightIssues"></ul><button id="datasetRunPreflight" type="button">重新检查当前选择</button></article>
             <article class="dataset-delivery-action"><strong>保存到这台 Mac</strong><p>系统会建立一个新的独立版本，包含图片副本、同名 `.txt` 和校验清单（`manifest.json`、`audit.json`、`hashes.sha256`）。重复点击不会覆盖旧版本，也不修改源文件夹。</p><button class="dataset-primary" id="datasetExportActiveProfile" type="button">生成并保存到 Mac</button><p>这里不会启动 Windows 训练；训练、正则和最终筛标继续在 AnimaLoraStudio 中完成。</p><p id="datasetExportResult" class="dataset-hint"></p></article>
           </div>
-          <section class="dataset-delivery-history"><div class="dataset-delivery-history-head"><div><span class="section-label">以前生成的版本</span><h4>交付历史</h4></div><p>每次生成都会保留独立版本。可以下载 ZIP、在 Finder 中打开，或复制到已经挂载的 <span data-remote-device-name>__PROMPT_HUB_DEVICE_NAME_HTML__</span>。</p></div><div id="datasetDeliveryHistory" class="dataset-delivery-list"><p class="dataset-hint">还没有交付版本。</p></div><p id="datasetCopyResult" class="dataset-hint"></p></section>
+          <section class="dataset-delivery-history"><div class="dataset-delivery-history-head"><div><span class="section-label">以前生成的版本</span><h4>交付历史</h4></div><p><span>每次生成都会保留独立版本。可以下载 ZIP、在 Finder 中打开，或复制到已经挂载的设备：</span> <span data-remote-device-name>__PROMPT_HUB_DEVICE_NAME_HTML__</span>。</p></div><div id="datasetDeliveryHistory" class="dataset-delivery-list"><p class="dataset-hint">还没有交付版本。</p></div><p id="datasetCopyResult" class="dataset-hint"></p></section>
         </section>
       </div>
     </main>
