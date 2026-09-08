@@ -454,3 +454,29 @@ def test_krea2_draft_has_on_demand_chinese_reference() -> None:
     assert "/api/captions/localize" in INDEX_HTML
     # 换图要清掉上一张的译文。否则会被当成这张的意思
     assert "$('#datasetDetailKrea2Locale').value='';" in INDEX_HTML
+
+
+def test_caption_switches_are_toggles_not_checkboxes() -> None:
+    """进阶开关用滑动开关呈现。原生勾选框在这里一次要看 12 个。"""
+    assert '.dataset-caption-rules input[type="checkbox"]' in INDEX_HTML
+    assert "appearance: none" in INDEX_HTML
+    assert "translateX(15px)" in INDEX_HTML
+
+
+def test_trigger_word_is_optional() -> None:
+    """触发词非必填。留空只提示后果。不挡下队列。"""
+    assert "captionSettingsError" not in INDEX_HTML
+
+
+def test_caption_presets_round_trip_through_local_storage() -> None:
+    """设置要能存下来重复套用。存在浏览器本机。不写进工作区。"""
+    assert "soda-caption-presets" in INDEX_HTML
+    for element_id in (
+        "datasetCaptionPreset",
+        "datasetCaptionPresetName",
+        "datasetCaptionPresetSave",
+        "datasetCaptionPresetDelete",
+    ):
+        assert f'id="{element_id}"' in INDEX_HTML
+    # 读不出来要当作没有预设。不能让整个规则面板跟着挂掉
+    assert "function readCaptionPresets()" in INDEX_HTML

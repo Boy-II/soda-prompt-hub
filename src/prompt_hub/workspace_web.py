@@ -82,6 +82,12 @@ WORKSPACE_HTML = r"""
               <summary>进阶开关</summary>
               <div class="dataset-caption-options" id="datasetCaptionOptionList"></div>
             </details>
+            <div class="dataset-caption-presets">
+              <label>已保存的设置<select id="datasetCaptionPreset"><option value="">不套用</option></select></label>
+              <label>另存为<input id="datasetCaptionPresetName" maxlength="40" placeholder="例如 肖像-miru"></label>
+              <div class="dataset-action-row"><button id="datasetCaptionPresetSave" type="button">保存当前设置</button><button id="datasetCaptionPresetDelete" type="button">删除所选</button></div>
+              <p id="datasetCaptionPresetHint" class="dataset-hint">设置只存在这台机器的浏览器里，不会写进工作区。</p>
+            </div>
           </div>
           <div class="dataset-curation-grid">
             <div class="dataset-curation-block">
@@ -347,7 +353,26 @@ WORKSPACE_STYLES = r"""
   .dataset-inline-check { display: flex !important; align-items: center; grid-template-columns: auto 1fr; }
   .dataset-caption-rules { border-right: 0; border-bottom: 1px solid var(--line); }
   .dataset-caption-rules .dataset-thresholds { grid-template-columns: repeat(3, 1fr); }
-  .dataset-caption-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 4px 12px; padding-top: 7px; }
+  .dataset-caption-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 6px 14px; padding-top: 8px; }
+  .dataset-caption-rules .dataset-inline-check { gap: 9px; cursor: pointer; }
+  .dataset-caption-rules input[type="checkbox"] {
+    appearance: none; -webkit-appearance: none; margin: 0;
+    width: 34px !important; height: 19px; flex: 0 0 34px;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--paper-deep); position: relative; cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  .dataset-caption-rules input[type="checkbox"]::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 13px; height: 13px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 2px rgba(23, 24, 21, .3);
+    transition: transform .15s ease;
+  }
+  .dataset-caption-rules input[type="checkbox"]:checked { background: var(--signal); border-color: var(--signal); }
+  .dataset-caption-rules input[type="checkbox"]:checked::after { transform: translateX(15px); }
+  .dataset-caption-rules input[type="checkbox"]:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+  .dataset-caption-presets { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; padding-top: 10px; border-top: 1px solid var(--line); margin-top: 10px; }
+  .dataset-caption-presets .dataset-action-row, .dataset-caption-presets .dataset-hint { grid-column: 1 / -1; }
   #datasetDetailKrea2Locale { min-height: 68px; }
   .dataset-inline-check input { width: auto; }
   .dataset-analytics { min-height: 44px; color: var(--muted); font: 8px/1.5 monospace; }
@@ -475,8 +500,8 @@ WORKSPACE_SCRIPT = r"""
   function startPolling() { clearInterval(state.poll); state.poll=setInterval(async()=>{ try { const running=await refreshJobs(); if (!running) clearInterval(state.poll); } catch(error) { console.error(error); clearInterval(state.poll); } },900); }
   async function updateReviews(items) { if (!state.active || !items.length) return; await api(`/api/dataset-workspaces/${state.active.workspace_id}/review`,jsonOptions({items})); await loadReport(); }
   function selectedPaths(scope='selected') { if (scope==='filtered') return state.visible.map(item=>item.relative_path); return [...state.selected]; }
-  async function queueWd14(scope) { if (!state.active) return; const paths=scope==='selected'?selectedPaths():[], tagger=$('#datasetTaggerMode').value, model=$('#datasetTaggerModel').value; if (scope==='selected' && !paths.length) return alert('请先选择要打标的图片。'); if (tagger==='model' && !model) return alert('请先选择用于打标的视觉模型。'); if (scope==='all' && !confirm('重新打标整个工作区会替换尚未人工确认的 Anima 草稿。继续吗？')) return; const settingsError=captionSettingsError(); if(settingsError) return alert(settingsError); const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/wd14`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,tagger,model,provider:'cpu',overwrite:scope==='all',...captionSettings()})}); renderJob(result.job); startPolling(); }
-  async function queueKrea2VLM(scope) { if (!state.active) return; const model=$('#datasetKrea2Model').value, paths=scope==='selected'?selectedPaths():[]; if (!model) return alert('请先在 LM Studio 中准备并加载一个视觉模型。'); if (scope==='selected' && !paths.length) return alert('请先选择要生成草稿的图片。'); const settingsError=captionSettingsError(); if(settingsError) return alert(settingsError); const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/krea2-vlm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,model,...captionSettings()})}); renderJob(result.job); $('#datasetKrea2QueueHint').textContent='队列已开始。模型结果只会进入待确认草稿。'; startPolling(); }
+  async function queueWd14(scope) { if (!state.active) return; const paths=scope==='selected'?selectedPaths():[], tagger=$('#datasetTaggerMode').value, model=$('#datasetTaggerModel').value; if (scope==='selected' && !paths.length) return alert('请先选择要打标的图片。'); if (tagger==='model' && !model) return alert('请先选择用于打标的视觉模型。'); if (scope==='all' && !confirm('重新打标整个工作区会替换尚未人工确认的 Anima 草稿。继续吗？')) return; const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/wd14`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,tagger,model,provider:'cpu',overwrite:scope==='all',...captionSettings()})}); renderJob(result.job); startPolling(); }
+  async function queueKrea2VLM(scope) { if (!state.active) return; const model=$('#datasetKrea2Model').value, paths=scope==='selected'?selectedPaths():[]; if (!model) return alert('请先在 LM Studio 中准备并加载一个视觉模型。'); if (scope==='selected' && !paths.length) return alert('请先选择要生成草稿的图片。'); const result=await api(`/api/dataset-workspaces/${state.active.workspace_id}/krea2-vlm`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scope,paths,model,...captionSettings()})}); renderJob(result.job); $('#datasetKrea2QueueHint').textContent='队列已开始。模型结果只会进入待确认草稿。'; startPolling(); }
   async function loadTagCatalog() { const payload=await api('/api/tags/catalog?language=zh'); $('#datasetTagSuggestions').innerHTML=(payload.items||[]).map(item=>`<option value="${escapeHtml(item.zh || item.en)}">${escapeHtml(item.en)}</option>`).join(''); }
   function appendBulkTag(tag) { const input=$('#datasetBulkAdd'), values=input.value.split(',').map(value=>value.trim()).filter(Boolean); if (!values.some(value=>value.toLowerCase()===tag.toLowerCase())) values.push(tag); input.value=values.join(', '); state.bulkPreview=null; $('#datasetBulkApply').disabled=true; $('#datasetBulkResult').textContent=`已选择 ${window.displayCanonicalTag?.(tag)||tag}；请先预览修改。`; }
   async function loadAnalytics() { if (!state.active) return; state.analytics=await api(`/api/dataset-workspaces/${state.active.workspace_id}/analytics`); const top=(state.analytics.frequencies || []).slice(0,18); await window.ensureTagLabels?.(top.map(item=>item.tag)); const chips=top.map(item=>`<button type="button" data-bulk-tag="${escapeHtml(item.tag)}" title="加入批量添加">${escapeHtml(window.displayCanonicalTag?.(item.tag) || item.tag)} · ${item.count}</button>`).join(''); $('#datasetAnalytics').innerHTML=`<strong>${formatNumber(state.analytics.captioned_images)} 张有 Anima 标签 · ${formatNumber(state.analytics.unique_tags)} 个标签 · ${formatNumber((state.analytics.conflicts||[]).length)} 个冲突提示</strong><div class="dataset-analytics-tags">${chips || '<span>暂无标签</span>'}</div>`; }
@@ -518,6 +543,7 @@ WORKSPACE_SCRIPT = r"""
     $('#datasetCaptionMediaTags').checked=Boolean(contract.media_tags_default);
     renderCaptionOptions();
     updateCaptionMode();
+    renderCaptionPresets();
   }
 
   function renderCaptionOptions() {
@@ -540,7 +566,10 @@ WORKSPACE_SCRIPT = r"""
     const needsTrigger=Boolean(mode.trigger_label);
     $('#datasetCaptionTriggerWrap').hidden=!needsTrigger;
     if(needsTrigger) $('#datasetCaptionTriggerLabel').textContent=mode.trigger_label;
-    $('#datasetCaptionModeHint').textContent=`省略：${mode.omits}` + (needsTrigger?`。${mode.trigger_label}会写在说明开头，让模型把省略掉的常数学到这个词上。`:'。');
+    const filled=$('#datasetCaptionTrigger').value.trim();
+    // 触发词非必填。留空不挡下队列，但要说清楚后果。
+    const triggerNote=needsTrigger?(filled?`。${mode.trigger_label}会写在说明开头，让模型把省略掉的常数学到这个词上。`:`。可以留空；只是省略掉的内容没有词承载，之后想靠一个词唤起会比较难。`):'。';
+    $('#datasetCaptionModeHint').textContent=`省略：${mode.omits}` + triggerNote;
   }
 
   function captionSettings() {
@@ -557,11 +586,60 @@ WORKSPACE_SCRIPT = r"""
     };
   }
 
-  function captionSettingsError() {
-    const contract=state.captionContract; if(!contract) return '';
-    const mode=contract.modes.find(item=>item.id===$('#datasetCaptionMode').value);
-    if(mode && mode.trigger_label && !$('#datasetCaptionTrigger').value.trim()) return `请先填写${mode.trigger_label}；这个模式会省略对应内容，没有这个词模型学不到东西。`;
-    return '';
+  const CAPTION_PRESET_KEY='soda-caption-presets';
+
+  function readCaptionPresets() {
+    // 浏览器可能禁用存储，或是留下上个版本写坏的内容。
+    // 读不出来就当作没有预设，不能让整个规则面板跟着挂掉。
+    try { const raw=localStorage.getItem(CAPTION_PRESET_KEY); const parsed=raw?JSON.parse(raw):{}; return (parsed && typeof parsed==='object' && !Array.isArray(parsed))?parsed:{}; }
+    catch(error) { console.debug(error); return {}; }
+  }
+
+  function renderCaptionPresets(selected='') {
+    const presets=readCaptionPresets(), names=Object.keys(presets).sort();
+    $('#datasetCaptionPreset').innerHTML='<option value="">不套用</option>'+names.map(name=>`<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join('');
+    $('#datasetCaptionPreset').value=selected;
+    $('#datasetCaptionPresetDelete').disabled=!selected;
+  }
+
+  function applyCaptionPreset(name) {
+    const preset=readCaptionPresets()[name];
+    if(!preset) return;
+    $('#datasetCaptionMode').value=preset.mode || 'general';
+    $('#datasetCaptionTrigger').value=preset.trigger || '';
+    $('#datasetCaptionMediaTags').checked=Boolean(preset.media_tags);
+    $('#datasetCaptionMaxTokens').value=preset.max_tokens || state.captionContract?.max_tokens_default || 300;
+    // 先写进 state 再重画，否则 renderCaptionOptions 会拿旧的勾选状态覆盖回去。
+    state.captionOptions={...(preset.options || {})};
+    renderCaptionOptions();
+    updateCaptionMode();
+    $('#datasetCaptionPresetHint').textContent=`已套用「${name}」。`;
+  }
+
+  function saveCaptionPreset() {
+    const name=$('#datasetCaptionPresetName').value.trim();
+    if(!name) return alert('请先填写设置名称。');
+    const presets=readCaptionPresets();
+    const existed=Object.prototype.hasOwnProperty.call(presets, name);
+    if(existed && !confirm(`已经有一份叫「${name}」的设置。覆盖它吗？`)) return;
+    presets[name]=captionSettings();
+    try { localStorage.setItem(CAPTION_PRESET_KEY, JSON.stringify(presets)); }
+    catch(error) { return alert(`保存失败：${error.message}`); }
+    $('#datasetCaptionPresetName').value='';
+    renderCaptionPresets(name);
+    $('#datasetCaptionPresetHint').textContent=existed?`已覆盖「${name}」。`:`已保存「${name}」。`;
+  }
+
+  function deleteCaptionPreset() {
+    const name=$('#datasetCaptionPreset').value;
+    if(!name) return;
+    if(!confirm(`删除设置「${name}」？`)) return;
+    const presets=readCaptionPresets();
+    delete presets[name];
+    try { localStorage.setItem(CAPTION_PRESET_KEY, JSON.stringify(presets)); }
+    catch(error) { return alert(`删除失败：${error.message}`); }
+    renderCaptionPresets();
+    $('#datasetCaptionPresetHint').textContent=`已删除「${name}」。`;
   }
 
   async function loadTaggerConfig() { try { const config=await api('/api/tagger-config'); $('#datasetWd14Calibration').textContent=`目前模型 ${config.model} · 校准值 general ${config.general_threshold} / character ${config.character_threshold}`; } catch(error) { $('#datasetWd14Calibration').textContent=`打标模型校准值读取失败：${error.message}`; } }
@@ -613,6 +691,10 @@ WORKSPACE_SCRIPT = r"""
   $('#datasetDetailDraftSave').addEventListener('click',()=>saveKrea2Draft(false).catch(error=>alert(error.message))); $('#datasetDetailDraftConfirm').addEventListener('click',()=>saveKrea2Draft(true).catch(error=>alert(error.message)));
   $('#datasetFindSimilar').addEventListener('click',()=>{ const item=detailItem(); if(!item) return; $('#datasetDetail').close(); window.openSimilarImage?.(item.sha256,item.filename||item.relative_path); });
   $('#datasetCaptionMode').addEventListener('change',updateCaptionMode);
+  $('#datasetCaptionTrigger').addEventListener('input',updateCaptionMode);
+  $('#datasetCaptionPreset').addEventListener('change',event=>{ $('#datasetCaptionPresetDelete').disabled=!event.target.value; if(event.target.value) applyCaptionPreset(event.target.value); });
+  $('#datasetCaptionPresetSave').addEventListener('click',saveCaptionPreset);
+  $('#datasetCaptionPresetDelete').addEventListener('click',deleteCaptionPreset);
   // 记住使用者的开关选择。切换交付格式会重画这份清单，
   // 不记的话每切一次就把人调好的设定清空。
   $('#datasetCaptionOptionList').addEventListener('change',event=>{ const input=event.target.closest('[data-caption-option]'); if(input) state.captionOptions[input.dataset.captionOption]=input.checked; });
