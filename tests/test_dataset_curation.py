@@ -13,6 +13,10 @@ from PIL import Image
 from prompt_hub.api import create_app
 from prompt_hub.background_jobs import BackgroundJobStore, JobContext, JobInterruptedError
 from prompt_hub.dataset_curation import DatasetCurationStore
+from prompt_hub.dataset_curation_support import (
+    _normalize_caption,
+    normalize_caption_settings,
+)
 from prompt_hub.dataset_workspace import DatasetWorkspaceError, DatasetWorkspaceStore
 
 if TYPE_CHECKING:
@@ -516,9 +520,10 @@ def test_source_captions_preview_and_apply_as_one_snapshot(settings, tmp_path) -
     assert preview["inspected"] == 3
     assert preview["paired"] == 3
     assert preview["changed"] == 2
-    assert preview["invalid"] == [
-        {"relative_path": "image-2.png", "reason": "最终 caption 必须使用英文"}
-    ]
+    # 断言的是「这张因为不是英文而被挡下」。不逐字比对讯息。
+    # 讯息措辞会随诊断变精确而调整。那不该算回归。
+    assert [item["relative_path"] for item in preview["invalid"]] == ["image-2.png"]
+    assert "英文" in preview["invalid"][0]["reason"]
     assert curation.list_snapshots(workspace["workspace_id"]) == []
 
     applied = curation.apply_source_captions(
@@ -957,3 +962,50 @@ def test_krea2_vlm_api_queues_drafts_and_requires_confirmation(
         assert confirmed.status_code == 200
         assert confirmed.json()["caption"]["source"] == "vlm-confirmed"
         assert calls[0][:3] == ("image-0.png", "test-vision-model", "")
+
+
+class TestCaptionLanguageGate:
+    """要挡的是模型回了中日韩文字。不是所有非 ASCII 字符。"""
+
+    def test_typographic_characters_are_folded_not_rejected(self) -> None:
+        """弯引号和破折号是排版字符。视觉模型经常输出。
+        用 isascii 当代理时 "a woman's shirt" 会被判成不是英文。"""
+        assert (
+            _normalize_caption("krea2", "A woman’s white shirt drapes off her shoulders.")  # noqa: RUF001 (测试资料本身就必须是这个字符)
+            == "A woman's white shirt drapes off her shoulders."
+        )
+        assert _normalize_caption("krea2", "A woman stands — looking back.") == (
+            "A woman stands - looking back."
+        )
+        assert _normalize_caption("krea2", "She looks away… softly lit.") == (
+            "She looks away... softly lit."
+        )
+
+    def test_accented_latin_is_still_english_enough(self) -> None:
+        assert _normalize_caption("krea2", "A woman sitting in a café.") == (
+            "A woman sitting in a café."
+        )
+
+    def test_cjk_output_is_still_rejected(self) -> None:
+        for text in ("一位女性站在窗边", "女性が窓辺に"):
+            with pytest.raises(DatasetWorkspaceError):
+                _normalize_caption("krea2", text)
+
+    def test_fullwidth_punctuation_signals_chinese_output(self) -> None:
+        with pytest.raises(DatasetWorkspaceError):
+            _normalize_caption("krea2", "A woman，standing.")  # noqa: RUF001 (测试资料本身就必须是这个字符)
+
+
+def test_trigger_word_is_optional_in_every_mode() -> None:
+    """触发词是选填的。
+
+    前端放行、后端强制要求时。队列会在第一张之前就整个失败。
+    错误停在 0/0——使用者看到的只是「执行失败」。
+    """
+    for mode in ("general", "portrait", "outfit", "style"):
+        settings = normalize_caption_settings("krea2", {"mode": mode, "trigger": ""})
+        assert settings["mode"] == mode
+        assert settings["trigger"] == ""
+
+    filled = normalize_caption_settings("krea2", {"mode": "portrait", "trigger": "miru"})
+    assert filled["trigger"] == "miru"

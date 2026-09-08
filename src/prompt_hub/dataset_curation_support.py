@@ -45,11 +45,45 @@ class CaptionSettings(TypedDict):
     max_tokens: int
 
 
+# 视觉模型常常输出弯引号、破折号和省略号。那不是「不是英文」。
+# 只是排版字符。训练用的说明统一成 ASCII 标点也更干净。
+_TYPOGRAPHY_FOLD = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+        "\u201b": "'",
+        "\u00b4": "'",
+        "\u02bc": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u201e": '"',
+        "\u201f": '"',
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2015": "-",
+        "\u2212": "-",
+        "\u2026": "...",
+        "\u00a0": " ",
+        "\u2009": " ",
+        "\u202f": " ",
+    }
+)
+
+# 要挡的是模型回了中文或日文。不是所有非 ASCII 字符。
+# 之前用 isascii 当代理。结果 "a woman's shirt" 只因为一个弯引号
+# 就被判成「不是英文」——讯息本身还是错的。cafe 上的重音同理。
+_CJK_PATTERN = re.compile(
+    "[\u3000-\u303f\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf"
+    "\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]"
+)
+CAPTION_NOT_ENGLISH_MESSAGE = "最终 caption 必须使用英文。模型这次返回了中日韩文字"
+
+
 def _normalize_caption(profile_id: CaptionProfile, caption: str) -> str:
-    clean = caption.strip()[:MAX_CAPTION_CHARS]
-    if clean and not clean.isascii():
-        message = "最终 caption 必须使用英文"
-        raise DatasetWorkspaceError(message)
+    clean = caption.strip().translate(_TYPOGRAPHY_FOLD)[:MAX_CAPTION_CHARS]
+    if clean and _CJK_PATTERN.search(clean):
+        raise DatasetWorkspaceError(CAPTION_NOT_ENGLISH_MESSAGE)
     if profile_id == "anima":
         try:
             return normalize_tag_draft(clean)
@@ -121,10 +155,10 @@ def normalize_caption_settings(
     if mode not in {"general", "portrait", "outfit", "style"}:
         message = "Unsupported caption mode"
         raise DatasetWorkspaceError(message)
+    # 触发词是选填的。留空只是让省略掉的内容没有词承载。
+    # 说明本身照样生成得出来。要不要接受这个代价是使用者的判断。
+    # 之前后端强制要求。前端放行、后端在第一张之前就整个队列失败。
     trigger = "" if mode == "general" else " ".join(str(raw.get("trigger", "")).split())
-    if mode != "general" and not trigger:
-        message = "Trigger word is required for this caption mode"
-        raise DatasetWorkspaceError(message)
     raw_options = raw.get("options", {})
     option_values = raw_options if isinstance(raw_options, Mapping) else {}
     options = {
