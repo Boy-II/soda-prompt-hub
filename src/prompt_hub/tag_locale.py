@@ -334,6 +334,59 @@ def translate_tag_with_model(tag: str, *, connections: ModelConnectionStore | No
         return ""
 
 
+CAPTION_TRANSLATION_SYSTEM_PROMPT = (
+    "You translate English image captions into Chinese. "
+    "Reply with only the Chinese translation itself. "
+    "Keep it one paragraph. No explanation, no prefix, no quotes."
+)
+# 一段自然语言说明比单个标签长得多。用标签的 60 token 上限会被截断。
+CAPTION_TRANSLATION_MAX_TOKENS = 1200
+MAX_CAPTION_LENGTH = 12000
+CAPTION_TOO_LONG_MESSAGE = "说明文字过长。无法翻译"
+
+
+def translate_caption_with_model(
+    caption: str,
+    *,
+    connections: ModelConnectionStore | None,
+) -> str:
+    """把一整段英文说明翻成中文。供人工对照。
+
+    不走标签快取 快取的键是标签。把整段句子塞进去会污染它。而且同一段
+    说明几乎不会重复出现。快取也没有价值。
+
+    失败一律回空字串并记 log。中文对照是辅助信息。拿不到就不显示。
+    不能让审核流程因为翻译服务出问题而中断。
+    """
+    text = caption.strip()
+    if not text:
+        return ""
+    if len(text) > MAX_CAPTION_LENGTH:
+        message = "说明文字过长。无法翻译"
+        raise TagLocaleError(message)
+    connection = _pick_connection(connections)
+    if connection is None:
+        return ""
+    payload = {
+        "model": connection.model_name,
+        "messages": [
+            {"role": "system", "content": CAPTION_TRANSLATION_SYSTEM_PROMPT},
+            {"role": "user", "content": text},
+        ],
+        "temperature": 0.0,
+        "max_tokens": CAPTION_TRANSLATION_MAX_TOKENS,
+        "stream": False,
+    }
+    try:
+        response = _post_chat_completion(connection, payload)
+        content = str(response["choices"][0]["message"]["content"]).strip()
+    except Exception as error:  # noqa: BLE001
+        _logger.warning("Caption translation failed: %s", error)
+        return ""
+    # 模型偶尔会把原文原样回来。那不是翻译。宁可不显示。
+    return "" if content == text else content
+
+
 def _pick_connection(connections: ModelConnectionStore | None) -> ModelConnection | None:
     if connections is None:
         return None

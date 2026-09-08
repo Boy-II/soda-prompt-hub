@@ -422,3 +422,35 @@ def test_named_event_handlers_are_defined() -> None:
         )
         declared = set(re.findall(r"(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)", block))
         assert not referenced - declared - shared
+
+
+def test_caption_rules_ui_renders_from_contract_not_hardcoded_enums() -> None:
+    """模式与开关必须从后端契约来。前端硬编 enum 就会跟后端各走各的。"""
+    assert "/api/dataset-workspaces/caption-modes" in INDEX_HTML
+    assert 'id="datasetCaptionOptionList"' in INDEX_HTML
+
+    # 两个容器在源码里必须是空的。内容由 JS 从契约填。
+    # 一旦有人把选项写死进 HTML。这里就会失败。
+    assert '<select id="datasetCaptionMode"></select>' in INDEX_HTML
+    assert '<div class="dataset-caption-options" id="datasetCaptionOptionList"></div>' in INDEX_HTML
+
+    # 开关 id 是契约的词汇。不该出现在页面源码里
+    for option_id in ("avoid_meta_phrases", "depth_of_field", "content_rating", "plain_words"):
+        assert option_id not in INDEX_HTML
+
+
+def test_caption_settings_reach_both_queues() -> None:
+    """WD14 与 Krea 2 两个队列都要带上打标规则。
+
+    上一轮的缺陷正是只有模型分支套用了设置。WD14 分支整组漏掉。
+    """
+    assert INDEX_HTML.count("...captionSettings()") == 2
+
+
+def test_krea2_draft_has_on_demand_chinese_reference() -> None:
+    """逐张确认时按需翻译。不是打开就自动发请求。"""
+    assert 'id="datasetDetailKrea2Locale"' in INDEX_HTML
+    assert 'id="datasetDetailKrea2Translate"' in INDEX_HTML
+    assert "/api/captions/localize" in INDEX_HTML
+    # 换图要清掉上一张的译文。否则会被当成这张的意思
+    assert "$('#datasetDetailKrea2Locale').value='';" in INDEX_HTML

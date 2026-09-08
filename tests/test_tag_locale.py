@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from prompt_hub import tag_locale
 from prompt_hub import tag_locale as tag_locale_module
 from prompt_hub.api import create_app
 from prompt_hub.tag_locale import (
@@ -196,3 +197,61 @@ def test_make_model_translator_never_raises(monkeypatch, tmp_path) -> None:
     assert localized["zh"] == ""
     assert localized["display"] == "antler_girl"
     assert cache.get("antler_girl") is None
+
+
+class TestCaptionTranslation:
+    """Krea 2 草稿是整段自然语言。与标签走不同的路。"""
+
+    def test_does_not_touch_the_tag_cache(self, tmp_path, monkeypatch) -> None:
+        """整段说明不该写进标签快取——键是标签。句子会污染它。"""
+        cache = TagLocaleCache(tmp_path / "locale.sqlite")
+        cache.initialize()
+
+        monkeypatch.setattr(
+            tag_locale,
+            "_post_chat_completion",
+            lambda *_: {"choices": [{"message": {"content": "一位女性站在窗边。"}}]},
+        )
+        text = tag_locale.translate_caption_with_model(
+            "A woman standing by the window.",
+            connections=_FakeConnections(_local_connection()),
+        )
+
+        assert text == "一位女性站在窗边。"
+        assert cache.get("A woman standing by the window.") is None
+
+    def test_failure_returns_empty_instead_of_raising(self, monkeypatch) -> None:
+        """翻译服务出问题不该让逐张审核停下来。"""
+        refused = OSError("connection refused")
+
+        def explode(*_):
+            raise refused
+
+        monkeypatch.setattr(tag_locale, "_post_chat_completion", explode)
+        assert (
+            tag_locale.translate_caption_with_model(
+                "anything", connections=_FakeConnections(_local_connection())
+            )
+            == ""
+        )
+
+    def test_echoed_source_is_not_a_translation(self, monkeypatch) -> None:
+        """模型把原文原样回来时宁可不显示。也不要假装翻好了。"""
+        monkeypatch.setattr(
+            tag_locale,
+            "_post_chat_completion",
+            lambda *_: {"choices": [{"message": {"content": "A woman."}}]},
+        )
+        assert (
+            tag_locale.translate_caption_with_model(
+                "A woman.", connections=_FakeConnections(_local_connection())
+            )
+            == ""
+        )
+
+    def test_no_connection_returns_empty(self) -> None:
+        assert tag_locale.translate_caption_with_model("A woman.", connections=None) == ""
+
+
+def _local_connection() -> _FakeConnection:
+    return _FakeConnection(base_url="http://127.0.0.1:1234/v1", model_name="qwen")

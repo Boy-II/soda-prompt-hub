@@ -70,6 +70,7 @@ from prompt_hub.tag_locale import (
     localize_tags,
     make_model_translator,
     tag_catalog,
+    translate_caption_with_model,
 )
 from prompt_hub.visual_assets import VisualAssetCatalog
 from prompt_hub.visual_model import (
@@ -174,6 +175,10 @@ class CreativeReviewBranchInput(BaseModel):
 class TagLocaleInput(BaseModel):
     tags: list[str] = Field(min_length=1, max_length=500)
     language: Literal["zh", "en"] = "zh"
+
+
+class CaptionLocaleInput(BaseModel):
+    caption: str = Field(min_length=1, max_length=12000)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -388,6 +393,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except TagLocaleError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
         return {"language": payload.language, "items": items}
+
+    @application.post("/api/captions/localize")
+    def get_localized_caption(payload: CaptionLocaleInput) -> dict[str, Any]:
+        """把一段英文说明翻成中文供人工对照。
+
+        翻不出来时回空字串而不是报错——对照是辅助信息。
+        翻译服务出问题不该让逐张审核停下来。
+        """
+        try:
+            text = translate_caption_with_model(
+                payload.caption,
+                connections=model_connections,
+            )
+        except TagLocaleError as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+        return {"caption": payload.caption, "localized": text}
 
     @application.get("/api/tags/catalog")
     def get_tag_catalog(
