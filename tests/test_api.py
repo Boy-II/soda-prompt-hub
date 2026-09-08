@@ -656,3 +656,21 @@ def _vision_connection() -> ModelConnection:
         model_name="qwen",
         supports_vision=True,
     )
+
+
+class TestNoJsonDiagnostics:
+    """模型回了散文而不是 JSON 时。最常见的原因是它拒绝描述这张图。"""
+
+    def test_refusal_text_is_carried_into_the_error(self) -> None:
+        """看不到原文的人会一直去调提示词。而该做的是换一个模型。"""
+        message = local_model._no_json_message(  # noqa: SLF001
+            "I can't caption this image. If you have other photos, I'm glad to help."
+        )
+        assert "拒绝" not in message  # 不替模型下判断。把它说的话带出来就好
+        assert "I can't caption this image" in message
+
+    def test_empty_content_says_empty_not_unparseable(self) -> None:
+        assert local_model._no_json_message("   ")  # noqa: SLF001 == "视觉模型没有返回任何内容"
+
+    def test_long_output_is_trimmed(self) -> None:
+        assert len(local_model._no_json_message("x" * 5000)) < 250  # noqa: SLF001

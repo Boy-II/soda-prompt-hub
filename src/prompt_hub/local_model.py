@@ -396,7 +396,7 @@ def draft_krea2_caption(
     try:
         raw = _extract_json_object(content)
     except json.JSONDecodeError as error:
-        raise LocalModelError("视觉模型没有返回可识别的 Krea 2 草稿 JSON") from error
+        raise LocalModelError(_no_json_message(content)) from error
     caption = normalize_caption_with_settings(
         "krea2",
         " ".join(str(raw.get("caption", "")).split()),
@@ -749,6 +749,19 @@ def _image_data_url(path: Path) -> str:
         raise LocalModelError("无法为本地视觉模型读取结果图") from error
     encoded = base64.b64encode(output.getvalue()).decode("ascii")
     return f"data:image/jpeg;base64,{encoded}"
+
+
+def _no_json_message(content: str) -> str:
+    """模型回了散文而不是 JSON 时。把它说了什么带出来。
+
+    只写「没有返回可识别的 JSON」的话。最常见的原因会被藏起来
+    模型拒绝描述这张图。那不是技术故障。换一个愿意描述的模型就好。
+    但看不到原文的人会一直去调提示词。
+    """
+    snippet = " ".join(content.split())[:160]
+    if not snippet:
+        return "视觉模型没有返回任何内容"
+    return f"视觉模型没有返回可识别的草稿 JSON。它回了这段文字：{snippet}"
 
 
 def _extract_json_object(content: str) -> dict[str, Any]:

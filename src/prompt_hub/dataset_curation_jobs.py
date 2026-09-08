@@ -286,7 +286,7 @@ class DatasetCurationJobsMixin:
                     job_id=job_id,
                     source_sha256=expected_sha256,
                 )
-                reasons.append("图片不存在或扫描后已变更")
+                reasons.append(str(error))
                 failed += 1
             else:
                 self._store_krea2_result(
