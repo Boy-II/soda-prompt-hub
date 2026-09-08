@@ -83,7 +83,7 @@ CREATIVE_HTML = r"""
         <div class="result-gallery" id="resultGallery"></div>
         <div class="wd14-toolbar">
           <div class="wd14-toolbar-intro"><strong>WD14 · 生成 Anima 标签草稿</strong><p>只处理已经选中的图片。自动结果需要人工检查，一次最多处理 24 张。</p></div>
-          <label>打标方式<select id="wd14TaggerMode"><option value="wd14">WD14 本地模型</option><option value="model">使用模型</option></select></label>
+          <label>打标模型<select id="wd14TaggerMode"><option value="wd14">WD14 本地模型</option><option value="model">使用模型</option></select></label>
           <label id="wd14TaggerModelWrap" hidden>用于打标的模型<select id="wd14TaggerModel"><option value="">正在读取视觉模型……</option></select></label>
           <div class="wd14-thresholds" id="wd14Thresholds"><p class="result-review-status" id="wd14Calibration">正在读取打标模型校准值……</p></div>
           <button id="tagSelectedDataset" disabled>为已选图片生成标签草稿</button>
