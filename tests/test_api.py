@@ -42,7 +42,7 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
             "soda-prompt-hub",
         )
         assert client.get("/api/stats").json()["entries"] > 5
-        assert len(client.get("/api/sources").json()) == 4
+        assert len(client.get("/api/sources").json()) == 5
         result = client.get("/api/search", params={"query": "gothic", "kind": "style"})
         assert result.status_code == 200
         assert result.json()["results"][0]["title"] == "Gothic Ink"
@@ -99,7 +99,7 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
         assert "开始创作" in page.text
         assert "提示词库" in page.text
         assert "角色库" in page.text
-        assert "资料管理" in page.text
+        assert "资料来源" in page.text
         assert "今天想画" in page.text
         assert "ANIMA" in page.text
         assert "KREA 2" in page.text
@@ -113,6 +113,7 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
             (marker[1:] not in page.text if marker.startswith("!") else marker in page.text)
             for marker in (
                 "检查生成结果",
+                "资料管理",
                 "resultImageFile",
                 "visionModel",
                 "只写入实测备注",
@@ -141,6 +142,8 @@ def test_api_health_stats_search_and_page(source_tree, monkeypatch) -> None:
                 "准备标签",
                 "人工审核",
                 "生成交付版本",
+                "需要交付的数据集格式",
+                "loraDeliveryReadiness",
                 "datasetModeSimple",
                 "datasetModeAdvanced",
                 "datasetDeliveryProfile",
@@ -434,6 +437,43 @@ def test_page_paginates_long_lists_and_loads_model_tabs_on_demand(settings) -> N
     assert "project.assets.map(assetCard)" not in page
 
 
+def test_page_persists_dataset_selection_and_lora_status_changes(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        page = client.get("/").text
+
+    assert "async function clearDatasetSelection()" in page
+    assert "selected:button.dataset.bulkStatus!=='excluded'" in page
+    assert "async function saveAssetStatus(card)" in page
+    assert "jsonOptions({status:select.value})" in page
+    assert "data-asset-save-status" in page
+
+
+def test_rebuild_index_reports_progress_in_source_center(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        page = client.get("/").text
+
+    assert "const sourceMessage = $('#sourceSyncMessage')" in page
+    assert "sourceMessage.textContent = '正在重建本地索引…'" in page
+    assert "sourceMessage.textContent = message" in page
+    assert "sourceMessage.textContent = `重建失败：${error.message}`" in page  # noqa: RUF001
+
+
+def test_fixed_interaction_messages_have_english_translations(settings) -> None:
+    with TestClient(create_app(settings)) as client:
+        page = client.get("/").text
+
+    for marker in (
+        "Currently searching the local library by keyword.",
+        "Searched the local library by keyword and related meaning.",
+        "The current semantic index cannot be used for this query",
+        "Rebuilding the local index…",
+        "Saving…",
+        "Saved",
+        "Rebuild failed:",
+    ):
+        assert marker in page
+
+
 def test_compute_contract(settings) -> None:
     with TestClient(create_app(settings)) as client:
         compute = client.get("/api/compute/contract").json()
@@ -461,13 +501,37 @@ def test_compute_contract(settings) -> None:
         }
 
 
+def test_animadex_visual_search_and_facets(source_tree, monkeypatch) -> None:
+    monkeypatch.setattr("prompt_hub.importers._git_commit", lambda _path: "deadbeef")
+    database = PromptDatabase(source_tree.database_path)
+    import_all(source_tree, database)
+    with TestClient(create_app(source_tree)) as client:
+        animadex = client.get(
+            "/api/search",
+            params={
+                "source_id": "animadex",
+                "has_visual": True,
+                "hair_color": "silver hair",
+                "eye_color": "blue eyes",
+            },
+        ).json()
+        assert animadex["count"] == 1
+        animadex_thumb = animadex["results"][0]["visuals"][0]["thumbnail_url"]
+        assert client.get(animadex_thumb).headers["content-type"] == "image/webp"
+        assert animadex["results"][0]["visuals"][0]["original_url"] == animadex_thumb
+        facets = client.get("/api/sources/animadex/facets").json()
+        assert facets["categories"] == ["test_series"]
+        assert facets["hair_colors"] == ["silver hair"]
+        assert facets["eye_colors"] == ["blue eyes"]
+
+
 def test_api_rebuild_index(source_tree, monkeypatch) -> None:
     monkeypatch.setattr("prompt_hub.importers._git_commit", lambda _path: "deadbeef")
     app = create_app(source_tree)
     with TestClient(app) as client:
         response = client.post("/api/import")
         assert response.status_code == 200
-        assert response.json()["stats"]["sources"] == 4
+        assert response.json()["stats"]["sources"] == 5
 
 
 def test_api_imports_and_searches_oc_manager_json(settings) -> None:

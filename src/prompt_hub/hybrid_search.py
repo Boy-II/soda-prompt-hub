@@ -53,7 +53,7 @@ class HybridSearchService:
 
         semantic = {
             "status": "not_requested",
-            "message": "当前为本地关键词检索; 提供真实 query embedding 后才会加入语义召回。",
+            "message": "当前按关键词查找本地资料。建立语义索引后，还可以匹配意思相近的内容。",  # noqa: RUF001
             "index": None,
         }
         if vector is not None:
@@ -66,13 +66,13 @@ class HybridSearchService:
                 _merge_vector_matches(groups, queried["matches"])
                 semantic = {
                     "status": "active",
-                    "message": "已使用版本固定的真实 embedding 进行 cosine 召回。",
+                    "message": "已同时按关键词和相近含义查找本地资料。",
                     "index": queried["index"],
                 }
             else:
                 semantic = {
                     "status": "unavailable",
-                    "message": "没有与 query embedding 维度兼容的真实索引; 未生成伪结果。",
+                    "message": "现有语义索引不适用于本次查询，因此只显示关键词结果。",  # noqa: RUF001
                     "index": None,
                 }
         return _response(clean_query, groups, semantic)
@@ -138,10 +138,13 @@ def _keyword_visuals(item: dict[str, Any], safety_filter: str) -> list[dict[str,
         if not path or (safety_filter and safety != safety_filter):
             continue
         encoded = quote(path, safe="/")
+        original_variant = (
+            "thumbnail" if ref.get("original_variant") == "thumbnail" else "original"
+        )
         visuals.append(
             {
                 "thumbnail_url": f"/media/{source_id}/thumbnail/{encoded}",
-                "original_url": f"/media/{source_id}/original/{encoded}",
+                "original_url": f"/media/{source_id}/{original_variant}/{encoded}",
                 "safety": safety,
             }
         )

@@ -178,6 +178,10 @@ class PromptDatabase(DatabaseOCMixin):
         model_family: str = "",
         safety: str = "",
         favorites_only: bool = False,
+        has_visual: bool = False,
+        category: str = "",
+        hair_color: str = "",
+        eye_color: str = "",
         limit: int = 20,
     ) -> list[dict[str, Any]]:
         safe_limit = min(max(limit, 1), 50)
@@ -187,6 +191,10 @@ class PromptDatabase(DatabaseOCMixin):
             model_family=model_family,
             safety=safety,
             favorites_only=favorites_only,
+            has_visual=has_visual,
+            category=category,
+            hair_color=hair_color,
+            eye_color=eye_color,
         )
         where = " AND ".join(filters)
         if where:
@@ -258,6 +266,48 @@ class PromptDatabase(DatabaseOCMixin):
                     [*values, safe_limit],
                 ).fetchall()
         return [_row_to_dict(row) for row in rows]
+
+    def source_facets(self, source_id: str) -> dict[str, list[str]]:
+        with self.connect() as connection:
+            categories = [
+                str(row[0])
+                for row in connection.execute(
+                    """
+                    SELECT DISTINCT category FROM entries
+                    WHERE source_id = ? AND kind = 'character_reference' AND category != ''
+                    ORDER BY category COLLATE NOCASE
+                    """,
+                    (source_id,),
+                )
+            ]
+
+            def metadata_values(path: str) -> list[str]:
+                return [
+                    str(row[0])
+                    for row in connection.execute(
+                        """
+                        SELECT DISTINCT json_each.value
+                        FROM entries, json_each(entries.metadata_json, ?)
+                        WHERE entries.source_id = ?
+                        ORDER BY json_each.value COLLATE NOCASE
+                        """,
+                        (path, source_id),
+                    )
+                ]
+
+            kinds = [
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT kind FROM entries WHERE source_id = ? ORDER BY kind",
+                    (source_id,),
+                )
+            ]
+            return {
+                "categories": categories,
+                "hair_colors": metadata_values("$.hair_colors"),
+                "eye_colors": metadata_values("$.eye_colors"),
+                "kinds": kinds,
+            }
 
     def save_mark(
         self,

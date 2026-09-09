@@ -179,6 +179,14 @@ def create_lora_router(
         except LoraProjectError as error:
             _raise_lora_http(error)
 
+    @router.get("/api/lora/projects/{project_id}/readiness")
+    def get_lora_project_readiness(project_id: str) -> dict[str, Any]:
+        project = store.get(project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="LoRA project not found")
+        records = _coverage_records(project, workspace_store, curation_store)
+        return _delivery_readiness(project, records)
+
     @router.post("/api/lora/projects/{project_id}/freeze", status_code=status.HTTP_201_CREATED)
     def freeze_project(project_id: str) -> dict[str, Any]:
         project = store.get(project_id)
@@ -264,6 +272,70 @@ def _coverage_records(
         if record is not None:
             records[str(asset.get("asset_id", ""))] = record
     return records
+
+
+def _delivery_readiness(
+    project: dict[str, Any],
+    records: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    assets = [
+        asset
+        for asset in project.get("assets", [])
+        if asset.get("status") in {"approved", "regularization"}
+    ]
+    trigger = str(project.get("trigger_word", ""))
+    hashes = [str(asset.get("sha256", "")) for asset in assets]
+    duplicate_count = len(hashes) - len(set(hashes))
+    family_results: dict[str, dict[str, Any]] = {}
+    for family in project.get("target_families", []):
+        counts = {
+            "complete": 0,
+            "missing": 0,
+            "pending_review": 0,
+            "non_english": 0,
+            "missing_trigger": 0,
+        }
+        issue_workspaces: list[str] = []
+        for asset in assets:
+            record = records.get(str(asset.get("asset_id", "")), {})
+            caption = (
+                record.get("curation", {}).get("captions", {}).get(family, {})
+                if isinstance(record, dict)
+                else {}
+            )
+            text = str(caption.get("current", "")).strip()
+            if not text:
+                issue = "missing"
+            elif caption.get("status") != "reviewed":
+                issue = "pending_review"
+            elif not text.isascii():
+                issue = "non_english"
+            elif trigger not in text:
+                issue = "missing_trigger"
+            else:
+                issue = "complete"
+            counts[issue] += 1
+            if issue != "complete":
+                workspace_id = str(asset.get("workspace_id", ""))
+                if workspace_id and workspace_id not in issue_workspaces:
+                    issue_workspaces.append(workspace_id)
+        total = len(assets)
+        family_results[str(family)] = {
+            "total": total,
+            **counts,
+            "ready": total > 0 and counts["complete"] == total,
+            "workspace_ids": issue_workspaces,
+        }
+    ready = bool(assets) and duplicate_count == 0 and all(
+        item["ready"] for item in family_results.values()
+    )
+    return {
+        "project_id": project.get("project_id"),
+        "eligible_count": len(assets),
+        "duplicate_count": duplicate_count,
+        "families": family_results,
+        "ready": ready,
+    }
 
 
 def _raise_lora_http(error: LoraProjectError) -> NoReturn:

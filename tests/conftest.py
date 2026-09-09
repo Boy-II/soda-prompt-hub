@@ -116,4 +116,31 @@ def source_tree(settings: Settings) -> Settings:
     )
     Image.new("RGB", (48, 64), "red").save(kisega / "adult.png")
     Image.new("RGB", (48, 64), "blue").save(kisega / "safe.png")
+
+    animadex = git_root / "AnimaDex" / "samples"
+    animadex.mkdir(parents=True)
+    (animadex / "characters.csv").write_text(
+        "character,copyright,trigger,core_tags,count,url\n"
+        'test_hero,test_series,"test hero, test series",'
+        '"1girl, blue eyes, silver hair, long hair, cape",42,'
+        "https://example.com/test-hero\n",
+        encoding="utf-8",
+    )
+    (animadex / "artists.csv").write_text(
+        "artist,trigger,count,url\n"
+        "test_artist,Test Artist,12,https://example.com/test-artist\n",
+        encoding="utf-8",
+    )
+    character_thumbs = animadex / "images" / "characters" / "thumbs"
+    artist_thumbs = animadex / "images" / "artists" / "thumbs"
+    copyright_thumbs = animadex / "images" / "copyrights" / "thumbs"
+    character_thumbs.mkdir(parents=True)
+    artist_thumbs.mkdir(parents=True)
+    copyright_thumbs.mkdir(parents=True)
+    Image.new("RGB", (48, 64), "silver").save(
+        character_thumbs / "test hero, test series.webp",
+        "WEBP",
+    )
+    Image.new("RGB", (48, 64), "purple").save(artist_thumbs / "Test Artist.webp", "WEBP")
+    Image.new("RGB", (64, 48), "navy").save(copyright_thumbs / "test_series.webp", "WEBP")
     return settings

@@ -128,18 +128,21 @@ __PROMPT_HUB_BASE_STYLES__  </style>
       <aside>
         <p class="section-label" id="searchLabel">查找提示词和视觉参考</p>
         <div class="search-box"><input id="query" type="search" aria-label="输入提示词关键词" placeholder="例如：哥特连衣裙、兔耳、逆光" autofocus></div>
+        <div class="source-quick-filters" id="sourceQuickFilters" aria-label="资料来源快捷筛选"></div>
         <details class="advanced-filters">
           <summary>展开高级筛选</summary>
           <div class="filters" id="promptFilters">
-            <label>资料类型<select id="kind"><option value="">全部类型</option><option value="style">画风</option><option value="prompt">完整提示词</option><option value="modifier">修饰词</option><option value="wildcard">通配词</option><option value="caption">图片说明</option><option value="tag">标签</option></select></label>
+            <label>资料类型<select id="kind"><option value="">全部类型</option><option value="style">画风</option><option value="prompt">完整提示词</option><option value="modifier">修饰词</option><option value="wildcard">通配词</option><option value="caption">图片说明</option><option value="tag">标签</option><option value="character_reference">角色参照</option><option value="artist_reference">画师参照</option><option value="copyright_reference">作品参照</option></select></label>
             <label>内容分级<select id="safety"><option value="">全部分级</option><option value="sfw">普通</option><option value="suggestive">轻度成人向</option><option value="adult">成人向</option><option value="explicit-adult">明确成人向</option></select></label>
             <label>资料来源<select id="source"><option value="">全部来源</option></select></label>
+            <fieldset class="animadex-filters" id="animadexFilters" hidden><legend>AnimaDex 细分筛选</legend><label>作品<select id="animadexCopyright"><option value="">全部作品</option></select></label><label>发色<select id="animadexHair"><option value="">全部发色</option></select></label><label>瞳色<select id="animadexEyes"><option value="">全部瞳色</option></select></label></fieldset>
           </div>
           <div class="filters" id="ocFilters" hidden>
             <label>所属世界<select id="ocWorld"><option value="">全部世界</option></select></label>
           </div>
         </details>
         <button class="search-button" id="searchButton">查找提示词</button>
+        <button class="shelf-filter" id="onlyWithVisuals" aria-pressed="false">▣ 只看有图片的资料</button>
         <button class="shelf-filter" id="favoritesOnly" aria-pressed="false">☆ 只看我的收藏</button>
         <section class="oc-import-panel" id="ocImportPanel" hidden>
           <p class="section-label">从 OC Manager 导入</p>

@@ -339,6 +339,11 @@
     .mode-button + .mode-button { border-left: 1px solid var(--ink); }
     .mode-button[aria-pressed="true"] { background: var(--ink); color: var(--acid); }
     .search-box { position: relative; }
+    .source-quick-filters { display:flex; flex-wrap:wrap; gap:6px; margin-top:14px; }
+    .source-quick-filters:empty { display:none; }
+    .source-quick-filter { border:1px solid var(--line); background:#e2dccd; color:var(--muted); padding:7px 8px; cursor:pointer; font:800 9px/1 monospace; }
+    .source-quick-filter:hover { border-color:var(--ink); color:var(--ink); }
+    .source-quick-filter[aria-pressed="true"] { border-color:var(--ink); background:var(--ink); color:var(--acid); }
     input, select {
       width: 100%;
       border: 0;
@@ -365,6 +370,8 @@
     .advanced-filters summary::after { content: "+"; float: right; color: var(--signal); font-size: 15px; }
     .advanced-filters[open] summary::after { content: "−"; }
     .advanced-filters .filters { margin: 0; padding: 5px 0 18px; }
+    .animadex-filters { display:grid; gap:14px; margin:2px 0 0; padding:14px; border:1px solid var(--line); background:#e4ddce; }
+    .animadex-filters legend { padding:0 6px; color:var(--signal); font:800 9px/1 monospace; letter-spacing:.08em; }
     label { display: grid; gap: 4px; font: 700 10px/1 monospace; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
     .search-button {
       width: 100%;

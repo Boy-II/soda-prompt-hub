@@ -102,6 +102,32 @@ def test_comfy_impact_wildcard_uses_populated_prompt() -> None:
     assert metadata["text_prompts"] == [expected]
 
 
+def test_comfy_parameters_preserve_multiline_positive_prompt() -> None:
+    positive = (
+        "Anima:\n\n"
+        "——————————————————————————————————\n"
+        "Tag:\n\n"
+        "masterpiece, best quality, 1girl, silver hair, rainy railway platform"
+    )
+    parameters = (
+        f"{positive}\n"
+        "Negative prompt: lowres, blurry, bad anatomy\n"
+        "Steps: 4, CFG scale: 1, Seed: 26090901, Size: 512x768, Model: anima-base-v1.0"
+    )
+    info = PngImagePlugin.PngInfo()
+    info.add_text("parameters", parameters)
+    output = BytesIO()
+    Image.new("RGB", (64, 96), "navy").save(output, "PNG", pnginfo=info)
+
+    metadata = inspect_comfy_image(output.getvalue(), filename="multiline-parameters.png")[
+        "metadata"
+    ]
+
+    assert metadata["positive_prompts"] == [positive]
+    assert metadata["text_prompts"] == [positive]
+    assert metadata["negative_prompts"] == ["lowres, blurry, bad anatomy"]
+
+
 def test_comfy_directory_is_read_only_and_plain_jpeg_is_explicit(settings, tmp_path) -> None:
     source = tmp_path / "comfy-output"
     source.mkdir()
