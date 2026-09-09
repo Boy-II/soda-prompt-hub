@@ -1,5 +1,7 @@
+import re
 from importlib.resources import files
 
+from prompt_hub.remote_web import REMOTE_STYLES
 from prompt_hub.web import INDEX_HTML, render_index_html
 
 
@@ -49,11 +51,45 @@ def test_web_shell_exposes_persistent_interface_language_switcher() -> None:
 
 def test_interface_language_preserves_user_defined_device_name() -> None:
     assert "data-remote-device-name data-i18n-ignore" in INDEX_HTML
+    assert "\uff1b <span data-remote-device-name data-i18n-ignore>" in INDEX_HTML
+    assert "</span> 的 ComfyUI" in INDEX_HTML
+
+
+def test_english_local_search_has_no_mixed_language_copy() -> None:
+    assert "'智能':'Local'" in INDEX_HTML
+    assert "Choose text search or image search." in INDEX_HTML
+    assert '"文件检查已经通过": "File checks passed"' in INDEX_HTML
+    assert "Seed ${match[1]} · Steps ${match[2]}" in INDEX_HTML
+    assert '"翻译与改写用哪个模型": "Model for Translation and Rewriting"' in INDEX_HTML
+    assert "Model files are not copied" in INDEX_HTML
+
+
+def test_mobile_remote_tabs_keep_long_labels_inside_each_tab() -> None:
+    assert ".remote-section-tab-copy { width: 100%; }" in REMOTE_STYLES
+    assert (
+        ".remote-section-tab-copy strong { font-size: 12px; line-height: 1.05; "
+        "overflow-wrap: anywhere; white-space: normal; }"
+    ) in REMOTE_STYLES
+
+
+def test_interface_translations_do_not_embed_personal_runtime_values() -> None:
+    assert "/Users/soda" not in INDEX_HTML
+    assert "CHINAMI-5E1E3GQ" not in INDEX_HTML
+    assert "linhuieroc" not in INDEX_HTML
+    assert re.search(r"project-[0-9a-f]{24,}", INDEX_HTML) is None
+    assert "Mac project directory: ${match[1]}" in INDEX_HTML
+    assert "Device / ${match[2]}" in INDEX_HTML
+    assert "Associated: ${match[1]}" in INDEX_HTML
 
 
 def test_pr11_dataset_copy_has_three_language_entries() -> None:
     assert '"说明文字设置": "Caption Settings"' in INDEX_HTML
     assert '"训练内容": "Training Content"' in INDEX_HTML
+    assert '"打标模型": "Tagging Model"' in INDEX_HTML
+    assert "打标方式" not in INDEX_HTML
+    assert "training, regularization, and final tag filtering" in INDEX_HTML
+    assert "No need to generate tags again. Continue to manual review." in INDEX_HTML
+    assert "Each export is saved as a separate version." in INDEX_HTML
     assert '"图片类型": "Image Type"' in INDEX_HTML
     assert '"二次元与插画": "Anime & Illustration"' in INDEX_HTML
     assert '"真人与摄影": "People & Photography"' in INDEX_HTML
