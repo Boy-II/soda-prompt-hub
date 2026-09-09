@@ -57,7 +57,7 @@
       return item.kind === 'tag' ? [item.title, ...String(item.content || '').split(',')] : [];
     }
 
-    const kindLabels = {style:'画风',prompt:'完整提示词',modifier:'修饰词',wildcard:'通配词',caption:'图片说明',tag:'标签'};
+    const kindLabels = {style:'画风',prompt:'完整提示词',modifier:'修饰词',wildcard:'通配词',caption:'图片说明',tag:'标签',character_reference:'角色参照',artist_reference:'画师参照',copyright_reference:'作品参照'};
     const safetyLabels = {sfw:'普通',suggestive:'轻度成人向',adult:'成人向','explicit-adult':'明确成人向',unrated:'尚未分级'};
     const modelFamilyLabels = {'danbooru-tags':'Booru 标签',anima:'Anima',krea2:'Krea 2'};
     const categoryLabels = {'web-capture':'网页资料','kisega-tag':'服装与物件标签'};
@@ -86,7 +86,7 @@
       const cards = item.visuals.map((visual, index) => {
         const rawVisualSafety = visual.safety || item.safety || 'unrated';
         const visualSafety = escapeHtml(rawVisualSafety);
-        const openLabel = multiple ? `查看第 ${index + 1} 张 ↗` : '查看原图 ↗';
+        const openLabel = multiple ? `查看第 ${index + 1} 张 ↗` : '查看大图 ↗';
         return `<a class="visual-frame" href="${escapeHtml(visual.original_url)}" target="_blank" rel="noreferrer" aria-label="查看 ${escapeHtml(item.title)} 参照图 ${index + 1}">
           <img src="${escapeHtml(visual.thumbnail_url)}" alt="${escapeHtml(item.title)} 视觉参照 ${index + 1}" loading="lazy" decoding="async">
           <span class="visual-label">${openLabel}</span><span class="visual-safety ${visualSafety}">${escapeHtml(safetyLabels[rawVisualSafety] || '尚未分级')}</span>
@@ -165,7 +165,53 @@
       $('#homeReleaseIdentity').textContent = `Soda Prompt Hub ${product.version || ''}（${product.release_channel_label || '版本未知'}）：`;
       $('#source').innerHTML = '<option value="">全部来源</option>' + sources.map(s => `<option value="${escapeHtml(s.source_id)}">${escapeHtml(s.name)}</option>`).join('');
       if ([...$('#source').options].some(option => option.value === selectedSource)) $('#source').value = selectedSource;
+      renderSourceQuickFilters(sources);
       $('#sourceList').innerHTML = '<p class="section-label">资料来源</p>' + sources.map(s => `<div class="source-row"><span>${escapeHtml(s.name)}</span><span>${formatNumber(s.entry_count)}</span></div>`).join('');
+    }
+
+    function renderSourceQuickFilters(sources) {
+      if (currentMode === 'characters') {
+        $('#sourceQuickFilters').innerHTML = '';
+        return;
+      }
+      const selected = $('#source').value;
+      const visualSources = sources.filter(item => Number(item.visual_count || 0) > 0);
+      $('#sourceQuickFilters').innerHTML = [
+        {source_id:'', name:'全部来源'},
+        ...visualSources,
+      ].map(item => `<button type="button" class="source-quick-filter" data-source-quick="${escapeHtml(item.source_id)}" aria-pressed="${String(selected === item.source_id)}">${escapeHtml(item.name)}</button>`).join('');
+      $('#sourceQuickFilters').querySelectorAll('[data-source-quick]').forEach(button => button.addEventListener('click', async () => {
+        $('#source').value = button.dataset.sourceQuick;
+        await handleSourceChange();
+      }));
+    }
+
+    async function loadAnimadexFacets() {
+      const response = await fetch('/api/sources/animadex/facets');
+      if (!response.ok) return;
+      const facets = await response.json();
+      const optionLabel = value => String(value || '').replaceAll('_', ' ');
+      const fill = (selector, label, values) => {
+        const selected = $(selector).value;
+        $(selector).innerHTML = `<option value="">${label}</option>` + (values || []).map(value => `<option value="${escapeHtml(value)}">${escapeHtml(optionLabel(value))}</option>`).join('');
+        if ([...$(selector).options].some(option => option.value === selected)) $(selector).value = selected;
+      };
+      fill('#animadexCopyright', '全部作品', facets.categories);
+      fill('#animadexHair', '全部发色', facets.hair_colors);
+      fill('#animadexEyes', '全部瞳色', facets.eye_colors);
+    }
+
+    async function handleSourceChange() {
+      const isAnimadex = $('#source').value === 'animadex';
+      $('#animadexFilters').hidden = !isAnimadex;
+      if (isAnimadex) await loadAnimadexFacets();
+      else {
+        $('#animadexCopyright').value = '';
+        $('#animadexHair').value = '';
+        $('#animadexEyes').value = '';
+      }
+      document.querySelectorAll('[data-source-quick]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.sourceQuick === $('#source').value)));
+      await searchPrompts();
     }
 
     function sourceSetupSignature(sources) {
@@ -243,7 +289,7 @@
     async function searchPrompts() {
       $('#status').textContent = '正在查找…';
       $('#results').classList.remove('character-results');
-      const params = new URLSearchParams({query: $('#query').value, kind: $('#kind').value, safety: $('#safety').value, source_id: $('#source').value, favorites_only: $('#favoritesOnly').getAttribute('aria-pressed'), limit: '30'});
+      const params = new URLSearchParams({query: $('#query').value, kind: $('#kind').value, safety: $('#safety').value, source_id: $('#source').value, favorites_only: $('#favoritesOnly').getAttribute('aria-pressed'), has_visual: $('#onlyWithVisuals').getAttribute('aria-pressed'), category: $('#animadexCopyright').value, hair_color: $('#animadexHair').value, eye_color: $('#animadexEyes').value, limit: '30'});
       const data = await fetch('/api/search?' + params).then(r => r.json());
       currentResults = data.results;
       archivePage = 1;
@@ -282,6 +328,8 @@
       $('#promptFilters').hidden = characterMode;
       $('#ocFilters').hidden = !characterMode;
       $('#favoritesOnly').hidden = characterMode;
+      $('#onlyWithVisuals').hidden = characterMode;
+      $('#sourceQuickFilters').hidden = characterMode;
       $('#ocImportPanel').hidden = !characterMode;
       $('#resultsTitle').textContent = characterMode ? '角色结果' : '提示词结果';
       $('#query').placeholder = characterMode ? '角色名、世界、故事或外观' : '例如：哥特连衣裙、兔耳、逆光';
@@ -290,8 +338,9 @@
       $('#searchLabel').textContent = characterMode ? '查找角色' : '查找提示词和视觉参考';
       $('#archiveNotice').innerHTML = characterMode ? '<strong>OC 角色库：</strong>导入 OC Manager JSON 后，可以按角色名、世界、故事和外观查找角色。' : '<strong>提示词与视觉资料库：</strong>输入服装、动作、构图、场景或画风关键词。找到合适内容后可以收藏并记录实测备注。';
       $('#query').value = '';
+      if (!characterMode) await handleSourceChange();
       if (characterMode) await loadOcWorlds();
-      await runSearch();
+      if (characterMode) await runSearch();
     }
 
     async function setView(view) {
@@ -386,10 +435,14 @@
 
     async function rebuild() {
       const button = $('#importButton');
+      const sourceMessage = $('#sourceSyncMessage');
       button.disabled = true;
       button.textContent = '正在重建索引…';
+      sourceMessage.textContent = '正在重建本地索引…';
       try {
-        const result = await fetch('/api/import', {method: 'POST'}).then(r => r.json());
+        const response = await fetch('/api/import', {method: 'POST'});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.detail || `请求失败：${response.status}`);
         await loadStats();
         await searchPrompts();
         const failed = result.failed || [], skipped = result.skipped || [];
@@ -398,7 +451,11 @@
         if (rebuilt === 0) message = `没有任何来源被重建，现有 ${formatNumber(result.stats.entries)} 条资料保持不变`;
         if (skipped.length) message += `；${skipped.length} 个来源的本地目录不存在（${skipped.map(item => item.name).join('、')}）`;
         if (failed.length) message += `；${failed.length} 个来源本次失败：${failed.map(item => `${item.name} — ${item.message}`).join('；')}`;
+        sourceMessage.textContent = message;
         $('#status').textContent = message;
+      } catch (error) {
+        sourceMessage.textContent = `重建失败：${error.message}`;
+        $('#status').textContent = `重建失败：${error.message}`;
       } finally {
         button.disabled = false;
         button.textContent = '仅重建本地索引';
@@ -498,7 +555,8 @@
     $('#query').addEventListener('keydown', event => { if (event.key === 'Enter') runSearch(); });
     $('#kind').addEventListener('change', searchPrompts);
     $('#safety').addEventListener('change', searchPrompts);
-    $('#source').addEventListener('change', searchPrompts);
+    $('#source').addEventListener('change', () => handleSourceChange().catch(error => { $('#status').textContent = error.message; }));
+    ['#animadexCopyright', '#animadexHair', '#animadexEyes'].forEach(selector => $(selector).addEventListener('change', searchPrompts));
     $('#ocWorld').addEventListener('change', searchCharacters);
     $('#archivePreviousPage').addEventListener('click', () => { if (archivePage <= 1) return; archivePage -= 1; renderPromptPage(); $('#archivePagination').scrollIntoView({block:'nearest'}); });
     $('#archiveNextPage').addEventListener('click', () => { if (archivePage * archivePageSize >= currentResults.length) return; archivePage += 1; renderPromptPage(); $('#archivePagination').scrollIntoView({block:'nearest'}); });
@@ -518,6 +576,12 @@
       const active = event.currentTarget.getAttribute('aria-pressed') === 'true';
       event.currentTarget.setAttribute('aria-pressed', String(!active));
       event.currentTarget.textContent = active ? '☆ 只看我的收藏' : '★ 正在只看收藏';
+      searchPrompts();
+    });
+    $('#onlyWithVisuals').addEventListener('click', event => {
+      const active = event.currentTarget.getAttribute('aria-pressed') === 'true';
+      event.currentTarget.setAttribute('aria-pressed', String(!active));
+      event.currentTarget.textContent = active ? '▣ 只看有图片的资料' : '▣ 正在只看有图片的资料';
       searchPrompts();
     });
     $('#results').addEventListener('click', async event => {

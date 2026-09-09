@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
 
 _KISEGA_SOURCE_ID = "kisegaeningyou"
 _CLIO_SOURCE_ID = "clio-style-preview"
+_ANIMADEX_SOURCE_ID = "animadex"
 _THUMBNAIL_SIZE = (640, 640)
 
 
@@ -42,24 +44,10 @@ def resolve_media_path(
     relative = PurePosixPath(relative_path)
     if relative.is_absolute() or ".." in relative.parts:
         return None
-
-    if source_id == _KISEGA_SOURCE_ID:
-        if variant == "original":
-            root = settings.git_sources_root / "Kisegaeningyou"
-            requested = Path(*relative.parts)
-            allowed_suffix = ".png"
-        elif variant == "thumbnail":
-            root = settings.thumbnails_root / _KISEGA_SOURCE_ID
-            requested = Path(*relative.parts).with_suffix(".webp")
-            allowed_suffix = ".webp"
-        else:
-            return None
-    elif source_id == _CLIO_SOURCE_ID and variant in {"original", "thumbnail"}:
-        root = settings.git_sources_root / "clio-style-preview"
-        requested = Path(*relative.parts)
-        allowed_suffix = ".jpg"
-    else:
+    request = _media_request(settings, source_id, variant, relative)
+    if request is None:
         return None
+    root, requested, allowed_suffix = request
 
     resolved_root = root.resolve()
     candidate = (resolved_root / requested).resolve()
@@ -68,3 +56,52 @@ def resolve_media_path(
     if candidate.suffix.casefold() != allowed_suffix or not candidate.is_file():
         return None
     return candidate
+
+
+def _media_request(
+    settings: Settings,
+    source_id: str,
+    variant: str,
+    relative: PurePosixPath,
+) -> tuple[Path, Path, str] | None:
+    if source_id == _KISEGA_SOURCE_ID and variant == "original":
+        return settings.git_sources_root / "Kisegaeningyou", Path(*relative.parts), ".png"
+    if source_id == _KISEGA_SOURCE_ID and variant == "thumbnail":
+        return (
+            settings.thumbnails_root / _KISEGA_SOURCE_ID,
+            Path(*relative.parts).with_suffix(".webp"),
+            ".webp",
+        )
+    if source_id == _CLIO_SOURCE_ID and variant in {"original", "thumbnail"}:
+        return settings.git_sources_root / "clio-style-preview", Path(*relative.parts), ".jpg"
+    if source_id == _ANIMADEX_SOURCE_ID and variant in {"original", "thumbnail"}:
+        return _animadex_media_request(settings, relative)
+    return None
+
+
+def _animadex_media_request(
+    settings: Settings,
+    relative: PurePosixPath,
+) -> tuple[Path, Path, str] | None:
+    source_root = settings.git_sources_root / "AnimaDex"
+    if relative.parts[:1] == ("catalogue",):
+        return _animadex_data_root(source_root), Path(*relative.parts[1:]), ".webp"
+    if relative.parts[:2] == ("samples", "images"):
+        return source_root, Path(*relative.parts), ".webp"
+    return None
+
+
+def _animadex_data_root(source_root: Path) -> Path:
+    data_root = source_root.parent / "animadex-data"
+    config_path = source_root / "config.toml"
+    if not config_path.is_file():
+        return data_root
+    try:
+        raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return data_root
+    configured = str(raw.get("paths", {}).get("data_dir", "")).strip()
+    if not configured:
+        return data_root
+    candidate = Path(configured).expanduser()
+    return candidate if candidate.is_absolute() else (source_root / candidate).resolve()

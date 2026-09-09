@@ -231,6 +231,10 @@ def _search_filters(
     model_family: str,
     safety: str,
     favorites_only: bool,
+    has_visual: bool = False,
+    category: str = "",
+    hair_color: str = "",
+    eye_color: str = "",
 ) -> tuple[list[str], list[Any]]:
     filters: list[str] = []
     values: list[Any] = []
@@ -239,12 +243,28 @@ def _search_filters(
         ("e.source_id", source_id),
         ("e.model_family", model_family),
         ("e.safety", safety),
+        ("e.category", category),
     ):
         if value:
             filters.append(f"{column} = ?")
             values.append(value)
     if favorites_only:
         filters.append("COALESCE(um.favorite, 0) = 1")
+    if has_visual:
+        filters.append(
+            "(json_array_length(e.metadata_json, '$.image_paths') > 0 "
+            "OR json_extract(e.metadata_json, '$.visual_path') != '' "
+            "OR json_extract(e.metadata_json, '$.cached_media_path') != '')"
+        )
+    for metadata_path, value in (
+        ("$.hair_colors", hair_color),
+        ("$.eye_colors", eye_color),
+    ):
+        if value:
+            filters.append(
+                "EXISTS (SELECT 1 FROM json_each(e.metadata_json, ?) WHERE json_each.value = ?)"
+            )
+            values.extend((metadata_path, value))
     return filters, values
 
 

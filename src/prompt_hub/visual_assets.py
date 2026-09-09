@@ -106,6 +106,9 @@ class VisualAssetCatalog:
                 if path is None or path in seen_paths:
                     continue
                 seen_paths.add(path)
+                original_variant = (
+                    "thumbnail" if ref.get("original_variant") == "thumbnail" else "original"
+                )
                 found.append(
                     _asset(
                         "prompt_visual",
@@ -120,7 +123,9 @@ class VisualAssetCatalog:
                                 f"/media/{entry['source_id']}/thumbnail/{quote(relative, safe='/')}"
                             ),
                             "original_url": (
-                                f"/media/{entry['source_id']}/original/{quote(relative, safe='/')}"
+                                f"/media/{entry['source_id']}/"
+                                f"{original_variant}/"
+                                f"{quote(relative, safe='/')}"
                             ),
                         },
                     )

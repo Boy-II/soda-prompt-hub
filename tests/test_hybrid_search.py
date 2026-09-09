@@ -39,6 +39,10 @@ def test_hybrid_search_keeps_keyword_results_when_embeddings_are_absent(
         assert response.status_code == 200
         payload = response.json()
         assert payload["semantic"]["status"] == "not_requested"
+        assert payload["semantic"]["message"] == (
+            "当前按关键词查找本地资料。建立语义索引后，还可以匹配意思相近的内容。"  # noqa: RUF001
+        )
+        assert "embedding" not in payload["semantic"]["message"]
         groups = {item["key"]: item for item in payload["groups"]}
         assert groups["prompt_library"]["results"][0]["title"] == "Gothic Ink"
         assert groups["prompt_library"]["results"][0]["match_type"] == "keyword"
@@ -74,6 +78,7 @@ def test_hybrid_search_uses_real_compatible_index_and_source_image_query(setting
         assert mixed.status_code == 200
         payload = mixed.json()
         assert payload["semantic"]["status"] == "active"
+        assert payload["semantic"]["message"] == "已同时按关键词和相近含义查找本地资料。"
         groups = {item["key"]: item for item in payload["groups"]}
         assert [item["asset_id"] for item in groups["my_datasets"]["results"]] == [
             "asset-a",
@@ -114,7 +119,10 @@ def test_hybrid_search_does_not_fake_incompatible_semantic_results(settings) -> 
         )
         assert response.status_code == 200
         assert response.json()["semantic"]["status"] == "unavailable"
-        assert "未生成伪结果" in response.json()["semantic"]["message"]
+        assert response.json()["semantic"]["message"] == (
+            "现有语义索引不适用于本次查询，因此只显示关键词结果。"  # noqa: RUF001
+        )
+        assert "embedding" not in response.json()["semantic"]["message"]
 
 
 def test_hybrid_search_includes_windows_lora_metadata_without_copying_weights(settings) -> None:

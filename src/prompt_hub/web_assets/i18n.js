@@ -10,7 +10,7 @@
 
       const en = {
         '主导航':'Main navigation','界面语言':'Interface language','本地绘图与数据集':'Local drawing and datasets','当前：首页':'Current: Home','打开菜单':'Open menu','收起菜单':'Close menu',
-        '首页':'Home','创作台':'Create','提示词库':'Prompt library','本地检索':'Local search','角色库':'Characters','数据集':'Datasets','LoRA 项目':'LoRA projects','Windows 出图':'Windows images','资料管理':'Library settings','设备连接':'Devices',
+        '首页':'Home','创作台':'Create','提示词库':'Prompt library','本地检索':'Local search','角色库':'Characters','数据集':'Datasets','LoRA 项目':'LoRA projects','Windows 出图':'Windows images','资料管理':'Library settings','资料来源':'Sources','设备连接':'Devices',
         '标签：中英':'Tags: CN + EN','标签：仅英文':'Tags: English','本地绘图工作台':'Local drawing workspace','今天想画':'What do you want to draw','什么？':'today?','两种提示词格式':'Two prompt formats','日常绘图顺序':'Everyday workflow','从想法到可用提示词':'From idea to usable prompts',
         '确定角色和想法':'Choose the character and idea','选择提示词与视觉参考':'Choose prompts and visual references','按模型整理并保存':'Format and save for each model','本地资料':'Local library','视觉与提示来源':'Prompt and visual sources','已导入 OC':'Imported OCs','当前程序':'App version','本机记录':'Local records','正在读取':'Loading',
         '第一次使用？查看 5 步指南':'First time here? View the 5-step guide','先写想法或选 OC':'Write an idea or choose an OC','找提示词和参考图':'Find prompts and reference images','整理两种提示词':'Prepare both prompt formats','需要时交给 Windows 出图':'Send to Windows when needed','精选、打标并交付数据集':'Select, tag, and export the dataset',
@@ -19,7 +19,7 @@
         '绘图项目':'Drawing projects','绘图创作':'Drawing workspace','新建绘图项目':'New drawing project','最近项目':'Recent projects','从资料库找参考':'Find references in the library','从提示词库找参考':'Search the prompt library','还没有查找参考':'No references searched yet','让模型帮忙':'Ask a model for help','暂无可用模型':'No model available','用所选模型补全空白项':'Use the selected model to fill empty fields','打开模型接入':'Open model connections','已保存配方':'Saved recipes','项目名':'Project name','不希望出现':'Avoid','从想法到数据集':'From idea to dataset','当前项目做到哪一步':'Project progress','把画面拆成七部分':'Break the image into seven parts','找到的参考资料':'Reference material found','继续找参考资料':'Find more references','两种提示词结果':'Two prompt outputs','保存到这台 Mac':'Save to this Mac','保存为配方':'Save as recipe','导出 Anima + Krea 2 JSON':'Export Anima + Krea 2 JSON','模型、LoRA 与采样参数':'Model, LoRA, and sampling','生成工作流':'Generation workflow','先做低成本测试':'Start with a low-cost test','发送到':'Send to','检查生成结果':'Review generated results','导入结果图':'Import result image',
         '只查本机资料':'Search local files only','智能':'Local','本地':'Local','检索':'Search','图片检索是否可用':'Image search status','使用自定义视觉模型':'Use a custom vision model','用文字查提示词':'Search prompts by text','用参考图查相似图':'Find similar images by reference','按相似画面浏览':'Browse by visual similarity','检索本地资料':'Search local library','提示词资料':'Prompt material','视觉参考':'Visual references','我的数据集':'My datasets','当前没有结果':'No results','全部视觉资料':'All visual material','图片来自哪里':'Image source','只查某个项目或数据集':'Limit to a project or dataset','全部项目':'All projects','选择一张参考图':'Choose a reference image','查找相似图片':'Find similar images','开始分组浏览':'Browse groups','相似画面分组':'Similar-image groups','建立 / 更新本地索引':'Build / update local index','切回官方视觉模型':'Use the official vision model','拉取视觉模型':'Download vision model','视觉模型下载任务':'Vision model download','选择文字检索或图片检索。没有真实向量时，以图找图保持明确空状态。':'Choose text search or image search. Image search stays unavailable until a real visual index is ready.',
         '只在 Mac 上整理':'Prepare on Mac','数据集工作台':'Dataset workspace','简单模式':'Simple mode','高级检查':'Advanced review','继续上次整理':'Continue last session','导入另一个文件夹':'Import another folder','数据集文件夹路径':'Dataset folder path','选择文件夹…':'Choose folder…','尚未选择文件夹':'No folder selected','手动输入路径（外接卷或深层目录）':'Enter a path manually (external drive or nested folder)','或上传 zip 数据包':'Or upload a ZIP package','选择 ZIP 文件…':'Choose ZIP file…','尚未选择 zip':'No ZIP selected','上传并导入 zip':'Upload and import ZIP','显示名称（可选）':'Display name (optional)','读取新的文件夹':'Read a new folder','最近工作区':'Recent workspaces','当前数据集':'Current dataset','删除这个工作区':'Remove this workspace','数据集交付五步流程':'Five-step dataset export','导入素材':'Import material','检查问题':'Check issues','准备标签':'Prepare tags','人工审核':'Manual review','生成交付版本':'Create export version','当前步骤':'Current step','查看下一步':'View next step','坏图与重复':'Invalid and duplicate images','重新扫描':'Scan again','全部图片':'All images','待审核':'Pending review','待复查':'Needs review','保留':'Keep','排除':'Exclude','文件格式':'File format','全部格式':'All formats','重复检查':'Duplicate check','无重复':'No duplicates','完全重复':'Exact duplicates','近似重复':'Near duplicates','清除筛选':'Clear filters','选择当前筛选结果':'Select filtered results','排除所选':'Exclude selected','逐张检查':'Review one by one','交付前检查':'Pre-export check','重新检查当前选择':'Check selection again','生成并保存到 Mac':'Create and save on Mac','交付历史':'Export history','标签统计与修改记录':'Tag statistics and edit history','预览标签修改':'Preview tag edits','确认写入并保存修改记录':'Apply changes and save a revision','选择修改记录':'Choose revision','恢复到这里':'Restore this revision',
-        'LoRA 数据集准备':'LoRA dataset preparation','LoRA 数据集五步流程':'Five-step LoRA dataset workflow','定义目标':'Define goal','选择图片':'Choose images','检查现有图片':'Review selected images','检查缺口':'Check missing coverage','确认图片和说明文字':'Confirm images and captions','生成新的交付版本':'Create a new export version','从哪里开始':'Where to start','新建 LoRA 数据集项目':'New LoRA dataset project','要训练什么':'Training target','角色':'Character','服装':'Outfit','角色和固定服装':'Character and fixed outfit','触发词':'Trigger word','从 OC Manager 开始（可选）':'Start from OC Manager (optional)','不关联 OC':'Do not link an OC','目标模型':'Target model','建立 LoRA 数据集项目 →':'Create LoRA dataset project →','保存项目设置':'Save project settings','已选图片':'Selected images','审核后保留':'Kept after review','训练尺寸':'Training resolution','从已经扫描的数据集中选择训练图片':'Choose training images from an imported dataset','选择已经导入的数据集':'Choose an imported dataset','只读取来源数据集':'Read source dataset only','检查已选图片':'Review selected images','检查是否缺少角度、动作或服装变化':'Check whether angles, poses, or outfit variations are missing','预览全部图片':'Preview all images','预览已选图片':'Preview selected images','生成数据集交付版本':'Create dataset export version','确认后生成交付版本，再到 Windows 训练':'Create an export after review, then train on Windows',
+        'LoRA 数据集准备':'LoRA dataset preparation','LoRA 数据集五步流程':'Five-step LoRA dataset workflow','定义目标':'Define goal','选择图片':'Choose images','检查现有图片':'Review selected images','检查缺口':'Check missing coverage','确认图片和说明文字':'Confirm images and captions','生成新的交付版本':'Create a new export version','从哪里开始':'Where to start','新建 LoRA 数据集项目':'New LoRA dataset project','要训练什么':'Training target','角色':'Character','服装':'Outfit','角色和固定服装':'Character and fixed outfit','触发词':'Trigger word','从 OC Manager 开始（可选）':'Start from OC Manager (optional)','不关联 OC':'Do not link an OC','需要交付的数据集格式':'Dataset formats to export','Anima · 英文标签':'Anima · English tags','Krea 2 · 英文自然语言':'Krea 2 · English natural language','建立 LoRA 数据集项目 →':'Create LoRA dataset project →','保存项目设置':'Save project settings','已选图片':'Selected images','审核后保留':'Kept after review','训练尺寸':'Training resolution','从已经扫描的数据集中选择训练图片':'Choose training images from an imported dataset','选择已经导入的数据集':'Choose an imported dataset','只读取来源数据集':'Read source dataset only','检查已选图片':'Review selected images','检查是否缺少角度、动作或服装变化':'Check whether angles, poses, or outfit variations are missing','预览全部图片':'Preview all images','预览已选图片':'Preview selected images','生成数据集交付版本':'Create dataset export version','确认后生成交付版本，再到 Windows 训练':'Create an export after review, then train on Windows','去准备 Anima 标签':'Prepare Anima tags','去生成 Krea 2 说明':'Generate Krea 2 captions',
         'Windows 出图结果':'Windows image results','处理顺序':'Workflow','导入一张图片':'Import one image','选择 PNG / JPEG / WebP':'Choose PNG / JPEG / WebP','尚未选择图片':'No image selected','导入并读取生成参数':'Import and read generation settings','扫描整个结果文件夹':'Scan an output folder','Mac 能看到的文件夹路径':'Folder path visible to Mac','扫描这个文件夹':'Scan this folder','选择它属于哪个项目':'Choose its project','创作项目':'Drawing project','请选择项目':'Choose a project','刷新结果列表':'Refresh results','已经导入到 Mac 的图片':'Images imported to Mac','等待您处理':'Waiting for review','只看':'Show','全部':'All','未审核':'Unreviewed','数据集候选':'Dataset candidate','失败测试':'Failed test','已关联参考':'Linked reference',
         'Mac 连接':'Mac connection','设备':'Device','连接':'Connection','登录信息放在哪里':'Where credentials are stored','密码由 Mac 钥匙串保存':'Password is stored in macOS Keychain','任务状态':'Tasks','模型库':'Model library','底模':'Base models','模型接入':'Model connections','模型服务':'Model services','Windows 远程设备':'Windows device','主机名或局域网 IP':'Hostname or LAN IP','设备显示名':'Device name','Mac 已连接的 Windows 文件夹':'Windows folder mounted on Mac','启用这台设备':'Enable this device','保存设备信息':'Save device settings','检查是否连接成功':'Check connection','刷新状态':'Refresh status','这里会出现哪些任务？':'What tasks appear here?','需要处理':'Needs attention','历史记录':'History','刷新任务状态':'Refresh tasks','忽略全部待接收旧记录':'Dismiss all old returned tasks','取消全部等待中的任务':'Cancel all queued tasks','查看 Windows 上的 LoRA':'View LoRAs on Windows','从 Windows 更新清单':'Update from Windows','名称、路径、触发词或标签':'Name, path, trigger word, or tag','LoRA 目录树':'LoRA folder tree','返回全部目录':'Show all folders','LoRA 清单分页':'LoRA list pages','查看 Windows 上的模型':'View models on Windows','名称 / 路径 / 类型 / 模型系列':'Name / path / type / model family','模型类型与目录树':'Model type and folder tree','返回全部模型':'Show all models','底模清单分页':'Base model list pages','连接本地或在线模型':'Connect a local or online model','显示名':'Display name','服务类型':'Service type','自定义':'Custom','服务地址（Base URL）':'Service address (Base URL)','读取模型列表':'Read model list','取消编辑':'Cancel editing','全选':'Select all','全不选':'Select none','保存连接和所选模型（已选 0）':'Save connection and selected models (0 selected)','还没有读取模型列表':'Model list has not been read','还没有保存模型服务':'No model service saved',
         '本地提示词来源中心':'Local prompt source center','这些资料从哪里来':'Where this material comes from','已经保存的网页资料':'Saved web material','保存网页资料':'Save web material','网页地址':'Web address','资料标题':'Title','我为什么保存它':'Why I saved it','许可信息':'License','保存为':'Save as','可保存到本机':'Can be saved locally','只收藏链接':'Save link only','＋ 保存这条网页资料':'＋ Save this web page','保存网上找到的':'Save something found online','关闭':'Close','删除':'Delete','复制':'Copy','继续':'Continue','取消':'Cancel','重试':'Retry','暂停':'Pause','查看来源':'View source','下载 ZIP':'Download ZIP','打开 Finder':'Open Finder'
@@ -615,6 +615,27 @@
         "数据结构": "Data Format",
         "创作、资料引用、双格式输出、远程出图、结果回流与数据集交付已经形成完整闭环。": "Create with local references, prepare both prompt formats, send work to Windows, review the returned images, and export a dataset.",
         "智能检索": "Local Search",
+        "当前按关键词查找本地资料。建立语义索引后，还可以匹配意思相近的内容。": "Currently searching the local library by keyword. Build a semantic index to also match related meanings.",
+        "已同时按关键词和相近含义查找本地资料。": "Searched the local library by keyword and related meaning.",
+        "现有语义索引不适用于本次查询，因此只显示关键词结果。": "The current semantic index cannot be used for this query, so only keyword results are shown.",
+        "正在重建本地索引…": "Rebuilding the local index…",
+        "正在保存…": "Saving…",
+        "已保存": "Saved",
+        "本地资料来源": "Local sources",
+        "资料来源快捷筛选": "Quick source filters",
+        "全部来源": "All sources",
+        "角色参照": "Character reference",
+        "画师参照": "Artist reference",
+        "作品参照": "Series reference",
+        "AnimaDex 细分筛选": "AnimaDex filters",
+        "作品": "Series",
+        "全部作品": "All series",
+        "发色": "Hair color",
+        "全部发色": "All hair colors",
+        "瞳色": "Eye color",
+        "全部瞳色": "All eye colors",
+        "▣ 只看有图片的资料": "▣ Show entries with images only",
+        "▣ 正在只看有图片的资料": "▣ Showing entries with images only",
         "通用": "General",
         "肖像": "Portrait",
         "风格": "Style",
@@ -708,6 +729,10 @@
       });
 
       const enPatterns = [
+        [/^重建失败：(.+)$/, match => `Rebuild failed: ${match[1]}`],
+        [/^保存失败：(.+)$/, match => `Save failed: ${match[1]}`],
+        [/^索引已更新，共 ([\d,]+) 条资料(?:；([\d,]+) 个来源的本地目录不存在（(.+)）)?(?:；([\d,]+) 个来源本次失败：(.+))?$/, match => `Index updated with ${match[1]} items.${match[2] ? ` ${match[2]} sources are not available locally (${match[3]}).` : ''}${match[4] ? ` ${match[4]} sources failed this time: ${match[5]}` : ''}`],
+        [/^没有任何来源被重建，现有 ([\d,]+) 条资料保持不变(?:；([\d,]+) 个来源的本地目录不存在（(.+)）)?(?:；([\d,]+) 个来源本次失败：(.+))?$/, match => `No sources were rebuilt; the existing ${match[1]} items were left unchanged.${match[2] ? ` ${match[2]} sources are not available locally (${match[3]}).` : ''}${match[4] ? ` ${match[4]} sources failed this time: ${match[5]}` : ''}`],
         [/^已选择 ([\d,]+) 张可交付图片。生成版本前仍可逐张复查。$/, match => `${match[1]} export-ready image${match[1] === '1' ? '' : 's'} selected. You can still review them individually before creating a version.`],
         [/^([\d,]+) 张图片已通过交付前检查。$/, match => `${match[1]} image${match[1] === '1' ? '' : 's'} passed the pre-export check.`],
         [/^(.+) (已确认|已完成)$/, match => `${translateEnglish(match[1], false)} ${match[2] === '已确认' ? 'confirmed' : 'complete'}`],
@@ -762,6 +787,11 @@
         [/^(角色|服装|角色和固定服装|画风) · 触发词 (.+) · 第 ([\d,]+) 次修改$/, match => `${translateEnglish(match[1], false)} · Trigger word ${match[2]} · Revision ${match[3]}`],
         [/^已关联：(.+)$/, match => `Associated: ${match[1]}`],
         [/^Mac 项目目录：(.+)$/, match => `Mac project directory: ${match[1]}`],
+        [/^(Anima · 英文标签|Krea 2 · 英文自然语言)：当前 ([\d,]+)\/([\d,]+) 张已完成$/, match => `${translateEnglish(match[1], false)}: ${match[2]}/${match[3]} complete`],
+        [/^缺少 ([\d,]+) 张$/, match => `${match[1]} missing`],
+        [/^([\d,]+) 张尚未确认$/, match => `${match[1]} not yet confirmed`],
+        [/^([\d,]+) 张不是纯英文$/, match => `${match[1]} not fully English`],
+        [/^([\d,]+) 张缺少触发词$/, match => `${match[1]} missing the trigger word`],
         [/^Windows Worker 与本机 ComfyUI 已通过自检。Python \/ (.+) · 设备 \/ (.+)$/, match => `Windows Worker and local ComfyUI passed self-check. Python / ${match[1]} · Device / ${match[2]}`],
         [/^([\d,]+) 个来源$/, match => `${match[1]} sources`],
         [/^([\d,]+) 条资料$/, match => `${match[1]} library items`],
@@ -976,12 +1006,18 @@
               if (translated !== current) record.target.setAttribute(attribute, translated);
               return;
             }
+            if (record.type === 'characterData') {
+              const translated = translate(record.target.textContent);
+              if (translated !== record.target.textContent) record.target.textContent = translated;
+              return;
+            }
             record.addedNodes.forEach(node => translateTree(node));
           });
         });
         observer.observe(document.body, {
           childList:true,
           subtree:true,
+          characterData:true,
           attributes:true,
           attributeFilter:['placeholder', 'aria-label', 'title', 'alt'],
         });

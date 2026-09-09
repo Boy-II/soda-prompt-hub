@@ -471,6 +471,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         model_family: str = "",
         safety: str = "",
         favorites_only: bool = False,
+        has_visual: bool = False,
+        category: str = "",
+        hair_color: str = "",
+        eye_color: str = "",
         limit: Annotated[int, Query(ge=1, le=50)] = 20,
     ) -> dict[str, Any]:
         results = database.search(
@@ -480,6 +484,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             model_family=model_family,
             safety=safety,
             favorites_only=favorites_only,
+            has_visual=has_visual,
+            category=category,
+            hair_color=hair_color,
+            eye_color=eye_color,
             limit=limit,
         )
         _attach_visual_urls(results, safety)
@@ -807,10 +815,12 @@ def _visual_urls(result: dict[str, Any], safety_filter: str = "") -> list[dict[s
         safety = str(ref.get("safety", result.get("safety", "sfw")))
         if not isinstance(path, str) or (safety_filter and safety != safety_filter):
             continue
+        encoded_path = quote(path, safe="/")
+        original_variant = "thumbnail" if ref.get("original_variant") == "thumbnail" else "original"
         visuals.append(
             {
-                "thumbnail_url": f"/media/{source_id}/thumbnail/{quote(path, safe='/')}",
-                "original_url": f"/media/{source_id}/original/{quote(path, safe='/')}",
+                "thumbnail_url": f"/media/{source_id}/thumbnail/{encoded_path}",
+                "original_url": f"/media/{source_id}/{original_variant}/{encoded_path}",
                 "safety": safety,
             }
         )

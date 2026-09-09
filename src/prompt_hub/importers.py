@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import csv
 import json
+import re
 import shutil
 import subprocess
+import tomllib
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,6 +58,47 @@ _SUGGESTIVE_TAGS = {
     "see-through",
 }
 _MAX_TAG_EXAMPLES = 3
+_ANIMADEX_HAIR_COLORS = {
+    "aqua hair",
+    "black hair",
+    "blonde hair",
+    "blue hair",
+    "brown hair",
+    "dark blue hair",
+    "gradient hair",
+    "green hair",
+    "grey hair",
+    "light blue hair",
+    "light brown hair",
+    "light green hair",
+    "light purple hair",
+    "multicolored hair",
+    "orange hair",
+    "pink hair",
+    "purple hair",
+    "red hair",
+    "silver hair",
+    "split-color hair",
+    "streaked hair",
+    "two-tone hair",
+    "white hair",
+}
+_ANIMADEX_EYE_COLORS = {
+    "aqua eyes",
+    "black eyes",
+    "blue eyes",
+    "brown eyes",
+    "gradient eyes",
+    "green eyes",
+    "grey eyes",
+    "multicolored eyes",
+    "orange eyes",
+    "pink eyes",
+    "purple eyes",
+    "red eyes",
+    "two-tone eyes",
+    "yellow eyes",
+}
 
 
 def discover_sources(settings: Settings) -> list[SourceSpec]:
@@ -95,6 +139,19 @@ def discover_sources(settings: Settings) -> list[SourceSpec]:
             license_name="unknown",
             notes="Paired images and captions; local personal indexing and research only.",
             importer="kisega",
+        ),
+        SourceSpec(
+            source_id="animadex",
+            name="AnimaDex",
+            url="https://github.com/zetaneko/AnimaDex",
+            path=root / "AnimaDex",
+            license_name="MIT",
+            notes=(
+                "Character, artist, and copyright visual references. The Git checkout "
+                "contains a small sample; a personal animadex.net export can populate "
+                "the separate animadex-data directory with the full thumbnail catalogue."
+            ),
+            importer="animadex",
         ),
     ]
 
@@ -190,6 +247,7 @@ def _load_entries(spec: SourceSpec, commit_hash: str) -> list[EntryInput]:
         "krea": _load_krea,
         "wildcards": _load_wildcards,
         "kisega": _load_kisega,
+        "animadex": _load_animadex,
     }
     return loaders[spec.importer](spec, commit_hash)
 
@@ -370,6 +428,178 @@ def _load_kisega(spec: SourceSpec, commit_hash: str) -> list[EntryInput]:
             )
         )
     return entries
+
+
+def _load_animadex(spec: SourceSpec, commit_hash: str) -> list[EntryInput]:
+    catalogue_root, csv_root, image_prefix = _animadex_catalogue_paths(spec.path)
+    characters_path = csv_root / "characters.csv"
+    artists_path = csv_root / "artists.csv"
+    if not characters_path.is_file() or not artists_path.is_file():
+        msg = "AnimaDex 缺少 characters.csv 或 artists.csv"
+        raise ValueError(msg)
+
+    entries: list[EntryInput] = []
+    copyright_rows: dict[str, dict[str, str]] = {}
+    for row in _read_csv_rows(characters_path):
+        slug = row.get("character", "").strip()
+        trigger = row.get("trigger", "").strip() or slug.replace("_", " ")
+        copyright_name = row.get("copyright", "").strip()
+        tags = _csv_tags(row.get("core_tags", ""))
+        if not slug or not copyright_name or not trigger:
+            continue
+        thumb = catalogue_root / "characters" / "thumbs" / f"{_animadex_filename(trigger)}.webp"
+        image_path = f"{image_prefix}characters/thumbs/{thumb.name}"
+        image_refs = _animadex_image_refs(thumb, image_path)
+        hair_colors = [tag for tag in tags if tag in _ANIMADEX_HAIR_COLORS]
+        eye_colors = [tag for tag in tags if tag in _ANIMADEX_EYE_COLORS]
+        entries.append(
+            EntryInput(
+                source_id=spec.source_id,
+                external_id=f"character:{slug}",
+                kind="character_reference",
+                title=trigger,
+                content=", ".join(dict.fromkeys([trigger, copyright_name, *tags])),
+                category=copyright_name,
+                model_family="danbooru-tags",
+                safety="unrated",
+                source_path=_animadex_source_path(characters_path, spec.path, image_prefix),
+                source_url=row.get("url", "").strip()
+                or _blob_url(spec, commit_hash, "samples/characters.csv"),
+                metadata={
+                    "record_type": "character",
+                    "character": slug,
+                    "copyright": copyright_name,
+                    "trigger": trigger,
+                    "tags": tags,
+                    "hair_colors": hair_colors,
+                    "eye_colors": eye_colors,
+                    "popularity": _safe_int(row.get("count", "")),
+                    "image_paths": [image_path] if image_refs else [],
+                    "image_refs": image_refs,
+                    "upstream_fields": _extra_animadex_fields(row),
+                },
+            )
+        )
+        copyright_rows.setdefault(copyright_name, row)
+
+    for row in _read_csv_rows(artists_path):
+        slug = row.get("artist", "").strip()
+        trigger = row.get("trigger", "").strip() or slug.replace("_", " ")
+        if not slug:
+            continue
+        thumb = catalogue_root / "artists" / "thumbs" / f"{_animadex_filename(trigger)}.webp"
+        image_path = f"{image_prefix}artists/thumbs/{thumb.name}"
+        image_refs = _animadex_image_refs(thumb, image_path)
+        entries.append(
+            EntryInput(
+                source_id=spec.source_id,
+                external_id=f"artist:{slug}",
+                kind="artist_reference",
+                title=trigger,
+                content=", ".join(dict.fromkeys([trigger, slug])),
+                category="artist",
+                model_family="danbooru-tags",
+                safety="unrated",
+                source_path=_animadex_source_path(artists_path, spec.path, image_prefix),
+                source_url=row.get("url", "").strip()
+                or _blob_url(spec, commit_hash, "samples/artists.csv"),
+                metadata={
+                    "record_type": "artist",
+                    "artist": slug,
+                    "trigger": trigger,
+                    "popularity": _safe_int(row.get("count", "")),
+                    "image_paths": [image_path] if image_refs else [],
+                    "image_refs": image_refs,
+                    "upstream_fields": _extra_animadex_fields(row),
+                },
+            )
+        )
+
+    for copyright_name, row in sorted(copyright_rows.items()):
+        thumb = (
+            catalogue_root / "copyrights" / "thumbs" / f"{_animadex_filename(copyright_name)}.webp"
+        )
+        image_path = f"{image_prefix}copyrights/thumbs/{thumb.name}"
+        image_refs = _animadex_image_refs(thumb, image_path)
+        entries.append(
+            EntryInput(
+                source_id=spec.source_id,
+                external_id=f"copyright:{copyright_name}",
+                kind="copyright_reference",
+                title=copyright_name.replace("_", " "),
+                content=copyright_name,
+                category=copyright_name,
+                model_family="danbooru-tags",
+                safety="unrated",
+                source_path=_animadex_source_path(characters_path, spec.path, image_prefix),
+                source_url=row.get("url", "").strip()
+                or _blob_url(spec, commit_hash, "samples/characters.csv"),
+                metadata={
+                    "record_type": "copyright",
+                    "copyright": copyright_name,
+                    "image_paths": [image_path] if image_refs else [],
+                    "image_refs": image_refs,
+                },
+            )
+        )
+    return entries
+
+
+def _animadex_catalogue_paths(repo_root: Path) -> tuple[Path, Path, str]:
+    data_root = repo_root.parent / "animadex-data"
+    config_path = repo_root / "config.toml"
+    if config_path.is_file():
+        raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        configured = str(raw.get("paths", {}).get("data_dir", "")).strip()
+        if configured:
+            data_root = Path(configured).expanduser()
+            if not data_root.is_absolute():
+                data_root = (repo_root / data_root).resolve()
+    if (data_root / "import" / "characters.csv").is_file() and (
+        data_root / "import" / "artists.csv"
+    ).is_file():
+        return data_root, data_root / "import", "catalogue/"
+    return repo_root / "samples" / "images", repo_root / "samples", "samples/images/"
+
+
+def _read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open(newline="", encoding="utf-8") as handle:
+        return [
+            {str(key): str(value or "") for key, value in row.items() if key is not None}
+            for row in csv.DictReader(handle)
+        ]
+
+
+def _csv_tags(value: str) -> list[str]:
+    return [tag.strip() for tag in value.split(",") if tag.strip()]
+
+
+def _animadex_filename(value: str) -> str:
+    return re.sub(r'[<>:"/\\|?*]', "_", value).rstrip(". ")
+
+
+def _animadex_image_refs(path: Path, virtual_path: str) -> list[dict[str, str]]:
+    if not path.is_file():
+        return []
+    return [{"path": virtual_path, "safety": "unrated", "original_variant": "thumbnail"}]
+
+
+def _animadex_source_path(path: Path, repo_root: Path, image_prefix: str) -> str:
+    if image_prefix.startswith("samples/"):
+        return path.relative_to(repo_root).as_posix()
+    return f"catalogue/import/{path.name}"
+
+
+def _safe_int(value: str) -> int:
+    try:
+        return int(value or 0)
+    except ValueError:
+        return 0
+
+
+def _extra_animadex_fields(row: dict[str, str]) -> dict[str, str]:
+    known = {"character", "copyright", "trigger", "core_tags", "count", "url", "artist"}
+    return {key: value for key, value in row.items() if key not in known and value}
 
 
 def _classify_safety(tags: list[str]) -> str:

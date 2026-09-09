@@ -17,6 +17,7 @@ def test_import_all_sources(source_tree, monkeypatch) -> None:
     assert results["krea-open-prompts"] == 2
     assert results["sd-wildcards"] == 2
     assert results["kisegaeningyou"] > 2
+    assert results["animadex"] == 3
 
     assert database.search("Gothic Ink", kind="style")[0]["model_family"] == "krea2"
     assert database.search("Gothic Ink", kind="style")[0]["metadata"]["image_paths"]
@@ -24,6 +25,10 @@ def test_import_all_sources(source_tree, monkeypatch) -> None:
     assert database.search("underboob", kind="caption")[0]["safety"] == "suggestive"
     assert database.search("collared shirt", kind="tag")[0]["metadata"]["count"] == 1
     assert database.search("collared shirt", kind="tag")[0]["metadata"]["image_paths"]
+    animadex = database.search("test hero", source_id="animadex")[0]
+    assert animadex["kind"] == "character_reference"
+    assert animadex["metadata"]["hair_colors"] == ["silver hair"]
+    assert animadex["metadata"]["eye_colors"] == ["blue eyes"]
     assert database.search("underboob", kind="tag")[0]["metadata"]["image_refs"][0]["safety"] == (
         "suggestive"
     )
@@ -32,7 +37,7 @@ def test_import_all_sources(source_tree, monkeypatch) -> None:
     manifest = json.loads(
         (source_tree.library_root / "sources" / "manifest.json").read_text(encoding="utf-8")
     )
-    assert len(manifest["sources"]) == 4
+    assert len(manifest["sources"]) == 5
     assert all(source["commit_hash"] == "deadbeef" for source in manifest["sources"])
 
 
@@ -47,6 +52,7 @@ def test_missing_source_directories_are_reported_not_silently_ignored(settings) 
         "krea-open-prompts",
         "sd-wildcards",
         "kisegaeningyou",
+        "animadex",
     }
     assert report["failed"] == []
 
@@ -79,6 +85,7 @@ def test_one_broken_source_does_not_abort_the_other_sources(source_tree, monkeyp
     assert broken["status"] == "load_error"
     assert report["sources"]["sd-wildcards"] == 2
     assert report["sources"]["kisegaeningyou"] > 2
+    assert report["sources"]["animadex"] == 3
     assert (source_tree.library_root / "sources" / "manifest.json").is_file()
 
 
@@ -98,5 +105,6 @@ def test_discover_sources_uses_expected_roots(settings) -> None:
         "krea-open-prompts",
         "sd-wildcards",
         "kisegaeningyou",
+        "animadex",
     }
     assert all(spec.path.is_relative_to(settings.git_sources_root) for spec in specs)
