@@ -4,8 +4,7 @@ Soda Prompt Hub 是一套本机优先的 AI 绘图创作与数据集整理工具
 创作项目、结果图、Caption、审核记录和冻结版本；Windows Worker 把经过确认的任务交给 Windows
 本机 ComfyUI，并把结果送回 Mac 校验。LoRA 正式训练仍在 Windows 的训练工具中完成。
 
-当前源码版本为 `1.1.0rc2`，已发布的候选版也是 `1.1.0rc2`。稳定版、升级说明和版本规则见
-[正式版本体系](docs/RELEASES.md)。
+当前源码版本为 `1.1.0`，属于稳定版通道。升级说明和版本规则见[正式版本体系](docs/RELEASES.md)。
 
 ## 五分钟开始
 
