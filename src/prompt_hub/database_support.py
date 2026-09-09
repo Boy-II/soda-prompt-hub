@@ -262,8 +262,7 @@ def _search_filters(
     ):
         if value:
             filters.append(
-                "EXISTS (SELECT 1 FROM json_each(e.metadata_json, ?) "
-                "WHERE json_each.value = ?)"
+                "EXISTS (SELECT 1 FROM json_each(e.metadata_json, ?) WHERE json_each.value = ?)"
             )
             values.extend((metadata_path, value))
     return filters, values

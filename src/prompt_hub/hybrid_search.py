@@ -138,9 +138,7 @@ def _keyword_visuals(item: dict[str, Any], safety_filter: str) -> list[dict[str,
         if not path or (safety_filter and safety != safety_filter):
             continue
         encoded = quote(path, safe="/")
-        original_variant = (
-            "thumbnail" if ref.get("original_variant") == "thumbnail" else "original"
-        )
+        original_variant = "thumbnail" if ref.get("original_variant") == "thumbnail" else "original"
         visuals.append(
             {
                 "thumbnail_url": f"/media/{source_id}/thumbnail/{encoded}",

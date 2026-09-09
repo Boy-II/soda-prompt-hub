@@ -326,8 +326,10 @@ def _delivery_readiness(
             "ready": total > 0 and counts["complete"] == total,
             "workspace_ids": issue_workspaces,
         }
-    ready = bool(assets) and duplicate_count == 0 and all(
-        item["ready"] for item in family_results.values()
+    ready = (
+        bool(assets)
+        and duplicate_count == 0
+        and all(item["ready"] for item in family_results.values())
     )
     return {
         "project_id": project.get("project_id"),

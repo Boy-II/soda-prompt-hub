@@ -517,10 +517,7 @@ def _load_animadex(spec: SourceSpec, commit_hash: str) -> list[EntryInput]:
 
     for copyright_name, row in sorted(copyright_rows.items()):
         thumb = (
-            catalogue_root
-            / "copyrights"
-            / "thumbs"
-            / f"{_animadex_filename(copyright_name)}.webp"
+            catalogue_root / "copyrights" / "thumbs" / f"{_animadex_filename(copyright_name)}.webp"
         )
         image_path = f"{image_prefix}copyrights/thumbs/{thumb.name}"
         image_refs = _animadex_image_refs(thumb, image_path)

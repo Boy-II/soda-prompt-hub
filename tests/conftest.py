@@ -127,8 +127,7 @@ def source_tree(settings: Settings) -> Settings:
         encoding="utf-8",
     )
     (animadex / "artists.csv").write_text(
-        "artist,trigger,count,url\n"
-        "test_artist,Test Artist,12,https://example.com/test-artist\n",
+        "artist,trigger,count,url\ntest_artist,Test Artist,12,https://example.com/test-artist\n",
         encoding="utf-8",
     )
     character_thumbs = animadex / "images" / "characters" / "thumbs"
