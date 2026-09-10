@@ -4,8 +4,7 @@ Soda Prompt Hub 是一套本机优先的 AI 绘图创作与数据集整理工具
 创作项目、结果图、Caption、审核记录和冻结版本；Windows Worker 把经过确认的任务交给 Windows
 本机 ComfyUI，并把结果送回 Mac 校验。LoRA 正式训练仍在 Windows 的训练工具中完成。
 
-当前源码版本为 `1.1.0rc2`，已发布的候选版也是 `1.1.0rc2`。稳定版、升级说明和版本规则见
-[正式版本体系](docs/RELEASES.md)。
+当前源码版本为 `1.1.0`，属于稳定版通道。升级说明和版本规则见[正式版本体系](docs/RELEASES.md)。
 
 ## 五分钟开始
 
@@ -26,7 +25,8 @@ $HOME/Documents/Soda Prompt Hub/prompt-library
 ## 它能做什么
 
 - 从灵感、OC 或参考图建立绘图项目，并输出 Anima tags 与 Krea 2 自然语言 Prompt。
-- 检索本地提示词库、视觉参照、网页收藏和 OC Manager JSON。
+- 检索本地提示词库、视觉参照、网页收藏和 OC Manager JSON；可按来源快速切换，并只查看带图资料。
+- 使用 AnimaDex 的角色、画师和作品缩略图作视觉参照；完整目录仍由用户使用自己的导出 token 下载到本机。
 - 使用 LM Studio 或可选的 OpenAI-compatible 模型辅助整理；模型结果先作为建议或草稿。
 - 使用 WD14 生成 Anima 标签草稿，人工审核后冻结为带哈希的版本化数据集。
 - 通过 SMB + Windows Worker 运行 ComfyUI、回收图片，并同步 LoRA/底模名称、分类、来源和预览图。

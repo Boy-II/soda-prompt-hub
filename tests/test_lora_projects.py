@@ -24,6 +24,23 @@ def _wait_for_job(client: TestClient, job_id: str) -> dict:
     raise AssertionError(message)
 
 
+def _assert_lora_readiness(
+    client: TestClient,
+    project_id: str,
+    *,
+    ready: bool,
+    completed: int | None = None,
+) -> None:
+    response = client.get(f"/api/lora/projects/{project_id}/readiness")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["eligible_count"] == 1
+    assert payload["ready"] is ready
+    if completed is not None:
+        assert payload["families"]["anima"]["complete"] == completed
+        assert payload["families"]["krea2"]["complete"] == completed
+
+
 def test_lora_project_store_creates_standard_handoff_layout(settings) -> None:
     store = LoraProjectStore(settings.lora_projects_root)
     store.initialize()
@@ -113,6 +130,8 @@ def test_lora_project_api_references_workspace_without_mutating_source(settings,
         assert client.get(project["assets"][0]["thumbnail_url"]).status_code == 200
         assert client.get(project["assets"][0]["original_url"]).status_code == 200
 
+        _assert_lora_readiness(client, project_id, ready=False)
+
         for profile_id, caption in (
             ("anima", "1girl, ariya_test, upper body, three-quarter view"),
             (
@@ -130,6 +149,7 @@ def test_lora_project_api_references_workspace_without_mutating_source(settings,
                 },
             )
             assert response.status_code == 200
+        _assert_lora_readiness(client, project_id, ready=True, completed=1)
         frozen = client.post(f"/api/lora/projects/{project_id}/freeze")
         assert frozen.status_code == 201
         export = frozen.json()["export"]

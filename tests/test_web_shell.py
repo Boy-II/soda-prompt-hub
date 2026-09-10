@@ -45,6 +45,8 @@ def test_web_shell_exposes_persistent_interface_language_switcher() -> None:
     assert "soda-prompt-hub-ui-language" in INDEX_HTML
     assert "window.promptHubI18n" in INDEX_HTML
     assert "window.location.reload()" in INDEX_HTML
+    assert "if (record.type === 'characterData')" in INDEX_HTML
+    assert "characterData:true" in INDEX_HTML
     assert "attributeFilter:['placeholder', 'aria-label', 'title', 'alt']" in INDEX_HTML
     assert "traditionalProtectedPatterns" in INDEX_HTML
 
@@ -70,6 +72,12 @@ def test_mobile_remote_tabs_keep_long_labels_inside_each_tab() -> None:
         ".remote-section-tab-copy strong { font-size: 12px; line-height: 1.05; "
         "overflow-wrap: anywhere; white-space: normal; }"
     ) in REMOTE_STYLES
+
+
+def test_comfy_result_legacy_prompt_summary_prefers_richer_text() -> None:
+    assert "function displayPrompts(metadata)" in INDEX_HTML
+    assert "longestPositive.length<12&&richerText.length>longestPositive.length" in INDEX_HTML
+    assert "const prompts=displayPrompts(metadata)" in INDEX_HTML
 
 
 def test_interface_translations_do_not_embed_personal_runtime_values() -> None:

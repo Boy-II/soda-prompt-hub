@@ -1,6 +1,6 @@
 {
   "format": "soda-windows-worker-release-v1",
-  "worker_version": "1.1.0rc2",
-  "release_channel": "candidate",
+  "worker_version": "1.1.0",
+  "release_channel": "stable",
   "protocol_version": "soda-compute-bridge-v2"
 }

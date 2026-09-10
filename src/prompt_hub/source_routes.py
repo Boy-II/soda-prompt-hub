@@ -43,6 +43,13 @@ def create_source_router(
     def get_source_sync_status() -> list[dict[str, Any]]:
         return service.status()
 
+    @router.get("/api/sources/{source_id}/facets")
+    def get_source_facets(source_id: str) -> dict[str, list[str]]:
+        source = service.database.get_source(source_id)
+        if source is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="资料来源不存在")
+        return service.database.source_facets(source_id)
+
     @router.post("/api/sources/sync", status_code=status.HTTP_202_ACCEPTED)
     def sync_sources(payload: SourceSyncInput) -> dict[str, Any]:
         job = job_runner.submit(

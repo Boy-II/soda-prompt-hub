@@ -41,9 +41,12 @@ $HOME/Documents/Soda Prompt Hub/prompt-library
 1. 先查看来源名和许可证提示；
 2. 点“安装推荐资料库”；
 3. 等待下载和本地索引完成；
-4. 某个来源失败时可稍后在“资料管理”单独重试。
+4. 某个来源失败时可稍后在“资料管理”中单独重试。
 
-Kisegaeningyou 包含较多视觉图片，第一次下载可能比纯文字仓库慢。点“暂时跳过”只隐藏当前提醒，
+Kisegaeningyou 包含较多视觉图片，第一次下载可能比纯文字仓库慢。AnimaDex 首次安装只使用仓库
+自带的角色、画师和作品缩略图样例；完整公共目录需要在 `animadex.net` 的 Account 页面生成
+“Offline dataset export” token，并按 AnimaDex 自己的导入说明下载到独立 `animadex-data` 目录。
+Prompt Hub 不保存 token，也不会把下载数据放进 GitHub 仓库。点“暂时跳过”只隐藏当前提醒，
 不会关闭资料管理功能。
 
 ## 每天使用

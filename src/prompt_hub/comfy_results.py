@@ -341,12 +341,15 @@ def _parse_parameters(value: str) -> dict[str, Any]:
         "positive_prompts": [],
         "negative_prompts": [],
     }
-    lines = value.strip().splitlines()
-    if lines:
-        positive = lines[0].strip()
-        if positive:
-            result["text_prompts"] = [positive]
-            result["positive_prompts"] = [positive]
+    positive_match = re.match(
+        r"\s*(.*?)(?=\r?\n(?:Negative prompt|Steps):|$)",
+        value,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if positive_match and positive_match.group(1).strip():
+        positive = positive_match.group(1).strip()
+        result["text_prompts"] = [positive]
+        result["positive_prompts"] = [positive]
     negative = re.search(
         r"Negative prompt:\s*(.*?)(?:\nSteps:|$)", value, re.IGNORECASE | re.DOTALL
     )

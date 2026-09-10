@@ -24,7 +24,7 @@ def test_system_version_reports_code_schema_and_worker(settings) -> None:
         "name": "Soda Prompt Hub",
         "version": __version__,
         "release_channel": release_channel(),
-        "release_channel_label": "候选版",
+        "release_channel_label": "正式版",
     }
     assert version["data"]["initialized"] is True
     assert version["data"]["components"] == {

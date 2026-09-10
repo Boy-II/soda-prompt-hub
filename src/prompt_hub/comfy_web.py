@@ -72,11 +72,19 @@ COMFY_SCRIPT = r"""
   const api = async (url, options={}) => { const response=await fetch(url,options); const payload=await response.json().catch(()=>({})); if(!response.ok) throw new Error(payload.detail||`请求失败：${response.status}`); return payload; };
   const jsonOptions = payload => ({method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const value = (metadata, key, fallback='—') => metadata?.[key] ?? fallback;
+  function displayPrompts(metadata) {
+    const positive=(metadata.positive_prompts||[]).map(String).filter(item=>item.trim());
+    const negative=new Set((metadata.negative_prompts||[]).map(item=>String(item).trim()));
+    const text=(metadata.text_prompts||[]).map(String).filter(item=>item.trim()&&!negative.has(item.trim()));
+    const longestPositive=positive.reduce((best,item)=>item.length>best.length?item:best,'');
+    const richerText=text.reduce((best,item)=>item.length>best.length?item:best,'');
+    return positive.length&&longestPositive.length<12&&richerText.length>longestPositive.length?[richerText]:(positive.length?positive:text);
+  }
   function metadataMarkup(result) {
     const metadata=result.metadata||{};
     if(!result.metadata_present) return '<div class="comfy-meta-summary comfy-no-meta"><strong>图片里没有保存生成参数</strong><br>仍然可以保留并关联项目，但这里不会猜测参数。</div>';
     const loras=(metadata.loras||[]).map(item=>`${item.name} @ ${item.strength_model??'?'}`).join(' · ')||'无';
-    const prompts=metadata.positive_prompts?.length?metadata.positive_prompts:metadata.text_prompts||[];
+    const prompts=displayPrompts(metadata);
     return `<div class="comfy-meta-summary"><strong>${escapeHtml(metadata.checkpoint||'未识别模型')}</strong><br>随机种子 ${escapeHtml(value(metadata,'seed'))} · 步数 ${escapeHtml(value(metadata,'steps'))} · CFG ${escapeHtml(value(metadata,'cfg'))}<br>采样器 ${escapeHtml(metadata.sampler||'未识别')} · 调度器 ${escapeHtml(metadata.scheduler||'未识别')}<br>LoRA：${escapeHtml(loras)}${prompts.length?`<p class="comfy-prompt">${escapeHtml(prompts.join('\n'))}</p>`:''}</div>`;
   }
   function card(result) {
